@@ -426,7 +426,13 @@ async function deleteItem(itemId) {
 function setupQrGenerator() {
   const baseUrlInput = document.getElementById('qr-base-url');
   if (baseUrlInput) {
-    baseUrlInput.value = menuData.settings.baseUrl || window.location.origin;
+    const saved = menuData && menuData.settings && menuData.settings.baseUrl;
+    // Eğer placeholder (hashtag-menu.com) ise doğrudan tarayıcının aktif canlı linkini al
+    if (saved && saved.trim() !== '' && saved !== 'https://hashtag-menu.com' && !saved.includes('hashtag-menu.com')) {
+      baseUrlInput.value = saved.trim();
+    } else {
+      baseUrlInput.value = window.location.origin;
+    }
   }
 
   const tableSelect = document.getElementById('qr-table-mode');
@@ -436,7 +442,12 @@ function setupQrGenerator() {
 }
 
 function updateQrPreview() {
-  const baseUrl = document.getElementById('qr-base-url').value.trim() || window.location.origin;
+  let baseUrl = (document.getElementById('qr-base-url').value || '').trim();
+  if (!baseUrl || baseUrl === 'https://hashtag-menu.com' || baseUrl.includes('hashtag-menu.com')) {
+    baseUrl = window.location.origin;
+    const input = document.getElementById('qr-base-url');
+    if (input) input.value = baseUrl;
+  }
   const mode = document.getElementById('qr-table-mode').value;
   const singleTableNum = document.getElementById('qr-single-table-num').value;
   const printArea = document.getElementById('print-area');
