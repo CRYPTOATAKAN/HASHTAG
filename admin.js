@@ -98,7 +98,7 @@ function logoutAdmin() {
 
 function switchTab(tab) {
   currentTab = tab;
-  const tabs = ['products', 'quick-price', 'settings', 'qr-stands'];
+  const tabs = ['products', 'quick-price', 'categories', 'settings', 'qr-stands'];
   tabs.forEach(t => {
     const btn = document.getElementById(`tab-btn-${t}`);
     const sec = document.getElementById(`tab-section-${t}`);
@@ -119,6 +119,7 @@ function switchTab(tab) {
 
   if (tab === 'products') renderAdminProductTable();
   if (tab === 'quick-price') renderQuickPriceTable();
+  if (tab === 'categories') renderAdminCategories();
   if (tab === 'qr-stands') setupQrGenerator();
   if (window.lucide) lucide.createIcons();
 }
@@ -420,18 +421,206 @@ async function deleteItem(itemId) {
 }
 
 /* ==========================================================================
+   HIZLI AROMA & GÖRSEL YARDIMCILARI (Quick Flavor & Image Helpers)
+   ========================================================================== */
+
+function appendFlavor(flavor) {
+  const input = document.getElementById('form-item-flavors');
+  if (!input) return;
+  const current = input.value.trim();
+  if (!current) {
+    input.value = flavor;
+  } else {
+    const list = current.split(',').map(s => s.trim());
+    if (!list.includes(flavor)) {
+      input.value = current + ', ' + flavor;
+    }
+  }
+}
+
+function setPresetImage(type) {
+  const input = document.getElementById('form-item-image');
+  if (!input) return;
+
+  const presets = {
+    'hookah': 'https://images.unsplash.com/photo-1527661591475-527312dd65f5?auto=format&fit=crop&w=600&q=80',
+    'fruit': 'https://images.unsplash.com/photo-1544816155-12df9643f363?auto=format&fit=crop&w=600&q=80',
+    'mocktail': 'https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?auto=format&fit=crop&w=600&q=80',
+    'coffee': 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=600&q=80',
+    'dessert': 'https://images.unsplash.com/photo-1606313564200-e75d5e30476c?auto=format&fit=crop&w=600&q=80'
+  };
+
+  if (presets[type]) {
+    input.value = presets[type];
+  }
+}
+
+/* ==========================================================================
+   KATEGORİ YÖNETİMİ (Category Management CRUD & Reordering)
+   ========================================================================== */
+
+let editingCategoryId = null;
+
+function renderAdminCategories() {
+  const container = document.getElementById('admin-categories-list');
+  if (!container) return;
+
+  const categories = menuData.categories || [];
+  const items = menuData.items || [];
+
+  if (categories.length === 0) {
+    container.innerHTML = `<div class="p-6 text-center text-gray-400">Henüz kategori bulunmuyor.</div>`;
+    return;
+  }
+
+  container.innerHTML = `
+    <div class="space-y-3">
+      ${categories.map((cat, idx) => {
+        const count = items.filter(it => it.categoryId === cat.id).length;
+        const isFirst = idx === 0;
+        const isLast = idx === categories.length - 1;
+
+        return `
+          <div class="flex items-center justify-between p-3.5 rounded-xl bg-black border border-white/10 hover:border-white/20 transition-all">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center font-bold">
+                <i data-lucide="${cat.icon || 'star'}" class="w-5 h-5"></i>
+              </div>
+              <div>
+                <div class="font-bold text-white text-sm">${cat.name}</div>
+                <div class="text-xs text-gray-400 mt-0.5">${count} ürün bulunuyor</div>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-2">
+              <button onclick="moveCategory('${cat.id}', -1)" ${isFirst ? 'disabled class="p-1.5 rounded-lg text-gray-600 cursor-not-allowed"' : 'class="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 transition-colors"'} title="Yukarı Taşı">
+                <i data-lucide="arrow-up" class="w-4 h-4"></i>
+              </button>
+              <button onclick="moveCategory('${cat.id}', 1)" ${isLast ? 'disabled class="p-1.5 rounded-lg text-gray-600 cursor-not-allowed"' : 'class="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 transition-colors"'} title="Aşağı Taşı">
+                <i data-lucide="arrow-down" class="w-4 h-4"></i>
+              </button>
+              <button onclick="openEditCategoryModal('${cat.id}')" class="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white transition-colors" title="Düzenle">
+                <i data-lucide="edit-3" class="w-4 h-4"></i>
+              </button>
+              <button onclick="deleteCategory('${cat.id}')" class="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 transition-colors" title="Sil">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+
+  if (window.lucide) lucide.createIcons();
+}
+
+function openNewCategoryModal() {
+  editingCategoryId = null;
+  document.getElementById('modal-category-title').textContent = 'Yeni Kategori Ekle';
+  document.getElementById('category-form').reset();
+  const modal = document.getElementById('edit-category-modal');
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
+}
+
+function openEditCategoryModal(catId) {
+  editingCategoryId = catId;
+  const cat = menuData.categories.find(c => c.id === catId);
+  if (!cat) return;
+
+  document.getElementById('modal-category-title').textContent = 'Kategoriyi Düzenle';
+  document.getElementById('form-category-name').value = cat.name || '';
+  document.getElementById('form-category-icon').value = cat.icon || 'star';
+
+  const modal = document.getElementById('edit-category-modal');
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
+}
+
+function closeCategoryModal() {
+  const modal = document.getElementById('edit-category-modal');
+  modal.classList.add('hidden');
+  modal.classList.remove('flex');
+}
+
+async function handleSaveCategory(e) {
+  e.preventDefault();
+  const name = document.getElementById('form-category-name').value.trim();
+  const icon = document.getElementById('form-category-icon').value;
+
+  if (editingCategoryId) {
+    const cat = menuData.categories.find(c => c.id === editingCategoryId);
+    if (cat) {
+      cat.name = name;
+      cat.icon = icon;
+    }
+  } else {
+    const newId = 'cat-' + Date.now();
+    menuData.categories.push({
+      id: newId,
+      name,
+      icon,
+      order: menuData.categories.length + 1
+    });
+  }
+
+  await saveMenuData(menuData);
+  closeCategoryModal();
+  renderAdminCategories();
+  fillCategorySelect();
+}
+
+async function moveCategory(catId, dir) {
+  const idx = menuData.categories.findIndex(c => c.id === catId);
+  if (idx < 0) return;
+  const targetIdx = idx + dir;
+  if (targetIdx < 0 || targetIdx >= menuData.categories.length) return;
+
+  const temp = menuData.categories[idx];
+  menuData.categories[idx] = menuData.categories[targetIdx];
+  menuData.categories[targetIdx] = temp;
+
+  await saveMenuData(menuData);
+  renderAdminCategories();
+  fillCategorySelect();
+}
+
+async function deleteCategory(catId) {
+  const cat = menuData.categories.find(c => c.id === catId);
+  if (!cat) return;
+
+  const itemsInCat = menuData.items.filter(it => it.categoryId === catId);
+  if (itemsInCat.length > 0) {
+    if (!confirm(`"${cat.name}" kategorisinde ${itemsInCat.length} adet ürün bulunuyor. Kategoriyi silerseniz bu ürünler sahipsiz kalacaktır. Devam etmek istiyor musunuz?`)) {
+      return;
+    }
+  } else {
+    if (!confirm(`"${cat.name}" kategorisini silmek istediğinize emin misiniz?`)) return;
+  }
+
+  menuData.categories = menuData.categories.filter(c => c.id !== catId);
+  await saveMenuData(menuData);
+  renderAdminCategories();
+  fillCategorySelect();
+}
+
+/* ==========================================================================
    SABİT QR KOD & MASA BASKI STANDI OLUŞTURUCU (Printable Stands)
    ========================================================================== */
 
 function setupQrGenerator() {
   const baseUrlInput = document.getElementById('qr-base-url');
   if (baseUrlInput) {
-    const saved = menuData && menuData.settings && menuData.settings.baseUrl;
-    // Eğer placeholder (hashtag-menu.com) ise doğrudan tarayıcının aktif canlı linkini al
-    if (saved && saved.trim() !== '' && saved !== 'https://hashtag-menu.com' && !saved.includes('hashtag-menu.com')) {
-      baseUrlInput.value = saved.trim();
-    } else {
+    let saved = (menuData && menuData.settings && menuData.settings.baseUrl) || '';
+    saved = saved.replace(/^file:\/\//i, '').trim();
+
+    if (saved && saved !== 'https://hashtag-menu.com' && !saved.includes('hashtag-menu.com') && saved.startsWith('http')) {
+      baseUrlInput.value = saved;
+    } else if (window.location.protocol.startsWith('http')) {
       baseUrlInput.value = window.location.origin;
+    } else {
+      baseUrlInput.value = 'https://p01--hashtag--xqx4khzq6gkf.code.run';
     }
   }
 
@@ -443,11 +632,27 @@ function setupQrGenerator() {
 
 function updateQrPreview() {
   let baseUrl = (document.getElementById('qr-base-url').value || '').trim();
-  if (!baseUrl || baseUrl === 'https://hashtag-menu.com' || baseUrl.includes('hashtag-menu.com')) {
-    baseUrl = window.location.origin;
-    const input = document.getElementById('qr-base-url');
-    if (input) input.value = baseUrl;
+  
+  // Hatalı veya kazara yapıştırılan file:// önekini otomatik temizle
+  baseUrl = baseUrl.replace(/^file:\/\//i, '').trim();
+
+  if (!baseUrl || baseUrl === 'null' || baseUrl === 'https://hashtag-menu.com' || baseUrl.includes('hashtag-menu.com')) {
+    if (window.location.protocol.startsWith('http')) {
+      baseUrl = window.location.origin;
+    } else {
+      baseUrl = 'https://p01--hashtag--xqx4khzq6gkf.code.run';
+    }
   }
+
+  if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
+    baseUrl = 'https://' + baseUrl;
+  }
+
+  const input = document.getElementById('qr-base-url');
+  if (input && input.value !== baseUrl) {
+    input.value = baseUrl;
+  }
+
   const mode = document.getElementById('qr-table-mode').value;
   const singleTableNum = document.getElementById('qr-single-table-num').value;
   const printArea = document.getElementById('print-area');
@@ -485,10 +690,10 @@ function updateQrPreview() {
         `}
 
         <!-- QR Kod Görseli -->
-        <div class="p-4 bg-white rounded-2xl inline-block my-3 shadow-inner">
-          <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=4&data=${encodeURIComponent(targetUrl)}" 
+        <div class="p-6 bg-white rounded-3xl inline-block my-3 shadow-xl">
+          <img src="https://api.qrserver.com/v1/create-qr-code/?size=400x400&ecc=H&margin=10&data=${encodeURIComponent(targetUrl)}" 
                alt="QR Menü" 
-               class="w-44 h-44 object-contain mx-auto block" />
+               class="w-52 h-52 object-contain mx-auto block" />
         </div>
 
         <!-- Yönlendirme Metni -->

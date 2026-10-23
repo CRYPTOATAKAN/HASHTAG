@@ -44,6 +44,9 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
     def _send_json(self, data, status=200):
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Cache-Control", "no-cache, no-store, must-revalidate, max-age=0")
+        self.send_header("Pragma", "no-cache")
+        self.send_header("Expires", "0")
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Admin-PIN")
@@ -62,6 +65,19 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
         path = parsed.path
 
         if path == "/api/menu":
+            # Eğer volume yeni bağlanmış ve DATA_FILE henüz yoksa, yerel şablondan otomatik oluştur
+            if not os.path.exists(DATA_FILE):
+                template_file = os.path.join(BASE_DIR, "data", "menu.json")
+                if os.path.exists(template_file):
+                    try:
+                        os.makedirs(DATA_DIR, exist_ok=True)
+                        with open(template_file, "r", encoding="utf-8") as f_in:
+                            initial_data = json.load(f_in)
+                        with open(DATA_FILE, "w", encoding="utf-8") as f_out:
+                            json.dump(initial_data, f_out, ensure_ascii=False, indent=2)
+                    except Exception as e:
+                        print("Error auto-seeding menu.json:", e)
+
             if os.path.exists(DATA_FILE):
                 try:
                     with open(DATA_FILE, "r", encoding="utf-8") as f:
