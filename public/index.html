@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="tr" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>HASHTAG | Lounge & Hookah QR Menü</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              gold: '#f59e0b',
+              amber: '#d97706',
+              dark: '#0a0b10',
+              card: 'rgba(22, 25, 37, 0.75)'
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- Custom Styles -->
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="antialiased selection:bg-amber-500 selection:text-black">
+  <div id="menu-app" class="min-h-screen flex flex-col pb-24">
+    
+    <!-- Üst Bar / Header -->
+    <header class="sticky top-0 z-40 bg-neutral-950/80 backdrop-blur-xl border-b border-white/5 transition-all">
+      <div class="max-w-3xl mx-auto px-4 py-3.5 flex items-center justify-between">
+        <!-- Logo & Masa Numarası -->
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center font-black text-black text-xl shadow-lg shadow-amber-500/20">
+            #
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h1 id="cafe-name" class="text-base font-extrabold tracking-tight text-white uppercase font-sans">
+                HASHTAG
+              </h1>
+              <div id="table-badge"></div>
+            </div>
+            <p id="cafe-tagline" class="text-[11px] text-gray-400 font-medium">Lounge & Hookah Experience</p>
+          </div>
+        </div>
+
+        <!-- Üst Sağ Butonlar -->
+        <div class="flex items-center gap-2">
+          <!-- Wi-Fi Butonu -->
+          <button id="wifi-info-btn" class="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300 border border-white/5 transition-colors flex items-center gap-1.5 text-xs font-medium">
+            <i data-lucide="wifi" class="w-4 h-4 text-amber-400"></i>
+            <span class="hidden sm:inline">Wi-Fi</span>
+          </button>
+          
+          <!-- Instagram -->
+          <a id="instagram-link" href="#" target="_blank" class="hidden p-2 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300 border border-white/5 transition-colors">
+            <i data-lucide="instagram" class="w-4 h-4 text-pink-400"></i>
+          </a>
+        </div>
+      </div>
+
+      <!-- Arama Kutusu -->
+      <div class="max-w-3xl mx-auto px-4 pb-3">
+        <div class="relative flex items-center">
+          <i data-lucide="search" class="w-4 h-4 text-gray-400 absolute left-3.5 pointer-events-none"></i>
+          <input 
+            type="text" 
+            id="menu-search" 
+            placeholder="Nargile aroması, içecek veya tatlı ara... (örn: Love 66, Kahve)" 
+            class="w-full pl-10 pr-10 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/50 transition-all"
+          />
+          <button id="search-clear-btn" class="hidden absolute right-3 text-gray-400 hover:text-white p-1">
+            <i data-lucide="x" class="w-4 h-4"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Kategori Carousel -->
+      <div class="max-w-3xl mx-auto px-4 pb-2.5 overflow-x-auto no-scrollbar">
+        <div id="categories-container" class="flex items-center gap-2">
+          <!-- JS Tarafından Doldurulacak -->
+        </div>
+      </div>
+    </header>
+
+    <!-- Menü İçeriği Listesi -->
+    <main class="max-w-3xl mx-auto px-4 pt-4 flex-1 w-full">
+      <div id="menu-items-list" class="space-y-6">
+        <!-- JS Tarafından Doldurulacak -->
+      </div>
+    </main>
+
+    <!-- Gelecekteki Özellikler: Köz İste & Garson Çağır (Admin panelinden açıldığında görünür) -->
+    <div id="service-call-actions" class="hidden fixed bottom-4 inset-x-4 max-w-md mx-auto z-30">
+      <div class="p-2 rounded-2xl bg-neutral-900/90 backdrop-blur-xl border border-white/10 shadow-2xl flex items-center gap-2">
+        <button onclick="requestService('coal')" class="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-amber-600 to-amber-500 text-white font-bold text-xs tracking-wider uppercase flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20 active:scale-95 transition-transform">
+          <i data-lucide="flame" class="w-4 h-4"></i>
+          Köz İste
+        </button>
+        <button onclick="requestService('waiter')" class="flex-1 py-3 px-4 rounded-xl bg-white/10 hover:bg-white/15 text-white font-bold text-xs tracking-wider uppercase flex items-center justify-center gap-2 active:scale-95 transition-transform">
+          <i data-lucide="bell" class="w-4 h-4"></i>
+          Garson Çağır
+        </button>
+      </div>
+    </div>
+
+    <!-- Alt Bilgi / Footer -->
+    <footer class="mt-12 py-8 border-t border-white/5 text-center text-xs text-gray-400 max-w-3xl mx-auto px-4">
+      <div class="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mx-auto mb-3 text-amber-400 font-bold">
+        #
+      </div>
+      <p class="font-semibold text-gray-300">HASHTAG LOUNGE & HOOKAH</p>
+      <p class="mt-1 text-gray-400">Tüm fiyatlarımıza KDV dahildir.</p>
+      <div class="mt-4 flex items-center justify-center gap-4 text-gray-400">
+        <a href="/admin" class="hover:text-amber-400 flex items-center gap-1 transition-colors">
+          <i data-lucide="shield-check" class="w-3.5 h-3.5"></i> Yönetici Girişi
+        </a>
+      </div>
+    </footer>
+
+  </div>
+
+  <!-- Ürün Detay Modalı -->
+  <div id="item-detail-modal" class="fixed inset-0 z-50 hidden items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-md transition-all">
+    <div id="item-detail-content" class="w-full sm:max-w-lg bg-neutral-950 border border-white/10 rounded-t-3xl sm:rounded-3xl overflow-hidden shadow-2xl max-h-[90vh] overflow-y-auto">
+      <!-- JS dolduracak -->
+    </div>
+  </div>
+
+  <!-- Wi-Fi Bilgi Modalı -->
+  <div id="wifi-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+    <div class="w-full max-w-sm bg-neutral-950 border border-white/10 rounded-3xl p-6 shadow-2xl relative">
+      <button onclick="closeWifiModal()" class="absolute top-4 right-4 text-gray-400 hover:text-white p-1">
+        <i data-lucide="x" class="w-5 h-5"></i>
+      </button>
+
+      <div class="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 mb-4">
+        <i data-lucide="wifi" class="w-6 h-6"></i>
+      </div>
+
+      <h3 class="text-lg font-bold text-white">HASHTAG Misafir Wi-Fi</h3>
+      <p class="text-xs text-gray-400 mt-1">Kafemizde kesintisiz internete bağlanın.</p>
+
+      <div class="mt-5 space-y-3">
+        <div class="p-3 rounded-xl bg-white/5 border border-white/5">
+          <div class="text-[11px] text-gray-400 font-medium uppercase tracking-wider">Ağ Adı (SSID)</div>
+          <div id="wifi-name-display" class="text-sm font-semibold text-white mt-0.5">HASHTAG_VIP</div>
+        </div>
+
+        <div class="p-3 rounded-xl bg-white/5 border border-white/5 flex items-center justify-between">
+          <div>
+            <div class="text-[11px] text-gray-400 font-medium uppercase tracking-wider">Şifre</div>
+            <div id="wifi-pass-display" class="text-sm font-mono font-semibold text-amber-400 mt-0.5">hashtagwelcome</div>
+          </div>
+          <button id="copy-wifi-btn" onclick="copyWifiPassword()" class="px-3 py-1.5 rounded-lg bg-amber-500 text-black text-xs font-semibold hover:bg-amber-400 transition-colors flex items-center gap-1.5">
+            <i data-lucide="copy" class="w-3.5 h-3.5"></i> Kopyala
+          </button>
+        </div>
+      </div>
+
+      <button onclick="closeWifiModal()" class="w-full mt-6 py-2.5 rounded-xl bg-white/10 text-white text-sm font-medium hover:bg-white/15 transition-colors">
+        Tamam
+      </button>
+    </div>
+  </div>
+
+  <!-- Scriptler -->
+  <script src="default-data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
