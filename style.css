@@ -136,6 +136,130 @@ body {
   transform: scale(0.985);
 }
 
+/* ==========================================================================
+   AKICI NARGİLE DUMANI & ORİJİNAL NEON TABELA ARKA PLAN AMBİYANSI
+   ========================================================================== */
+.lounge-ambient-container {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+
+/* Orijinal Neon Tabela Ambiyans Filigranı */
+.ambient-neon-sign {
+  position: absolute;
+  top: 48%;
+  left: 50%;
+  width: 320px;
+  height: 320px;
+  max-width: 85vw;
+  max-height: 85vw;
+  transform: translate(-50%, calc(-50% + var(--neon-shift, 0px)));
+  border-radius: 50%;
+  opacity: 0.12;
+  mix-blend-mode: screen;
+  filter: drop-shadow(0 0 50px rgba(6, 182, 212, 0.45));
+  will-change: transform, opacity;
+  animation: neonBreathe 7s ease-in-out infinite alternate;
+}
+
+@keyframes neonBreathe {
+  0% {
+    transform: translate(-50%, calc(-50% + var(--neon-shift, 0px))) scale(0.96);
+    opacity: 0.10;
+    filter: drop-shadow(0 0 35px rgba(6, 182, 212, 0.35));
+  }
+  50% {
+    opacity: 0.15;
+    filter: drop-shadow(0 0 65px rgba(245, 158, 11, 0.45));
+  }
+  100% {
+    transform: translate(-50%, calc(-50% + var(--neon-shift, 0px))) scale(1.04);
+    opacity: 0.12;
+    filter: drop-shadow(0 0 75px rgba(139, 92, 246, 0.5));
+  }
+}
+
+/* Akıcı Duman Püskürmeleri (Hookah Vapor Clouds) */
+.smoke-puff {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(65px);
+  pointer-events: none;
+  will-change: transform, opacity;
+  mix-blend-mode: screen;
+  animation: smokeCurl 18s ease-in-out infinite alternate;
+}
+
+@keyframes smokeCurl {
+  0% {
+    border-radius: 42% 58% 70% 30% / 45% 45% 55% 55%;
+    transform: translate3d(var(--smoke-drift-x, 0px), var(--smoke-scroll-y, 0px), 0) rotate(0deg) scale(0.95);
+  }
+  33% {
+    border-radius: 70% 30% 50% 50% / 30% 30% 70% 70%;
+    transform: translate3d(calc(var(--smoke-drift-x, 0px) + 25px), calc(var(--smoke-scroll-y, 0px) - 20px), 0) rotate(45deg) scale(1.05);
+  }
+  66% {
+    border-radius: 30% 70% 70% 30% / 50% 60% 40% 50%;
+    transform: translate3d(calc(var(--smoke-drift-x, 0px) - 30px), calc(var(--smoke-scroll-y, 0px) + 15px), 0) rotate(90deg) scale(0.98);
+  }
+  100% {
+    border-radius: 58% 42% 40% 60% / 60% 40% 60% 40%;
+    transform: translate3d(var(--smoke-drift-x, 0px), var(--smoke-scroll-y, 0px), 0) rotate(135deg) scale(1.06);
+  }
+}
+
+/* Farklı Katman ve Renklerde Duman Bulutları */
+.smoke-puff-1 {
+  top: 10%;
+  left: -5%;
+  width: 380px;
+  height: 380px;
+  background: radial-gradient(circle, rgba(6, 182, 212, 0.20) 0%, rgba(6, 182, 212, 0.06) 45%, transparent 70%);
+  --smoke-scroll-y: calc(var(--scroll-y, 0px) * -0.25);
+  --smoke-drift-x: 0px;
+  animation-duration: 20s;
+}
+
+.smoke-puff-2 {
+  top: 40%;
+  right: -8%;
+  width: 440px;
+  height: 440px;
+  background: radial-gradient(circle, rgba(245, 158, 11, 0.18) 0%, rgba(217, 119, 6, 0.05) 50%, transparent 70%);
+  --smoke-scroll-y: calc(var(--scroll-y, 0px) * -0.42);
+  --smoke-drift-x: 10px;
+  animation-duration: 24s;
+  animation-delay: -5s;
+}
+
+.smoke-puff-3 {
+  top: 70%;
+  left: 5%;
+  width: 420px;
+  height: 420px;
+  background: radial-gradient(circle, rgba(168, 85, 247, 0.18) 0%, rgba(139, 92, 246, 0.05) 50%, transparent 70%);
+  --smoke-scroll-y: calc(var(--scroll-y, 0px) * -0.32);
+  --smoke-drift-x: -15px;
+  animation-duration: 22s;
+  animation-delay: -10s;
+}
+
+.smoke-puff-4 {
+  top: 25%;
+  left: 30%;
+  width: 300px;
+  height: 300px;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.10) 0%, rgba(180, 210, 240, 0.04) 55%, transparent 72%);
+  --smoke-scroll-y: calc(var(--scroll-y, 0px) * -0.55);
+  --smoke-drift-x: 20px;
+  animation-duration: 16s;
+  animation-delay: -7s;
+}
+
 /* Mobile Admin Touch Ergonomics */
 @media (max-width: 640px) {
   .admin-action-btn {

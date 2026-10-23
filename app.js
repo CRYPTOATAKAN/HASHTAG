@@ -239,6 +239,29 @@ function initCustomerMenu() {
   setupSearchInput();
   setupWifiModal();
   setupServiceCallModal();
+  initAmbientSmokeScroll();
+}
+
+// Akıcı Nargile Dumanı ve Arka Plan Kaydırma Efekti (GPU Hızlandırmalı)
+function initAmbientSmokeScroll() {
+  if (typeof window === 'undefined') return;
+  let ticking = false;
+
+  function updateSmoke() {
+    const scrollY = window.pageYOffset || document.documentElement.scrollTop || 0;
+    document.documentElement.style.setProperty('--scroll-y', `${scrollY}px`);
+    document.documentElement.style.setProperty('--neon-shift', `${scrollY * 0.08}px`);
+    ticking = false;
+  }
+
+  window.addEventListener('scroll', () => {
+    if (!ticking) {
+      window.requestAnimationFrame(updateSmoke);
+      ticking = true;
+    }
+  }, { passive: true });
+
+  updateSmoke();
 }
 
 function renderHeaderInfo() {
