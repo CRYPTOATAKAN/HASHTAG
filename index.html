@@ -29,7 +29,7 @@
   <script src="https://unpkg.com/lucide@latest"></script>
 
   <!-- Custom Styles -->
-  <link rel="stylesheet" href="style.css?v=2.4" />
+  <link rel="stylesheet" href="style.css?v=2.5" />
 </head>
 <body class="antialiased selection:bg-amber-500 selection:text-black">
   <div id="menu-app" class="min-h-screen flex flex-col pb-24">
@@ -70,11 +70,6 @@
             <i data-lucide="wifi" class="w-4 h-4 text-amber-400"></i>
             <span class="hidden sm:inline">Wi-Fi</span>
           </button>
-          
-          <!-- Instagram -->
-          <a id="instagram-link" href="#" target="_blank" class="hidden p-2 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300 border border-white/5 transition-colors">
-            <i data-lucide="instagram" class="w-4 h-4 text-pink-400"></i>
-          </a>
         </div>
       </div>
 
@@ -209,11 +204,15 @@
 
     <!-- Alt Bilgi / Footer -->
     <footer class="mt-12 py-8 border-t border-white/5 text-center text-xs text-gray-400 max-w-3xl mx-auto px-4">
-      <div class="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mx-auto mb-3 text-amber-400 font-bold">
-        #
+      <div class="w-12 h-12 rounded-2xl overflow-hidden border border-amber-500/30 mx-auto mb-3 shadow-lg shadow-amber-500/10 bg-black flex items-center justify-center">
+        <img 
+          src="hashtag-logo.jpg?v=2.5" 
+          onerror="if(!this.src.includes('images/')) this.src='images/hashtag-logo.jpg?v=2.5';"
+          alt="HASHTAG" 
+          class="w-full h-full object-cover" 
+        />
       </div>
-      <p id="footer-cafe-name" class="font-semibold text-gray-300">HASHTAG LOUNGE & HOOKAH</p>
-      <p class="mt-1 text-gray-400">Tüm fiyatlarımıza KDV dahildir.</p>
+      <p id="footer-cafe-name" class="font-bold text-gray-300 uppercase tracking-wider text-sm">HASHTAG LOUNGE & HOOKAH</p>
     </footer>
 
   </div>
@@ -263,7 +262,7 @@
   </div>
 
   <!-- Scriptler -->
-  <script src="default-data.js?v=2.4"></script>
-  <script src="app.js?v=2.4"></script>
+  <script src="default-data.js?v=2.5"></script>
+  <script src="app.js?v=2.5"></script>
 </body>
 </html>

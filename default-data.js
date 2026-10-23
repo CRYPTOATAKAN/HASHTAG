@@ -6,7 +6,7 @@ window.DEFAULT_MENU_DATA = {
     "adminPin": "1234",
     "wifiName": "HASHTAG_GUEST",
     "wifiPassword": "hashtaghookah",
-    "instagram": "hashtag.lounge",
+    "instagram": "hashtagcafe07",
     "phone": "+90 (555) 000 00 00",
     "address": "Lounge Caddesi No: 42, İstanbul",
     "enableServiceCalls": false,
