@@ -121,6 +121,7 @@ function switchTab(tab) {
   if (tab === 'quick-price') renderQuickPriceTable();
   if (tab === 'categories') renderAdminCategories();
   if (tab === 'qr-stands') setupQrGenerator();
+  if (tab === 'settings') fillSettingsForm();
   if (window.lucide) lucide.createIcons();
 }
 
@@ -260,25 +261,27 @@ function renderQuickPriceTable() {
   container.innerHTML = `
     <div class="space-y-2">
       <div class="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-xs text-amber-300 flex items-center justify-between">
-        <span>💡 Fiyatları kutucuklara tıklayıp doğrudan değiştirebilirsiniz. Değişiklikler anında kaydedilir.</span>
-        <button onclick="saveAllQuickPrices()" class="px-3 py-1 bg-amber-500 text-black font-semibold rounded-lg hover:bg-amber-400 transition-colors">
+        <span>💡 Fiyatları kutucuklara tıklayıp doğrudan değiştirebilirsiniz. Enter tuşuna basarak veya kutucuktan çıkınca anında kaydedilir.</span>
+        <button onclick="saveAllQuickPrices()" class="px-3.5 py-1.5 bg-amber-500 text-black font-bold text-xs rounded-lg hover:bg-amber-400 transition-colors shadow-md">
           Tümünü Kaydet
         </button>
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
         ${items.map(item => `
-          <div class="flex items-center justify-between p-3 rounded-xl bg-neutral-900 border border-white/5">
+          <div class="flex items-center justify-between p-3 rounded-xl bg-neutral-900 border border-white/5 hover:border-white/10 transition-colors">
             <div class="min-w-0 pr-3">
               <div class="font-medium text-white text-sm truncate">${item.name}</div>
               <div class="text-xs text-gray-400">${item.badge || 'Standart'}</div>
             </div>
             <div class="flex items-center gap-2 flex-shrink-0">
+              <span id="quick-status-${item.id}" class="text-[11px] font-semibold text-emerald-400 opacity-0 transition-opacity duration-300">✓ Kaydedildi</span>
               <input 
                 type="number" 
                 id="quick-price-${item.id}" 
                 value="${item.price}" 
                 onchange="saveSingleQuickPrice('${item.id}', this.value)"
+                onkeydown="if(event.key==='Enter'){ this.blur(); }"
                 class="w-24 px-3 py-1.5 rounded-lg bg-black border border-white/20 text-right font-mono font-bold text-amber-400 focus:outline-none focus:border-amber-400 text-sm"
               />
               <span class="text-xs text-gray-400 font-semibold">${currency}</span>
@@ -301,7 +304,15 @@ async function saveSingleQuickPrice(itemId, newPrice) {
 
   if (item.price !== val) {
     item.price = val;
-    await saveMenuData(menuData);
+    const ok = await saveMenuData(menuData);
+    if (ok) {
+      const statusEl = document.getElementById(`quick-status-${itemId}`);
+      if (statusEl) {
+        statusEl.classList.remove('opacity-0');
+        setTimeout(() => statusEl.classList.add('opacity-0'), 2500);
+      }
+      renderAdminProductTable();
+    }
   }
 }
 
@@ -322,6 +333,7 @@ async function saveAllQuickPrices() {
 
   const success = await saveMenuData(menuData);
   if (success) {
+    showToast(`✅ ${changed > 0 ? changed + ' ürün fiyatı' : 'Tüm fiyatlar'} kaydedildi!`, 'success');
     renderAdminProductTable();
   }
 }
@@ -773,6 +785,8 @@ function fillSettingsForm() {
 async function handleSaveSettings(e) {
   e.preventDefault();
 
+  const newPin = document.getElementById('set-admin-pin').value.trim() || '1234';
+
   menuData.settings = {
     ...menuData.settings,
     cafeName: document.getElementById('set-cafe-name').value.trim(),
@@ -781,14 +795,18 @@ async function handleSaveSettings(e) {
     wifiName: document.getElementById('set-wifi-name').value.trim(),
     wifiPassword: document.getElementById('set-wifi-pass').value.trim(),
     instagram: document.getElementById('set-instagram').value.trim(),
-    adminPin: document.getElementById('set-admin-pin').value.trim() || '1234',
+    adminPin: newPin,
     baseUrl: document.getElementById('set-base-url').value.trim() || window.location.origin,
     tableCount: parseInt(document.getElementById('set-table-count').value) || 24,
     enableServiceCalls: document.getElementById('set-enable-calls').checked
   };
 
-  await saveMenuData(menuData);
-  alert('✅ Ayarlar başarıyla güncellendi!');
+  const ok = await saveMenuData(menuData);
+  if (ok) {
+    try { sessionStorage.setItem('hashtag_admin_pin', newPin); } catch (err) {}
+    fillSettingsForm();
+    showToast('✅ Kafe ve Wi-Fi ayarları başarıyla kaydedildi!', 'success');
+  }
 }
 
 /* ==========================================================================

@@ -48,6 +48,45 @@ function showToast(message, type = 'success') {
   }, 3500);
 }
 
+// Güvenli Depolama Yardımcıları
+function safeGetStorage(key) {
+  try { return localStorage.getItem(key); } catch (e) { return null; }
+}
+function safeSetStorage(key, val) {
+  try { localStorage.setItem(key, val); } catch (e) {}
+}
+
+// Sekmeler Arası Eşitleme Kanalı (BroadcastChannel)
+const syncChannel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('hashtag_menu_sync') : null;
+if (syncChannel) {
+  syncChannel.onmessage = async (ev) => {
+    if (ev.data === 'sync') {
+      await loadMenuData();
+      if (document.getElementById('menu-app')) {
+        renderHeaderInfo();
+        renderCategoryPills();
+        renderMenuItems();
+      }
+    }
+  };
+}
+
+// Depolama Olayı Dinleyicisi (Farklı Sekmeler İçin)
+if (typeof window !== 'undefined' && window.addEventListener) {
+  window.addEventListener('storage', (e) => {
+    if (e.key === 'hashtag_menu_cache') {
+      try {
+        menuData = JSON.parse(e.newValue);
+        if (document.getElementById('menu-app')) {
+          renderHeaderInfo();
+          renderCategoryPills();
+          renderMenuItems();
+        }
+      } catch (err) {}
+    }
+  });
+}
+
 // Menü Verisini Yükleme (Önbellek atlatmalı canlı sunucu kontrolü)
 async function loadMenuData() {
   try {
@@ -58,7 +97,7 @@ async function loadMenuData() {
     });
     if (res.ok) {
       menuData = await res.json();
-      localStorage.setItem('hashtag_menu_cache', JSON.stringify(menuData));
+      safeSetStorage('hashtag_menu_cache', JSON.stringify(menuData));
       return menuData;
     }
   } catch (err) {
@@ -66,7 +105,7 @@ async function loadMenuData() {
   }
 
   // Önbellek kontrolü
-  const cached = localStorage.getItem('hashtag_menu_cache');
+  const cached = safeGetStorage('hashtag_menu_cache');
   if (cached) {
     try {
       menuData = JSON.parse(cached);
@@ -104,10 +143,16 @@ async function loadMenuData() {
 // Menüyü Kaydetme (Sunucuya POST, LocalStorage'a da yaz)
 async function saveMenuData(updatedData) {
   menuData = updatedData;
-  localStorage.setItem('hashtag_menu_cache', JSON.stringify(menuData));
+  safeSetStorage('hashtag_menu_cache', JSON.stringify(menuData));
+
+  if (syncChannel) {
+    try { syncChannel.postMessage('sync'); } catch (e) {}
+  }
 
   // Giriş yapılmış PIN'i header ile gönder (Güvenlik)
-  const pin = sessionStorage.getItem('hashtag_admin_pin') || (menuData.settings && menuData.settings.adminPin) || '1234';
+  let pin = '';
+  try { pin = sessionStorage.getItem('hashtag_admin_pin') || ''; } catch (e) {}
+  if (!pin) pin = (menuData.settings && menuData.settings.adminPin) || '1234';
 
   try {
     const apiBase = getApiBaseUrl();
@@ -127,7 +172,7 @@ async function saveMenuData(updatedData) {
         const verifyRes = await fetch(apiBase + '/api/menu?_t=' + Date.now(), { cache: 'no-store' });
         if (verifyRes.ok) {
           menuData = await verifyRes.json();
-          localStorage.setItem('hashtag_menu_cache', JSON.stringify(menuData));
+          safeSetStorage('hashtag_menu_cache', JSON.stringify(menuData));
         }
       } catch (e) {}
       return true;
@@ -200,11 +245,25 @@ function renderHeaderInfo() {
   const { settings } = menuData;
   const nameEl = document.getElementById('cafe-name');
   const taglineEl = document.getElementById('cafe-tagline');
+  const footerNameEl = document.getElementById('footer-cafe-name');
   const tableBadgeEl = document.getElementById('table-badge');
   const instaEl = document.getElementById('instagram-link');
+  const wifiNameEl = document.getElementById('wifi-name-display');
+  const wifiPassEl = document.getElementById('wifi-pass-display');
+  const wifiTitleEl = document.getElementById('wifi-modal-title');
 
-  if (nameEl) nameEl.textContent = settings.cafeName || 'HASHTAG';
-  if (taglineEl) taglineEl.textContent = settings.cafeTagline || 'Lounge & Hookah';
+  const cafeName = settings.cafeName || 'HASHTAG';
+  const cafeTagline = settings.cafeTagline || 'Lounge & Hookah Experience';
+
+  if (nameEl) nameEl.textContent = cafeName;
+  if (taglineEl) taglineEl.textContent = cafeTagline;
+  if (footerNameEl) footerNameEl.textContent = `${cafeName.toUpperCase()} LOUNGE & HOOKAH`;
+  document.title = `${cafeName} | ${cafeTagline}`;
+
+  // Wi-Fi Bilgilerini Anında Güncelle
+  if (wifiTitleEl) wifiTitleEl.textContent = `${cafeName} Misafir Wi-Fi`;
+  if (wifiNameEl) wifiNameEl.textContent = settings.wifiName || 'HASHTAG';
+  if (wifiPassEl) wifiPassEl.textContent = settings.wifiPassword || '';
 
   if (tableBadgeEl) {
     if (selectedTable) {
@@ -218,9 +277,13 @@ function renderHeaderInfo() {
     }
   }
 
-  if (instaEl && settings.instagram) {
-    instaEl.href = `https://instagram.com/${settings.instagram.replace('@', '')}`;
-    instaEl.classList.remove('hidden');
+  if (instaEl) {
+    if (settings.instagram && settings.instagram.trim()) {
+      instaEl.href = `https://instagram.com/${settings.instagram.trim().replace('@', '')}`;
+      instaEl.classList.remove('hidden');
+    } else {
+      instaEl.classList.add('hidden');
+    }
   }
 
   // Gelecek özellik (Köz & Garson) kontrolü
@@ -538,11 +601,14 @@ function setupWifiModal() {
   if (!btn || !modal) return;
 
   btn.addEventListener('click', () => {
-    const { settings } = menuData;
-    document.getElementById('wifi-name-display').textContent = settings.wifiName || 'HASHTAG_GUEST';
-    document.getElementById('wifi-pass-display').textContent = settings.wifiPassword || '12345678';
+    const s = (menuData && menuData.settings) || {};
+    const nameEl = document.getElementById('wifi-name-display');
+    const passEl = document.getElementById('wifi-pass-display');
+    if (nameEl) nameEl.textContent = s.wifiName || 'HASHTAG';
+    if (passEl) passEl.textContent = s.wifiPassword || '';
     modal.classList.remove('hidden');
     modal.classList.add('flex');
+    if (window.lucide) lucide.createIcons();
   });
 }
 
@@ -555,19 +621,42 @@ function closeWifiModal() {
 }
 
 function copyWifiPassword() {
-  const pass = menuData.settings.wifiPassword || '';
-  navigator.clipboard.writeText(pass).then(() => {
-    const copyBtn = document.getElementById('copy-wifi-btn');
+  const pass = (menuData && menuData.settings && menuData.settings.wifiPassword) || '';
+  const copyBtn = document.getElementById('copy-wifi-btn');
+
+  const onCopied = () => {
     if (copyBtn) {
       const orig = copyBtn.innerHTML;
-      copyBtn.innerHTML = `<i data-lucide="check" class="w-4 h-4 text-green-400"></i> Kopyalandı!`;
+      copyBtn.innerHTML = `<i data-lucide="check" class="w-3.5 h-3.5 text-black"></i> Kopyalandı!`;
       if (window.lucide) lucide.createIcons();
       setTimeout(() => {
         copyBtn.innerHTML = orig;
         if (window.lucide) lucide.createIcons();
       }, 2000);
     }
-  });
+  };
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(pass).then(onCopied).catch(() => fallbackCopy(pass, onCopied));
+  } else {
+    fallbackCopy(pass, onCopied);
+  }
+}
+
+function fallbackCopy(text, cb) {
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    if (cb) cb();
+  } catch (e) {
+    prompt('Wi-Fi Şifresi:', text);
+  }
 }
 
 // Garson / Köz İsteme (Altyapı hazırlandı, admin panelinden istendiği an açılabilir)
@@ -580,4 +669,20 @@ function setupServiceCallModal() {
 
     alert(`🛎️ ${title}\n\n${desc}`);
   };
+}
+
+// Müşteri Menüsü İçin Akıllı Arka Plan Otomatik Güncelleme (15 sn)
+if (typeof setInterval !== 'undefined') {
+  setInterval(async () => {
+    if (typeof document !== 'undefined' && document.getElementById('menu-app') && document.visibilityState === 'visible' && menuData) {
+      const prevDataStr = JSON.stringify(menuData);
+      await loadMenuData();
+      const nextDataStr = JSON.stringify(menuData);
+      if (prevDataStr !== nextDataStr) {
+        renderHeaderInfo();
+        renderCategoryPills();
+        renderMenuItems();
+      }
+    }
+  }, 15000);
 }

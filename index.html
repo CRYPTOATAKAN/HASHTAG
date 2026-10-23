@@ -29,7 +29,7 @@
   <script src="https://unpkg.com/lucide@latest"></script>
 
   <!-- Custom Styles -->
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="style.css?v=2.1" />
 </head>
 <body class="antialiased selection:bg-amber-500 selection:text-black">
   <div id="menu-app" class="min-h-screen flex flex-col pb-24">
@@ -123,7 +123,7 @@
       <div class="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mx-auto mb-3 text-amber-400 font-bold">
         #
       </div>
-      <p class="font-semibold text-gray-300">HASHTAG LOUNGE & HOOKAH</p>
+      <p id="footer-cafe-name" class="font-semibold text-gray-300">HASHTAG LOUNGE & HOOKAH</p>
       <p class="mt-1 text-gray-400">Tüm fiyatlarımıza KDV dahildir.</p>
       <div class="mt-4 flex items-center justify-center gap-4 text-gray-400">
         <a href="/admin" class="hover:text-amber-400 flex items-center gap-1 transition-colors">
@@ -152,19 +152,19 @@
         <i data-lucide="wifi" class="w-6 h-6"></i>
       </div>
 
-      <h3 class="text-lg font-bold text-white">HASHTAG Misafir Wi-Fi</h3>
+      <h3 id="wifi-modal-title" class="text-lg font-bold text-white">Misafir Wi-Fi</h3>
       <p class="text-xs text-gray-400 mt-1">Kafemizde kesintisiz internete bağlanın.</p>
 
       <div class="mt-5 space-y-3">
         <div class="p-3 rounded-xl bg-white/5 border border-white/5">
           <div class="text-[11px] text-gray-400 font-medium uppercase tracking-wider">Ağ Adı (SSID)</div>
-          <div id="wifi-name-display" class="text-sm font-semibold text-white mt-0.5">HASHTAG_VIP</div>
+          <div id="wifi-name-display" class="text-sm font-semibold text-white mt-0.5">Yükleniyor...</div>
         </div>
 
         <div class="p-3 rounded-xl bg-white/5 border border-white/5 flex items-center justify-between">
           <div>
             <div class="text-[11px] text-gray-400 font-medium uppercase tracking-wider">Şifre</div>
-            <div id="wifi-pass-display" class="text-sm font-mono font-semibold text-amber-400 mt-0.5">hashtagwelcome</div>
+            <div id="wifi-pass-display" class="text-sm font-mono font-semibold text-amber-400 mt-0.5">••••••••</div>
           </div>
           <button id="copy-wifi-btn" onclick="copyWifiPassword()" class="px-3 py-1.5 rounded-lg bg-amber-500 text-black text-xs font-semibold hover:bg-amber-400 transition-colors flex items-center gap-1.5">
             <i data-lucide="copy" class="w-3.5 h-3.5"></i> Kopyala
@@ -179,7 +179,7 @@
   </div>
 
   <!-- Scriptler -->
-  <script src="default-data.js"></script>
-  <script src="app.js"></script>
+  <script src="default-data.js?v=2.1"></script>
+  <script src="app.js?v=2.1"></script>
 </body>
 </html>
