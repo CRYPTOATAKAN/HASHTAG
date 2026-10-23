@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="tr" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HASHTAG | Yönetici & QR Baskı Paneli</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- Custom Styles -->
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body id="admin-app" class="bg-neutral-950 text-gray-100 min-h-screen">
+
+  <!-- PIN Korumalı Giriş Modalı -->
+  <div id="pin-login-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-xl">
+    <div class="w-full max-w-sm p-8 rounded-3xl bg-neutral-900 border border-white/10 shadow-2xl text-center">
+      <div class="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center mx-auto mb-4">
+        <i data-lucide="lock" class="w-7 h-7"></i>
+      </div>
+      <h2 class="text-xl font-bold text-white tracking-tight">HASHTAG Yönetici Girişi</h2>
+      <p class="text-xs text-gray-400 mt-1">Lütfen 4 haneli yönetici PIN kodunuzu girin.</p>
+
+      <form id="pin-login-form" class="mt-6 space-y-4">
+        <div>
+          <input 
+            type="password" 
+            id="admin-pin-input" 
+            maxlength="8" 
+            placeholder="••••" 
+            class="w-full py-3 text-center text-2xl font-mono tracking-widest rounded-xl bg-black border border-white/10 text-amber-400 focus:outline-none focus:border-amber-500"
+            required 
+          />
+        </div>
+        <div id="pin-error" class="hidden text-xs text-red-400 font-medium"></div>
+
+        <button type="submit" class="w-full py-3 rounded-xl bg-amber-500 text-black font-bold text-sm hover:bg-amber-400 transition-colors shadow-lg shadow-amber-500/20">
+          Giriş Yap
+        </button>
+      </form>
+
+      <div class="mt-4">
+        <a href="/" class="text-xs text-gray-400 hover:text-white transition-colors">← Müşteri Menüsüne Dön</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Ana Yönetim Arayüzü (PIN girildikten sonra açılır) -->
+  <div id="admin-main-content" class="hidden min-h-screen flex flex-col no-print">
+    
+    <!-- Üst Yönetici Başlığı -->
+    <header class="bg-neutral-900/80 backdrop-blur-md border-b border-white/10 sticky top-0 z-30">
+      <div class="max-w-6xl mx-auto px-4 py-3.5 flex flex-wrap items-center justify-between gap-4">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-xl bg-amber-500 flex items-center justify-center text-black font-black text-lg">
+            #
+          </div>
+          <div>
+            <h1 class="text-base font-bold text-white flex items-center gap-2">
+              HASHTAG Yönetim Paneli
+              <span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">Aktif</span>
+            </h1>
+            <p class="text-xs text-gray-400">Menü ve Fiyat Düzenleme • Sabit QR Masa Standları</p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <a href="/" target="_blank" class="px-3.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-gray-200 text-xs font-semibold flex items-center gap-1.5 border border-white/10 transition-colors">
+            <i data-lucide="external-link" class="w-3.5 h-3.5"></i> Müşteri Menüsünü Aç
+          </a>
+          <button onclick="logoutAdmin()" class="p-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 transition-colors" title="Çıkış Yap">
+            <i data-lucide="log-out" class="w-4 h-4"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Sekmeler (Tabs) -->
+      <div class="max-w-6xl mx-auto px-4 border-t border-white/5 overflow-x-auto no-scrollbar">
+        <div class="flex items-center gap-1 py-2">
+          <button id="tab-btn-products" onclick="switchTab('products')" class="px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2">
+            <i data-lucide="package" class="w-4 h-4"></i> Ürün Yönetimi
+          </button>
+          <button id="tab-btn-quick-price" onclick="switchTab('quick-price')" class="px-4 py-2 rounded-xl text-xs font-medium transition-all flex items-center gap-2 text-gray-400 hover:bg-white/5">
+            <i data-lucide="dollar-sign" class="w-4 h-4 text-amber-400"></i> Hızlı Fiyat Güncelle
+          </button>
+          <button id="tab-btn-qr-stands" onclick="switchTab('qr-stands')" class="px-4 py-2 rounded-xl text-xs font-medium transition-all flex items-center gap-2 text-gray-400 hover:bg-white/5">
+            <i data-lucide="qr-code" class="w-4 h-4 text-amber-400"></i> Sabit QR Masa Standları
+          </button>
+          <button id="tab-btn-settings" onclick="switchTab('settings')" class="px-4 py-2 rounded-xl text-xs font-medium transition-all flex items-center gap-2 text-gray-400 hover:bg-white/5">
+            <i data-lucide="sliders" class="w-4 h-4"></i> Kafe & Wi-Fi Ayarları
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Ana İçerik Alanı -->
+    <main class="max-w-6xl mx-auto px-4 py-6 flex-1 w-full">
+
+      <!-- Hızlı İstatistik Kartları -->
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+        <div class="p-4 rounded-2xl bg-neutral-900 border border-white/5 flex items-center justify-between">
+          <div>
+            <div class="text-xs text-gray-400 font-medium">Toplam Menü Ürünü</div>
+            <div id="stat-total-items" class="text-2xl font-bold text-white mt-0.5">0</div>
+          </div>
+          <div class="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-gray-300">
+            <i data-lucide="layers" class="w-5 h-5"></i>
+          </div>
+        </div>
+
+        <div class="p-4 rounded-2xl bg-neutral-900 border border-white/5 flex items-center justify-between">
+          <div>
+            <div class="text-xs text-gray-400 font-medium">Nargile Çeşitleri</div>
+            <div id="stat-hookah-count" class="text-2xl font-bold text-amber-400 mt-0.5">0</div>
+          </div>
+          <div class="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center">
+            <i data-lucide="flame" class="w-5 h-5"></i>
+          </div>
+        </div>
+
+        <div class="p-4 rounded-2xl bg-neutral-900 border border-white/5 flex items-center justify-between">
+          <div>
+            <div class="text-xs text-gray-400 font-medium">Tükenen Ürünler</div>
+            <div id="stat-out-of-stock" class="text-2xl font-bold text-red-400 mt-0.5">0</div>
+          </div>
+          <div class="w-10 h-10 rounded-xl bg-red-500/10 text-red-400 flex items-center justify-center">
+            <i data-lucide="alert-circle" class="w-5 h-5"></i>
+          </div>
+        </div>
+      </div>
+
+      <!-- SEKME 1: ÜRÜN YÖNETİMİ -->
+      <section id="tab-section-products">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-lg font-bold text-white">Menü Ürünleri</h2>
+          <button onclick="openNewItemModal()" class="px-4 py-2 rounded-xl bg-amber-500 text-black font-bold text-xs flex items-center gap-1.5 hover:bg-amber-400 transition-colors shadow-lg shadow-amber-500/20">
+            <i data-lucide="plus" class="w-4 h-4"></i> Yeni Ürün Ekle
+          </button>
+        </div>
+
+        <div id="admin-products-list" class="rounded-2xl bg-neutral-900 border border-white/10 overflow-hidden shadow-xl">
+          <!-- JS dolduracak -->
+        </div>
+      </section>
+
+      <!-- SEKME 2: HIZLI FİYAT DÜZENLEYİCİ -->
+      <section id="tab-section-quick-price" class="hidden">
+        <div class="mb-4">
+          <h2 class="text-lg font-bold text-white">Hızlı Fiyat Değiştirici</h2>
+          <p class="text-xs text-gray-400">Ürünlerin fiyatlarını kutucuklardan düzenleyip tek tıkla kaydedebilirsiniz.</p>
+        </div>
+
+        <div id="quick-price-list" class="rounded-2xl bg-neutral-900/50 border border-white/10 p-4">
+          <!-- JS dolduracak -->
+        </div>
+      </section>
+
+      <!-- SEKME 3: SABİT QR KOD & BASKI STANDI -->
+      <section id="tab-section-qr-stands" class="hidden">
+        <div class="p-6 rounded-2xl bg-neutral-900 border border-white/10 mb-6">
+          <div class="flex items-start justify-between flex-wrap gap-4">
+            <div>
+              <h2 class="text-lg font-bold text-white flex items-center gap-2">
+                <i data-lucide="printer" class="w-5 h-5 text-amber-400"></i>
+                Sabit QR Kod Masa Baskı Oluşturucu
+              </h2>
+              <p class="text-xs text-gray-400 mt-1 max-w-xl">
+                Buradan oluşturulan QR kodlar masalarınıza pleksi/ahşap stant olarak basılabilir. Menüde fiyat veya ürün değiştirdiğinizde <strong>QR KODU YENİDEN BASMANIZA GEREK KALMAZ</strong>, kod her zaman güncel menüyü açar.
+              </p>
+            </div>
+
+            <button onclick="triggerPrint()" class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 text-black font-black text-xs uppercase tracking-wider flex items-center gap-2 hover:scale-105 transition-all shadow-xl shadow-amber-500/20">
+              <i data-lucide="printer" class="w-4 h-4"></i>
+              Baskı Al / PDF Kaydet
+            </button>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6 pt-6 border-t border-white/10">
+            <div>
+              <label class="block text-xs font-semibold text-gray-300 uppercase tracking-wider mb-1.5">Menü Web Adresi (URL)</label>
+              <input type="text" id="qr-base-url" oninput="updateQrPreview()" placeholder="https://hashtag-menu.com" class="w-full px-3 py-2 rounded-xl bg-black border border-white/10 text-sm text-white focus:outline-none focus:border-amber-500" />
+              <p class="text-[11px] text-gray-500 mt-1">Canlıya aldığınız domain/Vercel linkini buraya yazın.</p>
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-gray-300 uppercase tracking-wider mb-1.5">Baskı Modu</label>
+              <select id="qr-table-mode" onchange="handleTableModeChange()" class="w-full px-3 py-2 rounded-xl bg-black border border-white/10 text-sm text-white focus:outline-none focus:border-amber-500">
+                <option value="single">Tek Masa Seç (Örn: Masa 1)</option>
+                <option value="all">Tüm Masaları Toplu Oluştur (1'den 24'e)</option>
+                <option value="general">Masa Numarasız Genel Menü QR</option>
+              </select>
+            </div>
+
+            <div id="qr-single-table-container">
+              <label class="block text-xs font-semibold text-gray-300 uppercase tracking-wider mb-1.5">Masa Numarası</label>
+              <input type="number" id="qr-single-table-num" value="1" min="1" max="100" oninput="updateQrPreview()" class="w-full px-3 py-2 rounded-xl bg-black border border-white/10 text-sm text-white focus:outline-none focus:border-amber-500" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Canlı Masa Standı Önizleme Alanı -->
+        <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Baskı Önizlemesi (Masa Standı Şablonu)</div>
+        <div id="print-area" class="bg-black/50 p-6 rounded-3xl border border-white/5">
+          <!-- JS dinamik dolduracak -->
+        </div>
+      </section>
+
+      <!-- SEKME 4: KAFE AYARLARI -->
+      <section id="tab-section-settings" class="hidden">
+        <form onsubmit="handleSaveSettings(event)" class="rounded-2xl bg-neutral-900 border border-white/10 p-6 space-y-6 max-w-2xl">
+          <h2 class="text-lg font-bold text-white">Kafe & Sistem Ayarları</h2>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-semibold text-gray-300 mb-1.5">Kafe Adı</label>
+              <input type="text" id="set-cafe-name" class="w-full px-3 py-2 rounded-xl bg-black border border-white/10 text-sm text-white focus:outline-none focus:border-amber-500" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-gray-300 mb-1.5">Slogan / Alt Başlık</label>
+              <input type="text" id="set-tagline" class="w-full px-3 py-2 rounded-xl bg-black border border-white/10 text-sm text-white focus:outline-none focus:border-amber-500" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-gray-300 mb-1.5">Para Birimi</label>
+              <input type="text" id="set-currency" class="w-full px-3 py-2 rounded-xl bg-black border border-white/10 text-sm text-white focus:outline-none focus:border-amber-500" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-gray-300 mb-1.5">Masa Sayısı</label>
+              <input type="number" id="set-table-count" class="w-full px-3 py-2 rounded-xl bg-black border border-white/10 text-sm text-white focus:outline-none focus:border-amber-500" />
+            </div>
+          </div>
+
+          <div class="pt-4 border-t border-white/10">
+            <h3 class="text-sm font-semibold text-white mb-3">Wi-Fi & İletişim Bilgileri (Müşteri Menüsünde Görünür)</h3>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-xs font-semibold text-gray-300 mb-1.5">Wi-Fi Ağ Adı (SSID)</label>
+                <input type="text" id="set-wifi-name" class="w-full px-3 py-2 rounded-xl bg-black border border-white/10 text-sm text-white focus:outline-none focus:border-amber-500" />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-gray-300 mb-1.5">Wi-Fi Şifresi</label>
+                <input type="text" id="set-wifi-pass" class="w-full px-3 py-2 rounded-xl bg-black border border-white/10 text-sm text-white focus:outline-none focus:border-amber-500 font-mono" />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-gray-300 mb-1.5">Instagram Kullanıcı Adı</label>
+                <input type="text" id="set-instagram" placeholder="hashtag.lounge" class="w-full px-3 py-2 rounded-xl bg-black border border-white/10 text-sm text-white focus:outline-none focus:border-amber-500" />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-gray-300 mb-1.5">Yönetici PIN Kodu</label>
+                <input type="text" id="set-admin-pin" class="w-full px-3 py-2 rounded-xl bg-black border border-white/10 text-sm text-amber-400 focus:outline-none focus:border-amber-500 font-mono" />
+              </div>
+            </div>
+          </div>
+
+          <div class="pt-4 border-t border-white/10">
+            <h3 class="text-sm font-semibold text-white mb-2">Gelecek Özellikleri (Altyapı)</h3>
+            <div class="flex items-center justify-between p-4 rounded-xl bg-black border border-white/10">
+              <div>
+                <div class="text-sm font-medium text-white">Köz İste & Garson Çağır Butonları</div>
+                <div class="text-xs text-gray-400">Menünün altında müşterilere tek tıkla köz veya garson çağırma butonunu göster.</div>
+              </div>
+              <label class="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" id="set-enable-calls" class="sr-only peer" />
+                <div class="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+              </label>
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-gray-300 mb-1.5">Sabit Domain / Yayın URL</label>
+            <input type="text" id="set-base-url" placeholder="https://hashtag-menu.com" class="w-full px-3 py-2 rounded-xl bg-black border border-white/10 text-sm text-white focus:outline-none focus:border-amber-500" />
+          </div>
+
+          <div class="pt-4 border-t border-white/10">
+            <h3 class="text-sm font-semibold text-white mb-2">Yedekleme & Dışa Aktarma</h3>
+            <div class="flex flex-wrap items-center gap-3">
+              <button type="button" onclick="exportMenuBackup()" class="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-semibold flex items-center gap-2 transition-colors">
+                <i data-lucide="download" class="w-4 h-4 text-amber-400"></i> Menü Verisini İndir (JSON)
+              </button>
+              <label class="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300 text-xs font-semibold flex items-center gap-2 cursor-pointer transition-colors border border-white/10">
+                <i data-lucide="upload" class="w-4 h-4 text-emerald-400"></i> Yedekten Yükle (JSON)
+                <input type="file" id="import-file-input" accept=".json" onchange="importMenuBackup(event)" class="hidden" />
+              </label>
+            </div>
+            <p class="text-[11px] text-gray-500 mt-2">Menüyü başka bir sunucuya taşımak veya bilgisayarınızda yedek saklamak için kullanabilirsiniz.</p>
+          </div>
+
+          <button type="submit" class="w-full py-3 rounded-xl bg-amber-500 text-black font-bold text-sm hover:bg-amber-400 transition-colors shadow-lg shadow-amber-500/20">
+            Ayarları Kaydet
+          </button>
+        </form>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- Ürün Ekle / Düzenle Modalı -->
+  <div id="edit-item-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+    <div class="w-full max-w-lg bg-neutral-900 border border-white/10 rounded-3xl p-6 shadow-2xl relative max-h-[92vh] overflow-y-auto">
+      <div class="flex items-center justify-between pb-4 border-b border-white/10">
+        <h3 id="modal-item-title" class="text-lg font-bold text-white">Ürün Düzenle</h3>
+        <button onclick="closeItemEditModal()" class="text-gray-400 hover:text-white p-1">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <form id="item-form" onsubmit="handleSaveItem(event)" class="mt-4 space-y-4">
+        <div>
+          <label class="block text-xs font-semibold text-gray-300 mb-1">Ürün Adı *</label>
+          <input type="text" id="form-item-name" required placeholder="örn: Love 66, Türk Kahvesi" class="w-full px-3 py-2 rounded-xl bg-black border border-white/10 text-sm text-white focus:outline-none focus:border-amber-500" />
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-gray-300 mb-1">Kategori *</label>
+            <select id="form-item-category" class="w-full px-3 py-2 rounded-xl bg-black border border-white/10 text-sm text-white focus:outline-none focus:border-amber-500"></select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-300 mb-1">Fiyat (₺) *</label>
+            <input type="number" id="form-item-price" step="1" required placeholder="380" class="w-full px-3 py-2 rounded-xl bg-black border border-white/10 text-sm text-amber-400 font-mono font-bold focus:outline-none focus:border-amber-500" />
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-gray-300 mb-1">Açıklama</label>
+          <textarea id="form-item-desc" rows="2" placeholder="Ürün içeriği, sunum özellikleri..." class="w-full px-3 py-2 rounded-xl bg-black border border-white/10 text-sm text-white focus:outline-none focus:border-amber-500"></textarea>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-gray-300 mb-1">Nargile Aromaları (Virgülle ayırın)</label>
+          <input type="text" id="form-item-flavors" placeholder="Kavun, Karpuz, Çarkıfelek, Mentol" class="w-full px-3 py-2 rounded-xl bg-black border border-white/10 text-sm text-white focus:outline-none focus:border-amber-500" />
+          <p class="text-[11px] text-gray-500 mt-1">Müşteriler arama yaparken bu aromaları yazarak bulabilir.</p>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-gray-300 mb-1">Rozet / Etiket</label>
+            <input type="text" id="form-item-badge" placeholder="Popüler, Şefin Tercihi, Yeni" class="w-full px-3 py-2 rounded-xl bg-black border border-white/10 text-sm text-white focus:outline-none focus:border-amber-500" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-300 mb-1">Görsel URL</label>
+            <input type="url" id="form-item-image" placeholder="https://..." class="w-full px-3 py-2 rounded-xl bg-black border border-white/10 text-sm text-white focus:outline-none focus:border-amber-500" />
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2 pt-2">
+          <input type="checkbox" id="form-item-stock" class="w-4 h-4 rounded text-amber-500 focus:ring-0 bg-black border-white/20" />
+          <label for="form-item-stock" class="text-xs font-medium text-gray-300 cursor-pointer">Ürün stokta mevcut (Tükendi değil)</label>
+        </div>
+
+        <div class="flex items-center gap-3 pt-4 border-t border-white/10">
+          <button type="button" onclick="closeItemEditModal()" class="flex-1 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300 text-sm font-medium transition-colors">
+            İptal
+          </button>
+          <button type="submit" class="flex-1 py-2.5 rounded-xl bg-amber-500 text-black font-bold text-sm hover:bg-amber-400 transition-colors shadow-lg shadow-amber-500/20">
+            Kaydet
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Scriptler -->
+  <script src="default-data.js"></script>
+  <script src="app.js"></script>
+  <script src="admin.js"></script>
+</body>
+</html>
