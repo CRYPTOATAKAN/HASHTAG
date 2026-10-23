@@ -14,11 +14,45 @@ function getTableFromUrl() {
   return params.get('table') || params.get('masa') || null;
 }
 
+// Canlı API Temel URL (Localhost, Canlı Sunucu veya Desktop file:// desteği)
+function getApiBaseUrl() {
+  if (window.location.protocol.startsWith('http')) {
+    return ''; // Doğrudan aktif sunucu
+  }
+  // Eğer masaüstündeki HTML dosyasından açıldıysa canlı Northflank adresine bağlan
+  return 'https://p01--hashtag--xqx4khzq6gkf.code.run';
+}
+
+// Görsel Bildirim (Toast) Sistemi
+function showToast(message, type = 'success') {
+  let toast = document.getElementById('hashtag-toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'hashtag-toast';
+    document.body.appendChild(toast);
+  }
+
+  if (type === 'success') {
+    toast.className = 'fixed top-5 right-5 z-[9999] px-5 py-3.5 rounded-2xl shadow-2xl font-bold text-xs transition-all duration-300 bg-emerald-500 text-black flex items-center gap-2 shadow-emerald-500/30';
+  } else {
+    toast.className = 'fixed top-5 right-5 z-[9999] px-5 py-3.5 rounded-2xl shadow-2xl font-bold text-xs transition-all duration-300 bg-red-500 text-white flex items-center gap-2 shadow-red-500/30';
+  }
+
+  toast.innerHTML = message;
+  toast.style.transform = 'translateY(0)';
+  toast.style.opacity = '1';
+
+  setTimeout(() => {
+    toast.style.transform = 'translateY(-20px)';
+    toast.style.opacity = '0';
+  }, 3500);
+}
+
 // Menü Verisini Yükleme (Önbellek atlatmalı canlı sunucu kontrolü)
 async function loadMenuData() {
   try {
-    // Cache-buster ile tarayıcı veya proxy önbelleğini kesinlikle atla
-    const res = await fetch('/api/menu?_t=' + Date.now(), {
+    const apiBase = getApiBaseUrl();
+    const res = await fetch(apiBase + '/api/menu?_t=' + Date.now(), {
       cache: 'no-store',
       headers: { 'Cache-Control': 'no-cache, no-store' }
     });
@@ -76,7 +110,8 @@ async function saveMenuData(updatedData) {
   const pin = sessionStorage.getItem('hashtag_admin_pin') || (menuData.settings && menuData.settings.adminPin) || '1234';
 
   try {
-    const res = await fetch('/api/menu/update', {
+    const apiBase = getApiBaseUrl();
+    const res = await fetch(apiBase + '/api/menu/update', {
       method: 'POST',
       headers: { 
         'Content-Type': 'application/json',
@@ -84,12 +119,57 @@ async function saveMenuData(updatedData) {
       },
       body: JSON.stringify(updatedData)
     });
-    if (res.ok) return true;
+
+    if (res.ok) {
+      showToast('✅ Değişiklikler canlı menüye başarıyla kaydedildi!', 'success');
+      // Arka planda sunucudan tekrar çekip doğrula
+      try {
+        const verifyRes = await fetch(apiBase + '/api/menu?_t=' + Date.now(), { cache: 'no-store' });
+        if (verifyRes.ok) {
+          menuData = await verifyRes.json();
+          localStorage.setItem('hashtag_menu_cache', JSON.stringify(menuData));
+        }
+      } catch (e) {}
+      return true;
+    } else {
+      const errJson = await res.json().catch(() => ({}));
+      const msg = errJson.message || `Sunucu hatası (${res.status})`;
+      showToast('⚠️ Kaydedilemedi: ' + msg, 'error');
+      alert('⚠️ Kaydedilemedi!\nSunucu yanıtı: ' + msg);
+      return false;
+    }
   } catch (err) {
-    console.warn("Sunucuya yazılamadı, localStorage'a kaydedildi:", err);
+    console.error("Sunucuya yazılamadı:", err);
+    showToast('⚠️ İnternet bağlantı hatası, sunucuya ulaşılamadı.', 'error');
+    alert('⚠️ Sunucuya ulaşılamadı!\nLütfen internet bağlantınızı kontrol edin.\nDetay: ' + err.message);
+    return false;
   }
-  return true;
 }
+
+window.refreshCustomerMenu = async function(btn) {
+  if (btn) btn.classList.add('animate-spin');
+  await loadMenuData();
+  renderHeaderInfo();
+  renderCategoryPills();
+  renderMenuItems();
+  showToast('✅ Menü güncellendi!');
+  if (btn) {
+    setTimeout(() => btn.classList.remove('animate-spin'), 600);
+  }
+};
+
+// Sekme veya telefon ekranı tekrar açıldığında menüyü otomatik yenile
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    loadMenuData().then(() => {
+      if (document.getElementById('menu-app')) {
+        renderHeaderInfo();
+        renderCategoryPills();
+        renderMenuItems();
+      }
+    });
+  }
+});
 
 // DOM Hazır Olduğunda Menüyü Başlat
 document.addEventListener('DOMContentLoaded', async () => {

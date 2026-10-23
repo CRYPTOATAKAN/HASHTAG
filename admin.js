@@ -278,6 +278,7 @@ function renderQuickPriceTable() {
                 type="number" 
                 id="quick-price-${item.id}" 
                 value="${item.price}" 
+                onchange="saveSingleQuickPrice('${item.id}', this.value)"
                 class="w-24 px-3 py-1.5 rounded-lg bg-black border border-white/20 text-right font-mono font-bold text-amber-400 focus:outline-none focus:border-amber-400 text-sm"
               />
               <span class="text-xs text-gray-400 font-semibold">${currency}</span>
@@ -289,6 +290,19 @@ function renderQuickPriceTable() {
   `;
 
   if (window.lucide) lucide.createIcons();
+}
+
+async function saveSingleQuickPrice(itemId, newPrice) {
+  const item = (menuData.items || []).find(it => it.id === itemId);
+  if (!item) return;
+
+  const val = parseFloat(newPrice);
+  if (isNaN(val)) return;
+
+  if (item.price !== val) {
+    item.price = val;
+    await saveMenuData(menuData);
+  }
 }
 
 async function saveAllQuickPrices() {
@@ -306,9 +320,10 @@ async function saveAllQuickPrices() {
     }
   });
 
-  await saveMenuData(menuData);
-  alert(`✅ ${changed > 0 ? `${changed} ürünün fiyatı güncellendi ve kaydedildi!` : 'Tüm fiyatlar güncel.'}`);
-  renderAdminProductTable();
+  const success = await saveMenuData(menuData);
+  if (success) {
+    renderAdminProductTable();
+  }
 }
 
 /* ==========================================================================
@@ -405,10 +420,12 @@ async function handleSaveItem(e) {
     });
   }
 
-  await saveMenuData(menuData);
-  closeItemEditModal();
-  updateAdminStats();
-  renderAdminProductTable();
+  const success = await saveMenuData(menuData);
+  if (success) {
+    closeItemEditModal();
+    updateAdminStats();
+    renderAdminProductTable();
+  }
 }
 
 async function deleteItem(itemId) {
