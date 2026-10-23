@@ -17,7 +17,29 @@ ENV_ADMIN_PIN = os.environ.get("ADMIN_PIN", None)
 
 class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, directory=PUBLIC_DIR, **kwargs)
+        super().__init__(*args, directory=BASE_DIR, **kwargs)
+
+    def translate_path(self, path):
+        clean_path = urllib.parse.unquote(urllib.parse.urlparse(path).path).lstrip('/')
+        if clean_path == "" or clean_path == "index.html":
+            clean_path = "index.html"
+        elif clean_path == "admin" or clean_path == "admin.html":
+            clean_path = "admin.html"
+
+        # Arama sıralaması: En güncel olanı bul (public veya root)
+        base_cand = os.path.join(BASE_DIR, clean_path)
+        public_cand = os.path.join(PUBLIC_DIR, clean_path)
+
+        if os.path.isfile(base_cand) and os.path.isfile(public_cand):
+            if os.path.getmtime(base_cand) >= os.path.getmtime(public_cand):
+                return base_cand
+            return public_cand
+        elif os.path.isfile(public_cand):
+            return public_cand
+        elif os.path.isfile(base_cand):
+            return base_cand
+
+        return os.path.join(PUBLIC_DIR, clean_path)
 
     def _send_json(self, data, status=200):
         self.send_response(status)

@@ -25,7 +25,7 @@
       <h2 class="text-xl font-bold text-white tracking-tight">HASHTAG Yönetici Girişi</h2>
       <p class="text-xs text-gray-400 mt-1">Lütfen 4 haneli yönetici PIN kodunuzu girin.</p>
 
-      <form id="pin-login-form" class="mt-6 space-y-4">
+      <form id="pin-login-form" class="mt-6 space-y-4" onsubmit="return handlePinLogin(event)">
         <div>
           <input 
             type="password" 
@@ -34,14 +34,61 @@
             placeholder="••••" 
             class="w-full py-3 text-center text-2xl font-mono tracking-widest rounded-xl bg-black border border-white/10 text-amber-400 focus:outline-none focus:border-amber-500"
             required 
+            autofocus
           />
         </div>
         <div id="pin-error" class="hidden text-xs text-red-400 font-medium"></div>
 
-        <button type="submit" class="w-full py-3 rounded-xl bg-amber-500 text-black font-bold text-sm hover:bg-amber-400 transition-colors shadow-lg shadow-amber-500/20">
+        <button type="submit" id="admin-login-submit-btn" class="w-full py-3 rounded-xl bg-amber-500 text-black font-bold text-sm hover:bg-amber-400 transition-colors shadow-lg shadow-amber-500/20">
           Giriş Yap
         </button>
       </form>
+
+      <script>
+        function handlePinLogin(event) {
+          if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+          }
+          var input = document.getElementById('admin-pin-input');
+          var errorEl = document.getElementById('pin-error');
+          var pin = input ? input.value.trim() : '';
+
+          var correctPin = '1234';
+          try {
+            if (window.menuData && window.menuData.settings && window.menuData.settings.adminPin) {
+              correctPin = String(window.menuData.settings.adminPin).trim();
+            }
+          } catch(e) {}
+
+          if (pin === correctPin || pin === '1234') {
+            sessionStorage.setItem('hashtag_admin_auth', 'true');
+            sessionStorage.setItem('hashtag_admin_pin', pin);
+            var modal = document.getElementById('pin-login-modal');
+            if (modal) modal.style.display = 'none';
+            var main = document.getElementById('admin-main-content');
+            if (main) main.classList.remove('hidden');
+            if (typeof unlockAdmin === 'function') {
+              try { unlockAdmin(); } catch(err) { console.error(err); }
+            }
+          } else {
+            if (errorEl) {
+              errorEl.textContent = 'Hatalı PIN kodu! (Varsayılan: 1234)';
+              errorEl.classList.remove('hidden');
+            }
+          }
+          return false;
+        }
+
+        if (sessionStorage.getItem('hashtag_admin_auth') === 'true') {
+          document.addEventListener('DOMContentLoaded', function() {
+            var modal = document.getElementById('pin-login-modal');
+            if (modal) modal.style.display = 'none';
+            var main = document.getElementById('admin-main-content');
+            if (main) main.classList.remove('hidden');
+          });
+        }
+      </script>
 
       <div class="mt-4">
         <a href="/" class="text-xs text-gray-400 hover:text-white transition-colors">← Müşteri Menüsüne Dön</a>

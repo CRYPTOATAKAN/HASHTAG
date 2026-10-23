@@ -74,13 +74,17 @@ function setupPinLogin() {
 function unlockAdmin() {
   isAuthenticated = true;
   const modal = document.getElementById('pin-login-modal');
-  if (modal) modal.classList.add('hidden');
+  if (modal) modal.style.display = 'none';
   const app = document.getElementById('admin-main-content');
   if (app) app.classList.remove('hidden');
 
-  switchTab('products');
-  updateAdminStats();
-  fillSettingsForm();
+  if (!menuData && window.DEFAULT_MENU_DATA) {
+    menuData = JSON.parse(JSON.stringify(window.DEFAULT_MENU_DATA));
+  }
+
+  try { switchTab('products'); } catch (e) { console.error('switchTab error:', e); }
+  try { updateAdminStats(); } catch (e) { console.error('updateAdminStats error:', e); }
+  try { fillSettingsForm(); } catch (e) { console.error('fillSettingsForm error:', e); }
 }
 
 function logoutAdmin() {
