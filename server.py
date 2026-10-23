@@ -26,18 +26,20 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
         elif clean_path == "admin" or clean_path == "admin.html":
             clean_path = "admin.html"
 
-        # Arama sıralaması: En güncel olanı bul (public veya root)
-        base_cand = os.path.join(BASE_DIR, clean_path)
-        public_cand = os.path.join(PUBLIC_DIR, clean_path)
+        # Akıllı Dosya & Görsel Çözümleyici (Root, Images veya Public klasörlerinde otomatik arar)
+        filename = os.path.basename(clean_path)
+        candidates = [
+            os.path.join(BASE_DIR, clean_path),
+            os.path.join(PUBLIC_DIR, clean_path),
+            os.path.join(BASE_DIR, filename),
+            os.path.join(PUBLIC_DIR, filename),
+            os.path.join(BASE_DIR, "images", filename),
+            os.path.join(PUBLIC_DIR, "images", filename)
+        ]
 
-        if os.path.isfile(base_cand) and os.path.isfile(public_cand):
-            if os.path.getmtime(base_cand) >= os.path.getmtime(public_cand):
-                return base_cand
-            return public_cand
-        elif os.path.isfile(public_cand):
-            return public_cand
-        elif os.path.isfile(base_cand):
-            return base_cand
+        for cand in candidates:
+            if os.path.isfile(cand):
+                return cand
 
         return os.path.join(PUBLIC_DIR, clean_path)
 

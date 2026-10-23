@@ -700,8 +700,13 @@ function updateQrPreview() {
       <div class="table-stand-card max-w-sm mx-auto p-8 rounded-3xl bg-neutral-950 text-white border-2 border-amber-500/40 text-center shadow-2xl relative mb-8 page-break">
         <!-- Logo & Marka -->
         <div class="mb-4">
-          <div class="w-14 h-14 rounded-2xl overflow-hidden border border-amber-500/40 mx-auto mb-2 shadow-lg shadow-amber-500/20 bg-black">
-            <img src="images/hashtag-logo.jpg?v=2.2" alt="HASHTAG" class="w-full h-full object-cover" />
+          <div class="w-14 h-14 rounded-2xl overflow-hidden border border-amber-500/40 mx-auto mb-2 shadow-lg shadow-amber-500/20 bg-black flex items-center justify-center">
+            <img 
+              src="hashtag-logo.jpg?v=2.3" 
+              onerror="if(!this.src.includes('images/')) this.src='images/hashtag-logo.jpg?v=2.3';"
+              alt="HASHTAG" 
+              class="w-full h-full object-cover" 
+            />
           </div>
           <h2 class="text-2xl font-black tracking-tight text-white uppercase">${menuData.settings.cafeName || 'HASHTAG'}</h2>
           <p class="text-xs text-amber-400 font-semibold tracking-widest uppercase mt-0.5">Lounge & Hookah</p>
