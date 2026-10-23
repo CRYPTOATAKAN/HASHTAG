@@ -29,7 +29,7 @@
   <script src="https://unpkg.com/lucide@latest"></script>
 
   <!-- Custom Styles -->
-  <link rel="stylesheet" href="style.css?v=2.1" />
+  <link rel="stylesheet" href="style.css?v=2.4" />
 </head>
 <body class="antialiased selection:bg-amber-500 selection:text-black">
   <div id="menu-app" class="min-h-screen flex flex-col pb-24">
@@ -142,6 +142,57 @@
       </div>
     </main>
 
+    <!-- Instagram Sosyal Medya Şık Tanıtım Kartı -->
+    <section id="instagram-card-section" class="max-w-3xl mx-auto px-4 mt-8 w-full">
+      <div class="relative overflow-hidden rounded-3xl p-5 sm:p-6 bg-gradient-to-br from-neutral-900/90 via-neutral-900/60 to-neutral-950 border border-white/10 shadow-2xl group hover:border-pink-500/40 transition-all duration-300">
+        <!-- Arka Plan Neon Işıltısı -->
+        <div class="absolute -top-10 -right-10 w-44 h-44 bg-gradient-to-br from-pink-500/15 via-purple-600/15 to-amber-500/10 rounded-full blur-2xl pointer-events-none group-hover:scale-125 transition-transform duration-700"></div>
+        <div class="absolute -bottom-8 -left-8 w-36 h-36 bg-amber-500/10 rounded-full blur-xl pointer-events-none"></div>
+
+        <div class="relative z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5">
+          <div class="flex items-center gap-4">
+            <!-- Instagram Renkli Logo Çerçevesi -->
+            <div class="w-13 h-13 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-tr from-amber-500 via-pink-500 to-purple-600 p-[2px] shadow-lg shadow-pink-500/20 flex-shrink-0 group-hover:scale-105 transition-transform">
+              <div class="w-full h-full bg-neutral-950 rounded-[14px] flex items-center justify-center p-3">
+                <i data-lucide="instagram" class="w-full h-full text-pink-400"></i>
+              </div>
+            </div>
+
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="text-[11px] font-bold text-transparent bg-clip-text bg-gradient-to-r from-amber-400 via-pink-400 to-purple-400 uppercase tracking-wider">
+                  Instagram'da Takip Edin
+                </span>
+                <span class="flex h-2 w-2 relative">
+                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-pink-400 opacity-75"></span>
+                  <span class="relative inline-flex rounded-full h-2 w-2 bg-pink-500"></span>
+                </span>
+              </div>
+              <h3 class="text-base sm:text-lg font-black text-white tracking-tight mt-0.5 flex items-center gap-1">
+                @<span id="instagram-handle-display">hashtagcafe07</span>
+              </h3>
+              <p class="text-xs text-gray-400 mt-0.5 max-w-sm">
+                Özel nargile karışımlarımız, atmosferimiz ve hikayelerimiz için bizi takip edin!
+              </p>
+            </div>
+          </div>
+
+          <!-- Takip Et Butonu -->
+          <a 
+            id="instagram-card-btn" 
+            href="https://www.instagram.com/hashtagcafe07" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            class="w-full sm:w-auto px-5 py-3 rounded-xl bg-gradient-to-r from-pink-600 via-purple-600 to-amber-600 hover:from-pink-500 hover:via-purple-500 hover:to-amber-500 text-white font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-xl shadow-pink-600/25 active:scale-95 transition-all"
+          >
+            <i data-lucide="instagram" class="w-4 h-4"></i>
+            <span>Sayfayı Ziyaret Et</span>
+            <i data-lucide="arrow-up-right" class="w-3.5 h-3.5"></i>
+          </a>
+        </div>
+      </div>
+    </section>
+
     <!-- Gelecekteki Özellikler: Köz İste & Garson Çağır (Admin panelinden açıldığında görünür) -->
     <div id="service-call-actions" class="hidden fixed bottom-4 inset-x-4 max-w-md mx-auto z-30">
       <div class="p-2 rounded-2xl bg-neutral-900/90 backdrop-blur-xl border border-white/10 shadow-2xl flex items-center gap-2">
@@ -212,7 +263,7 @@
   </div>
 
   <!-- Scriptler -->
-  <script src="default-data.js?v=2.1"></script>
-  <script src="app.js?v=2.1"></script>
+  <script src="default-data.js?v=2.4"></script>
+  <script src="app.js?v=2.4"></script>
 </body>
 </html>

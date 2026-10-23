@@ -130,7 +130,7 @@ async function loadMenuData() {
       adminPin: "1234",
       wifiName: "HASHTAG_VIP",
       wifiPassword: "hashtagwelcome",
-      instagram: "hashtag.lounge",
+      instagram: "hashtagcafe07",
       enableServiceCalls: false,
       baseUrl: window.location.origin
     },
@@ -277,12 +277,42 @@ function renderHeaderInfo() {
     }
   }
 
+  // Instagram Bağlantısı ve Şık Kartı
+  const instaCardBtn = document.getElementById('instagram-card-btn');
+  const instaHandleEl = document.getElementById('instagram-handle-display');
+  const instaCardSec = document.getElementById('instagram-card-section');
+
+  const rawInstagram = (settings.instagram || 'hashtagcafe07').trim();
+  const cleanInstagram = rawInstagram
+    .replace(/^https?:\/\/(www\.)?instagram\.com\//i, '')
+    .split(/[/?#]/)[0]
+    .replace('@', '')
+    .trim();
+
+  const fullInstaUrl = cleanInstagram 
+    ? `https://www.instagram.com/${cleanInstagram}` 
+    : 'https://www.instagram.com/hashtagcafe07';
+
+  if (instaHandleEl) instaHandleEl.textContent = cleanInstagram || 'hashtagcafe07';
+
   if (instaEl) {
-    if (settings.instagram && settings.instagram.trim()) {
-      instaEl.href = `https://instagram.com/${settings.instagram.trim().replace('@', '')}`;
+    if (cleanInstagram) {
+      instaEl.href = fullInstaUrl;
       instaEl.classList.remove('hidden');
     } else {
       instaEl.classList.add('hidden');
+    }
+  }
+
+  if (instaCardBtn) {
+    instaCardBtn.href = fullInstaUrl;
+  }
+
+  if (instaCardSec) {
+    if (cleanInstagram) {
+      instaCardSec.classList.remove('hidden');
+    } else {
+      instaCardSec.classList.add('hidden');
     }
   }
 
