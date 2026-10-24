@@ -146,7 +146,7 @@ function updateAdminStats() {
     hookahCountEl.textContent = hookahs.length;
   }
   if (outOfStockEl) {
-    const out = items.filter(it => it.inStock === false);
+    const out = items.filter(it => it.inStock === false || it.isAvailable === false);
     outOfStockEl.textContent = out.length;
   }
 }
@@ -182,7 +182,7 @@ function renderAdminProductTable() {
         <tbody class="divide-y divide-white/5">
           ${items.map(item => {
             const cat = menuData.categories.find(c => c.id === item.categoryId);
-            const isOut = item.inStock === false;
+            const isOut = item.inStock === false || item.isAvailable === false;
 
             return `
               <tr class="hover:bg-white/5 transition-colors">
@@ -246,7 +246,9 @@ async function toggleStockStatus(itemId) {
   const item = menuData.items.find(it => it.id === itemId);
   if (!item) return;
 
-  item.inStock = !(item.inStock !== false);
+  const currentAvailable = (item.inStock !== false) && (item.isAvailable !== false);
+  item.inStock = !currentAvailable;
+  item.isAvailable = !currentAvailable;
   await saveMenuData(menuData);
   updateAdminStats();
   renderAdminProductTable();
@@ -374,7 +376,7 @@ function openEditItemModal(itemId) {
   document.getElementById('form-item-badge').value = item.badge || '';
   document.getElementById('form-item-image').value = item.image || '';
   document.getElementById('form-item-flavors').value = (item.flavors || []).join(', ');
-  document.getElementById('form-item-stock').checked = item.inStock !== false;
+  document.getElementById('form-item-stock').checked = (item.inStock !== false) && (item.isAvailable !== false);
 
   const modal = document.getElementById('edit-item-modal');
   modal.classList.remove('hidden');
@@ -420,6 +422,7 @@ async function handleSaveItem(e) {
       item.image = image;
       item.flavors = flavors;
       item.inStock = inStock;
+      item.isAvailable = inStock;
     }
   } else {
     // Yeni ekleme
@@ -433,7 +436,8 @@ async function handleSaveItem(e) {
       badge,
       image,
       flavors,
-      inStock
+      inStock,
+      isAvailable: inStock
     });
   }
 

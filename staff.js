@@ -727,7 +727,7 @@ function renderStockItems() {
   }
 
   container.innerHTML = items.map(item => {
-    const isAvailable = item.isAvailable !== false;
+    const isAvailable = (item.isAvailable !== false) && (item.inStock !== false);
     return `
       <div class="flex items-center justify-between p-3.5 rounded-2xl bg-neutral-900/80 border border-white/10 transition-colors ${!isAvailable ? 'opacity-60 bg-red-950/10 border-red-500/20' : ''}">
         
@@ -768,7 +768,10 @@ function renderStockItems() {
 async function toggleItemStock(itemId, newAvailable) {
   if (menuData && menuData.items) {
     const item = menuData.items.find(i => i.id === itemId);
-    if (item) item.isAvailable = newAvailable;
+    if (item) {
+      item.isAvailable = newAvailable;
+      item.inStock = newAvailable;
+    }
     renderStockItems();
   }
 

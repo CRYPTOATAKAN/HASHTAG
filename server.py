@@ -751,6 +751,7 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
                 for it in menu_obj.get("items", []):
                     if it.get("id") == item_id:
                         it["isAvailable"] = bool(is_available)
+                        it["inStock"] = bool(is_available)
                         found_item = it
                         break
 
@@ -769,7 +770,7 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
                         title=f'"{found_item["name"]}" ürününü "{st_text}" yaptı'
                     )
 
-                    self._send_json({"status": "success", "itemId": item_id, "isAvailable": is_available})
+                    self._send_json({"status": "success", "itemId": item_id, "isAvailable": is_available, "inStock": is_available})
                 else:
                     self._send_json({"status": "error", "message": "Ürün bulunamadı"}, status=404)
             except Exception as e:

@@ -694,7 +694,7 @@ function renderMenuItems() {
 }
 
 function renderItemCard(item, currency) {
-  const isOutOfStock = item.inStock === false;
+  const isOutOfStock = (item.inStock === false) || (item.isAvailable === false);
   const isHookah = item.categoryId && item.categoryId.includes('hookah');
 
   return `
@@ -797,7 +797,7 @@ function openItemDetails(itemId) {
       <div class="flex items-start justify-between gap-4">
         <div>
           <h2 class="text-xl font-bold text-white tracking-tight">${item.name}</h2>
-          ${item.inStock === false ? `
+          ${(item.inStock === false || item.isAvailable === false) ? `
             <span class="inline-block mt-1 text-xs text-red-400 font-medium">Bu ürün şu anda tükendi</span>
           ` : ''}
         </div>
@@ -1171,7 +1171,7 @@ function closeCallSuccessModal() {
   }
 }
 
-// Müşteri Menüsü İçin Akıllı Arka Plan Otomatik Güncelleme (15 sn)
+// Müşteri Menüsü İçin Akıllı Arka Plan Otomatik Güncelleme (3.5 sn)
 if (typeof setInterval !== 'undefined') {
   setInterval(async () => {
     if (typeof document !== 'undefined' && document.getElementById('menu-app') && document.visibilityState === 'visible' && menuData) {
@@ -1184,5 +1184,5 @@ if (typeof setInterval !== 'undefined') {
         renderMenuItems();
       }
     }
-  }, 15000);
+  }, 3500);
 }
