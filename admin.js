@@ -78,6 +78,13 @@ function unlockAdmin() {
   const app = document.getElementById('admin-main-content');
   if (app) app.classList.remove('hidden');
 
+  try {
+    if (!sessionStorage.getItem('hashtag_admin_pin')) {
+      const pin = (menuData && menuData.settings && menuData.settings.adminPin) ? String(menuData.settings.adminPin).trim() : '1234';
+      sessionStorage.setItem('hashtag_admin_pin', pin);
+    }
+  } catch (e) {}
+
   if (!menuData && window.DEFAULT_MENU_DATA) {
     menuData = JSON.parse(JSON.stringify(window.DEFAULT_MENU_DATA));
   }
@@ -89,7 +96,19 @@ function unlockAdmin() {
 
 function logoutAdmin() {
   sessionStorage.removeItem('hashtag_admin_auth');
+  sessionStorage.removeItem('hashtag_admin_pin');
   window.location.reload();
+}
+
+function getAdminPin() {
+  let pin = '';
+  try {
+    pin = sessionStorage.getItem('hashtag_admin_pin') || '';
+  } catch (e) {}
+  if (!pin && menuData && menuData.settings && menuData.settings.adminPin) {
+    pin = String(menuData.settings.adminPin).trim();
+  }
+  return pin || '1234';
 }
 
 /* ==========================================================================
@@ -1103,22 +1122,25 @@ function openStaffModal(staffId = null) {
   if (staffId) {
     const s = adminStaffList.find(x => x.id === staffId);
     if (s) {
-      title.textContent = 'Personeli Düzenle';
-      formId.value = s.id;
-      formName.value = s.name;
-      formRole.value = s.role;
-      formPin.value = s.pin || '1111';
+      if (title) title.textContent = 'Personeli Düzenle';
+      if (formId) formId.value = s.id || '';
+      if (formName) formName.value = s.name || '';
+      if (formRole) formRole.value = s.role || 'Garson';
+      if (formPin) formPin.value = s.pin || '';
     }
   } else {
-    title.textContent = 'Yeni Personel Ekle';
-    formId.value = '';
-    formName.value = '';
-    formRole.value = 'Garson';
-    formPin.value = Math.floor(1000 + Math.random() * 9000).toString();
+    if (title) title.textContent = 'Yeni Personel Ekle';
+    if (formId) formId.value = '';
+    if (formName) formName.value = '';
+    if (formRole) formRole.value = 'Garson';
+    if (formPin) formPin.value = Math.floor(1000 + Math.random() * 9000).toString();
   }
 
   modal.classList.remove('hidden');
   modal.classList.add('flex');
+  setTimeout(() => {
+    if (formName) formName.focus();
+  }, 100);
 }
 
 function closeStaffModal() {
@@ -1134,14 +1156,36 @@ function editStaffMember(staffId) {
 }
 
 async function handleSaveStaff(e) {
-  e.preventDefault();
+  if (e) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
   const adminPin = getAdminPin();
-  const id = document.getElementById('form-staff-id').value;
-  const name = document.getElementById('form-staff-name').value.trim();
-  const role = document.getElementById('form-staff-role').value;
-  const pin = document.getElementById('form-staff-pin').value.trim();
+  const idEl = document.getElementById('form-staff-id');
+  const nameEl = document.getElementById('form-staff-name');
+  const roleEl = document.getElementById('form-staff-role');
+  const pinEl = document.getElementById('form-staff-pin');
 
-  if (!name || !pin) return;
+  const id = idEl ? idEl.value.trim() : '';
+  const name = nameEl ? nameEl.value.trim() : '';
+  const role = roleEl ? roleEl.value : 'Garson';
+  const pin = pinEl ? pinEl.value.trim() : '';
+
+  if (!name) {
+    alert("Lütfen personel adını giriniz.");
+    return;
+  }
+  if (!pin) {
+    alert("Lütfen 4 haneli PIN kodunu giriniz.");
+    return;
+  }
+
+  const saveBtn = document.getElementById('btn-save-staff') || (e && e.target ? e.target.querySelector('button[type="submit"]') : null);
+  const oldText = saveBtn ? saveBtn.innerHTML : 'Kaydet';
+  if (saveBtn) {
+    saveBtn.disabled = true;
+    saveBtn.innerText = 'Kaydediliyor...';
+  }
 
   try {
     const res = await fetch('/api/admin/staff/save', {
@@ -1156,11 +1200,21 @@ async function handleSaveStaff(e) {
       closeStaffModal();
       showToast('✅ Personel başarıyla kaydedildi!', 'success');
       await loadStaffPerformanceData();
+      await loadStaffAdminData();
+      await loadStaffLogsData();
     } else {
-      alert("Personel kaydedilemedi.");
+      const data = await res.json().catch(() => ({}));
+      alert("Personel kaydedilemedi: " + (data.message || "Yetkisiz işlem veya sunucu hatası."));
     }
   } catch (err) {
     console.error("Save staff error:", err);
+    alert("Bağlantı hatası: Personel kaydedilemedi.");
+  } finally {
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.innerHTML = oldText;
+    }
+    if (window.lucide) lucide.createIcons();
   }
 }
 
@@ -1177,10 +1231,16 @@ async function deleteStaffMember(staffId) {
       body: JSON.stringify({ id: staffId })
     });
     if (res.ok) {
-      showToast('Personel silindi.', 'info');
+      showToast('🗑️ Personel silindi.', 'info');
       await loadStaffPerformanceData();
+      await loadStaffAdminData();
+      await loadStaffLogsData();
+    } else {
+      const data = await res.json().catch(() => ({}));
+      alert("Personel silinemedi: " + (data.message || "Yetkisiz işlem."));
     }
   } catch (err) {
     console.error("Delete staff error:", err);
+    alert("Bağlantı hatası: Personel silinemedi.");
   }
 }

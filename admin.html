@@ -631,11 +631,11 @@
   </div>
 
   <!-- Personel Ekle / Düzenle Modalı -->
-  <div id="edit-staff-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+  <div id="edit-staff-modal" onclick="if(event.target === this) closeStaffModal()" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-black/80 backdrop-blur-md">
     <div class="w-full max-w-sm bg-neutral-900 border border-white/10 rounded-3xl p-6 shadow-2xl relative">
       <div class="flex items-center justify-between pb-4 border-b border-white/10">
         <h3 id="modal-staff-title" class="text-lg font-bold text-white">Personel Ekle</h3>
-        <button onclick="closeStaffModal()" class="text-gray-400 hover:text-white p-1">
+        <button type="button" onclick="closeStaffModal()" class="text-gray-400 hover:text-white p-1">
           <i data-lucide="x" class="w-5 h-5"></i>
         </button>
       </div>
@@ -668,7 +668,7 @@
           <button type="button" onclick="closeStaffModal()" class="flex-1 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300 text-sm font-medium transition-colors">
             İptal
           </button>
-          <button type="submit" class="flex-1 py-2.5 rounded-xl bg-amber-500 text-black font-bold text-sm hover:bg-amber-400 transition-colors shadow-lg shadow-amber-500/20">
+          <button type="submit" id="btn-save-staff" class="flex-1 py-2.5 rounded-xl bg-amber-500 text-black font-bold text-sm hover:bg-amber-400 transition-colors shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2">
             Kaydet
           </button>
         </div>
