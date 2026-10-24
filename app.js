@@ -7,6 +7,19 @@ let menuData = null;
 let currentCategory = 'all';
 let searchQuery = '';
 let selectedTable = null;
+let estimatedBillItems = {};
+let currentRating = 5;
+let currentFeedbackTags = new Set();
+
+function escapeHtml(text) {
+  if (text === null || text === undefined) return '';
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 
 // URL'den Masa Numarası Yakalama (?table=5 veya ?masa=5)
 function getTableFromUrl() {
@@ -756,9 +769,22 @@ function renderItemCard(item, currency) {
             <span class="amount">${item.price}</span>
             <span class="currency">${currency}</span>
           </div>
-          <span class="text-xs text-gray-400 flex items-center gap-1 group-hover:text-white transition-colors">
-            İncele <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i>
-          </span>
+          <div class="flex items-center gap-2">
+            ${!isOutOfStock ? `
+              <button 
+                type="button"
+                onclick="event.stopPropagation(); addItemToBillEstimate('${item.id}')" 
+                class="px-2.5 py-1 rounded-xl bg-amber-500/15 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 text-xs font-bold flex items-center gap-1 transition-all active:scale-90"
+                title="Masa hesabına ekle"
+              >
+                <span>+</span>
+                <span class="text-[10px]">Hesaba Ekle</span>
+              </button>
+            ` : ''}
+            <span class="text-xs text-gray-400 flex items-center gap-1 group-hover:text-white transition-colors">
+              İncele <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i>
+            </span>
+          </div>
         </div>
       </div>
     </div>
@@ -1154,23 +1180,102 @@ function updateCustomerCallModalCompleted() {
   if (pillText) pillText.textContent = '✅ Servis Tamamlandı';
   if (pillBox) pillBox.className = 'inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-[11px] font-bold text-emerald-300 mb-3';
 
-  if (titleEl) titleEl.textContent = 'Talebiniz Yerine Getirildi!';
-  if (descEl) {
-    descEl.className = 'text-xs text-gray-200 mt-2 leading-relaxed p-3 rounded-2xl bg-emerald-950/30 border border-emerald-500/30';
-    descEl.innerHTML = `Personelimiz masanıza ulaştı ve talebinizi tamamladı. <br/><b class="text-amber-400 font-semibold mt-1 inline-block">Keyifli anlar ve afiyet olsun dileriz! 😊</b>`;
-  }
-
+  if (titleEl) titleEl.textContent = 'Servisimizden Memnun Kaldınız mı?';
   if (iconWrap) {
-    iconWrap.className = 'w-16 h-16 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 mx-auto flex items-center justify-center text-emerald-400 mb-3 shadow-lg shadow-emerald-500/20';
+    iconWrap.className = 'w-14 h-14 rounded-2xl bg-amber-500/20 border border-amber-500/40 mx-auto flex items-center justify-center text-amber-400 mb-2 shadow-lg shadow-amber-500/20';
   }
-  if (iconEl) iconEl.setAttribute('data-lucide', 'check-circle');
+  if (iconEl) iconEl.setAttribute('data-lucide', 'star');
+
+  currentRating = 5;
+  currentFeedbackTags.clear();
+
+  if (descEl) {
+    descEl.className = 'text-xs text-gray-200 mt-2 leading-relaxed';
+    descEl.innerHTML = `
+      <div class="p-3 rounded-2xl bg-black/60 border border-white/10 mb-3">
+        <p class="text-xs text-gray-300 mb-2 font-medium">Hizmet kalitemizi puanlayın:</p>
+        <div class="flex items-center justify-center gap-2 mb-3" id="feedback-stars">
+          ${[1, 2, 3, 4, 5].map(star => `
+            <button type="button" onclick="setFeedbackRating(${star})" class="text-2xl transition-transform hover:scale-125 focus:outline-none" id="star-btn-${star}">
+              ⭐
+            </button>
+          `).join('')}
+        </div>
+        
+        <div class="flex flex-wrap items-center justify-center gap-1.5 mb-3">
+          ${['🔥 Köz Kıvamında', '⚡ Hızlı Servis', '😊 Güler Yüz', '✨ Temiz'].map(tag => `
+            <button type="button" onclick="toggleFeedbackTag('${tag}', this)" class="px-2.5 py-1 rounded-full text-[10px] font-semibold bg-white/5 border border-white/10 text-gray-400 hover:text-white transition-all">
+              ${tag}
+            </button>
+          `).join('')}
+        </div>
+
+        <input type="text" id="feedback-comment" placeholder="Varsa eklemek istediğiniz not (isteğe bağlı)..." maxlength="150" class="w-full px-3 py-2 rounded-xl bg-neutral-900 border border-white/10 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-amber-500 mb-3" />
+
+        <div class="flex items-center gap-2">
+          <button type="button" onclick="submitCustomerFeedback()" class="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold transition-all shadow-md active:scale-95">
+            Puanı Gönder
+          </button>
+          <button type="button" onclick="closeCallSuccessModal()" class="px-3 py-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-gray-300 text-xs font-medium transition-all">
+            Kapat
+          </button>
+        </div>
+      </div>
+    `;
+  }
 
   if (typeof lucide !== 'undefined') lucide.createIcons();
+}
 
-  // 3 saniye sonra otomatik kapat
+function setFeedbackRating(stars) {
+  currentRating = stars;
+  for (let i = 1; i <= 5; i++) {
+    const btn = document.getElementById(`star-btn-${i}`);
+    if (btn) {
+      btn.style.opacity = i <= stars ? '1' : '0.25';
+      btn.style.filter = i <= stars ? 'none' : 'grayscale(100%)';
+    }
+  }
+}
+
+function toggleFeedbackTag(tag, btn) {
+  if (currentFeedbackTags.has(tag)) {
+    currentFeedbackTags.delete(tag);
+    btn.classList.remove('bg-amber-500/20', 'text-amber-300', 'border-amber-500/40');
+    btn.classList.add('bg-white/5', 'text-gray-400', 'border-white/10');
+  } else {
+    currentFeedbackTags.add(tag);
+    btn.classList.remove('bg-white/5', 'text-gray-400', 'border-white/10');
+    btn.classList.add('bg-amber-500/20', 'text-amber-300', 'border-amber-500/40');
+  }
+}
+
+async function submitCustomerFeedback() {
+  const commentInput = document.getElementById('feedback-comment');
+  const comment = commentInput ? commentInput.value.trim() : '';
+  const table = selectedTable ? `Masa ${selectedTable}` : 'Bilinmeyen Masa';
+
+  try {
+    const apiBase = getApiBaseUrl();
+    await fetch(apiBase + '/api/feedback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        table: table,
+        rating: currentRating,
+        tags: Array.from(currentFeedbackTags),
+        comment: comment,
+        callId: ''
+      })
+    });
+  } catch (e) {
+    console.warn("Feedback err:", e);
+  }
+
+  showToast('❤️ Geri bildiriminiz için çok teşekkür ederiz!', 'success');
   setTimeout(() => {
     closeCallSuccessModal();
-  }, 3200);
+  }, 1000);
 }
 
 function closeCallSuccessModal() {
@@ -1179,6 +1284,114 @@ function closeCallSuccessModal() {
     modal.classList.add('hidden');
     modal.classList.remove('flex');
   }
+}
+
+// =========================================================================
+// MASA ADİSYON / HESAP HESAPLAYICI (ESTIMATED BILL CALCULATOR)
+// =========================================================================
+
+function addItemToBillEstimate(itemId) {
+  if (!menuData || !menuData.items) return;
+  const item = menuData.items.find(i => i.id === itemId);
+  if (!item) return;
+
+  if (!estimatedBillItems[itemId]) {
+    estimatedBillItems[itemId] = { item, count: 0 };
+  }
+  estimatedBillItems[itemId].count += 1;
+  updateBillEstimateUI();
+  showToast(`+1 "${item.name}" hesaba eklendi`, 'info');
+}
+
+function changeBillItemQty(itemId, delta) {
+  if (!estimatedBillItems[itemId]) return;
+  estimatedBillItems[itemId].count += delta;
+  if (estimatedBillItems[itemId].count <= 0) {
+    delete estimatedBillItems[itemId];
+  }
+  updateBillEstimateUI();
+  renderBillModalContent();
+}
+
+function clearBillEstimate() {
+  estimatedBillItems = {};
+  updateBillEstimateUI();
+  closeBillEstimateModal();
+}
+
+function getBillEstimateTotals() {
+  let totalCount = 0;
+  let totalPrice = 0;
+  Object.values(estimatedBillItems).forEach(({ item, count }) => {
+    totalCount += count;
+    const priceNum = parseFloat(item.price) || 0;
+    totalPrice += priceNum * count;
+  });
+  return { totalCount, totalPrice };
+}
+
+function updateBillEstimateUI() {
+  const { totalCount, totalPrice } = getBillEstimateTotals();
+  const floatingBar = document.getElementById('estimated-bill-floating-bar');
+  const countEl = document.getElementById('estimated-bill-total-count');
+  const priceEl = document.getElementById('estimated-bill-total-price');
+
+  if (!floatingBar) return;
+
+  if (totalCount > 0) {
+    floatingBar.classList.remove('hidden');
+    floatingBar.classList.add('flex');
+    if (countEl) countEl.textContent = `${totalCount} Ürün`;
+    if (priceEl) priceEl.textContent = `${totalPrice.toLocaleString('tr-TR')} ₺`;
+  } else {
+    floatingBar.classList.add('hidden');
+    floatingBar.classList.remove('flex');
+  }
+}
+
+function openBillEstimateModal() {
+  const modal = document.getElementById('estimated-bill-modal');
+  if (!modal) return;
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
+  renderBillModalContent();
+}
+
+function closeBillEstimateModal() {
+  const modal = document.getElementById('estimated-bill-modal');
+  if (modal) {
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+  }
+}
+
+function renderBillModalContent() {
+  const listEl = document.getElementById('estimated-bill-items-list');
+  const modalTotal = document.getElementById('estimated-bill-modal-total');
+  const { totalCount, totalPrice } = getBillEstimateTotals();
+
+  if (modalTotal) modalTotal.textContent = `${totalPrice.toLocaleString('tr-TR')} ₺`;
+  if (!listEl) return;
+
+  const items = Object.values(estimatedBillItems);
+  if (items.length === 0) {
+    listEl.innerHTML = `<div class="py-8 text-center text-xs text-gray-500">Listenizde henüz ürün yok.</div>`;
+    return;
+  }
+
+  listEl.innerHTML = items.map(({ item, count }) => `
+    <div class="flex items-center justify-between p-3 rounded-2xl bg-black/60 border border-white/5">
+      <div class="min-w-0 flex-1 pr-2">
+        <h4 class="text-xs font-bold text-white truncate">${escapeHtml(item.name)}</h4>
+        <div class="text-[11px] text-amber-400 font-mono mt-0.5">${item.price} ₺</div>
+      </div>
+      <div class="flex items-center gap-2 flex-shrink-0">
+        <button onclick="changeBillItemQty('${item.id}', -1)" class="w-6 h-6 rounded-lg bg-white/5 hover:bg-white/10 text-white flex items-center justify-center font-bold text-xs">-</button>
+        <span class="text-xs font-bold text-white w-5 text-center">${count}</span>
+        <button onclick="changeBillItemQty('${item.id}', 1)" class="w-6 h-6 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 flex items-center justify-center font-bold text-xs">+</button>
+      </div>
+    </div>
+  `).join('');
 }
 
 // Müşteri Menüsü İçin Akıllı Arka Plan Otomatik Güncelleme (3.5 sn)

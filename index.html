@@ -340,6 +340,65 @@
     </div>
   </div>
 
+  <!-- Alt Kısım: Tahmini Masa Hesabı Çubuğu -->
+  <div id="estimated-bill-floating-bar" class="fixed bottom-24 left-1/2 -translate-x-1/2 z-30 hidden items-center justify-between gap-3 px-4 py-2.5 rounded-2xl bg-neutral-900/95 border border-amber-500/40 shadow-2xl backdrop-blur-md max-w-sm w-[90%]">
+    <div class="flex items-center gap-2 min-w-0 cursor-pointer" onclick="openBillEstimateModal()" role="button">
+      <div class="w-7 h-7 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center text-xs flex-shrink-0">
+        <i data-lucide="receipt" class="w-4 h-4"></i>
+      </div>
+      <div class="min-w-0">
+        <div class="text-[10px] text-gray-400 leading-none">Tahmini Masa Hesabı</div>
+        <div class="text-xs font-bold text-white flex items-center gap-1.5 mt-0.5">
+          <span id="estimated-bill-total-price" class="text-amber-400 font-mono">0 ₺</span>
+          <span class="text-[10px] text-gray-500">•</span>
+          <span id="estimated-bill-total-count" class="text-[10px] text-gray-400 font-normal">0 Ürün</span>
+        </div>
+      </div>
+    </div>
+    <div class="flex items-center gap-1.5 flex-shrink-0">
+      <button onclick="openBillEstimateModal()" class="px-2.5 py-1 rounded-xl bg-white/10 hover:bg-white/15 text-white text-[11px] font-semibold transition-all">
+        Gör
+      </button>
+      <button onclick="requestService('bill')" class="px-3 py-1 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-[11px] font-black transition-all flex items-center gap-1 shadow-md">
+        <span>Hesap İste</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Tahmini Masa Hesabı Detay Modalı -->
+  <div id="estimated-bill-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+    <div class="w-full max-w-sm bg-neutral-900 border border-white/10 rounded-3xl p-5 shadow-2xl relative max-h-[85vh] flex flex-col">
+      <div class="flex items-center justify-between pb-3 border-b border-white/10">
+        <div class="flex items-center gap-2">
+          <i data-lucide="receipt" class="w-4 h-4 text-amber-400"></i>
+          <h3 class="text-sm font-bold text-white">Masa Hesap Hesaplayıcı</h3>
+        </div>
+        <button onclick="closeBillEstimateModal()" class="p-1 rounded-lg text-gray-400 hover:text-white">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <div id="estimated-bill-items-list" class="flex-1 overflow-y-auto no-scrollbar space-y-2 py-3 min-h-[140px] max-h-60">
+        <!-- JS doldurur -->
+      </div>
+
+      <div class="pt-3 border-t border-white/10 space-y-2.5">
+        <div class="flex items-center justify-between text-xs">
+          <span class="text-gray-400">Tahmini Toplam Tutar:</span>
+          <span id="estimated-bill-modal-total" class="text-lg font-black text-amber-400 font-mono">0 ₺</span>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <button onclick="clearBillEstimate()" class="py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-gray-400 text-xs font-semibold transition-all">
+            Listeyi Temizle
+          </button>
+          <button onclick="closeBillEstimateModal(); requestService('bill');" class="py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold transition-all shadow-md">
+            Garson Çağır (Hesap)
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Scriptler -->
   <script src="default-data.js?v=2.7"></script>
   <script src="app.js?v=2.7"></script>

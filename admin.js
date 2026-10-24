@@ -5,6 +5,17 @@
 let isAuthenticated = false;
 let currentTab = 'products'; // 'products', 'quick-price', 'settings', 'qr-stands'
 let editingItemId = null;
+let adminFeedbackList = [];
+
+function escapeHtml(text) {
+  if (text === null || text === undefined) return '';
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 
 function initAdminPanel() {
   if (window.adminInitialized) return;
@@ -960,10 +971,11 @@ async function refreshStaffTab() {
   if (btn) btn.classList.add('opacity-50', 'pointer-events-none');
   await Promise.allSettled([
     loadStaffPerformanceData(false),
-    loadStaffLogsData(false)
+    loadStaffLogsData(false),
+    loadFeedbackList(false)
   ]);
   if (btn) btn.classList.remove('opacity-50', 'pointer-events-none');
-  showToast('🔄 Personel ve log verileri güncellendi', 'info');
+  showToast('🔄 Personel, log ve değerlendirme verileri güncellendi', 'info');
 }
 
 async function loadStaffAdminData() {
@@ -1045,19 +1057,19 @@ function renderAdminStaffTable() {
               ${firstChar}
             </div>
             <div>
-              <div class="font-bold text-white">${name}</div>
-              <div class="text-[10px] text-gray-500">ID: ${s.id || ''}</div>
+              <div class="font-bold text-white">${escapeHtml(name)}</div>
+              <div class="text-[10px] text-gray-500">ID: ${escapeHtml(s.id || '')}</div>
             </div>
           </div>
         </td>
         <td class="py-3 px-3">
           <span class="px-2 py-0.5 rounded-lg bg-white/5 border border-white/5 text-[11px] font-medium text-gray-300">
-            ${s.role || 'Garson'}
+            ${escapeHtml(s.role || 'Garson')}
           </span>
         </td>
         <td class="py-3 px-3 font-mono text-amber-400 font-bold">
           <span class="bg-black/50 px-2 py-1 rounded-md border border-white/5">
-            ${s.pin ? s.pin : '••••'}
+            ${s.pin ? escapeHtml(s.pin) : '••••'}
           </span>
         </td>
         <td class="py-3 px-3">
@@ -1078,7 +1090,7 @@ function renderAdminStaffTable() {
           ${s.totalHours || 0} Saat
         </td>
         <td class="py-3 px-3 text-gray-400 text-[11px]">
-          ${s.lastDevice && s.lastDevice !== 'Bilinmiyor' ? s.lastDevice : '—'}
+          ${escapeHtml(s.lastDevice && s.lastDevice !== 'Bilinmiyor' ? s.lastDevice : '—')}
         </td>
         <td class="py-3 pl-3 text-right">
           <div class="flex items-center justify-end gap-1.5">
@@ -1155,7 +1167,8 @@ function renderLogsList() {
     'logout': '<i data-lucide="log-out" class="w-4 h-4 text-red-400"></i>',
     'call_taken': '<i data-lucide="footprints" class="w-4 h-4 text-blue-400"></i>',
     'call_completed': '<i data-lucide="check-circle" class="w-4 h-4 text-emerald-400"></i>',
-    'stock_toggle': '<i data-lucide="package" class="w-4 h-4 text-amber-400"></i>'
+    'stock_toggle': '<i data-lucide="package" class="w-4 h-4 text-amber-400"></i>',
+    'feedback': '<i data-lucide="star" class="w-4 h-4 text-amber-400"></i>'
   };
 
   container.innerHTML = filtered.map(l => `
@@ -1166,20 +1179,78 @@ function renderLogsList() {
         </div>
         <div>
           <div class="flex items-center gap-2">
-            <span class="font-bold text-white">${l.staffName || 'Personel'}</span>
-            <span class="text-[10px] text-gray-400">(${l.role || 'Ekip'})</span>
+            <span class="font-bold text-white">${escapeHtml(l.staffName || 'Personel')}</span>
+            <span class="text-[10px] text-gray-400">(${escapeHtml(l.role || 'Ekip')})</span>
             <span class="text-gray-600">•</span>
-            <span class="text-amber-300 font-medium">${l.title || 'İşlem'}</span>
+            <span class="text-amber-300 font-medium">${escapeHtml(l.title || 'İşlem')}</span>
           </div>
           <div class="text-[11px] text-gray-500 mt-0.5 flex items-center gap-2">
-            <span>📱 ${l.device || 'Cihaz'}</span>
-            ${l.details ? `<span>• ${l.details}</span>` : ''}
+            <span>📱 ${escapeHtml(l.device || 'Cihaz')}</span>
+            ${l.details ? `<span>• ${escapeHtml(l.details)}</span>` : ''}
           </div>
         </div>
       </div>
       <div class="text-[11px] text-gray-500 font-mono flex-shrink-0 text-right">
-        ${l.timeStr || ''}
+        ${escapeHtml(l.timeStr || '')}
       </div>
+    </div>
+  `).join('');
+
+  if (window.lucide) lucide.createIcons();
+}
+
+async function loadFeedbackList(silent = false) {
+  try {
+    const apiBase = getApiBaseUrl();
+    const pin = getAdminPin();
+    const res = await fetch(apiBase + '/api/admin/feedback', {
+      headers: { 'X-Admin-PIN': pin },
+      cache: 'no-store'
+    });
+    if (res.ok) {
+      const data = await res.json();
+      adminFeedbackList = data.feedbacks || [];
+      const avgBadge = document.getElementById('stat-avg-rating');
+      if (avgBadge) {
+        avgBadge.innerHTML = `<span>⭐ ${data.avgRating || '5.0'}</span><span class="text-[10px] text-gray-400 font-normal">(${data.totalRatings || 0} Değerlendirme)</span>`;
+      }
+      renderFeedbackList();
+    }
+  } catch (e) {
+    if (!silent) console.error("Load feedback error:", e);
+  }
+}
+
+function renderFeedbackList() {
+  const container = document.getElementById('feedback-container');
+  if (!container) return;
+
+  if (adminFeedbackList.length === 0) {
+    container.innerHTML = `<div class="py-8 text-center text-xs text-gray-500">Henüz müşteri geri bildirimi yok.</div>`;
+    return;
+  }
+
+  container.innerHTML = adminFeedbackList.map(fb => `
+    <div class="p-3.5 rounded-2xl bg-black border border-white/5 flex items-start justify-between text-xs hover:border-white/10 transition-colors">
+      <div class="flex items-start gap-3">
+        <div class="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/20 flex flex-col items-center justify-center flex-shrink-0 text-amber-400 font-bold">
+          <span class="text-[11px] leading-none">${fb.rating}</span>
+          <span class="text-[8px] leading-none mt-0.5">★</span>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="font-bold text-white">${escapeHtml(fb.table)}</span>
+            <span class="text-amber-400 font-medium">${'⭐'.repeat(fb.rating)}</span>
+          </div>
+          ${fb.tags && fb.tags.length > 0 ? `
+            <div class="flex flex-wrap gap-1 mt-1.5">
+              ${fb.tags.map(t => `<span class="px-2 py-0.5 rounded-md bg-white/5 text-gray-300 border border-white/5 text-[10px]">${escapeHtml(t)}</span>`).join('')}
+            </div>
+          ` : ''}
+          ${fb.comment ? `<p class="text-gray-400 text-xs mt-1 italic">"${escapeHtml(fb.comment)}"</p>` : ''}
+        </div>
+      </div>
+      <div class="text-[10px] text-gray-500 font-mono text-right flex-shrink-0">${escapeHtml(fb.timeStr || '')}</div>
     </div>
   `).join('');
 

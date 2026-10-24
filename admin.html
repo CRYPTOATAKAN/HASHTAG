@@ -512,6 +512,27 @@
           </div>
         </div>
 
+        <!-- 3. Müşteri Memnuniyeti & Puan Değerlendirmeleri (NPS / Feedback) -->
+        <div class="p-5 rounded-3xl bg-neutral-900/90 border border-white/10 shadow-xl">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <h3 class="text-sm font-bold text-white flex items-center gap-2">
+                <i data-lucide="star" class="w-4 h-4 text-amber-400"></i>
+                Müşteri Memnuniyeti & Hizmet Puanları
+              </h3>
+              <p class="text-xs text-gray-400 mt-0.5">Müşterilerin masalarından verdikleri 5 yıldızlı puanlar ve geri bildirim etiketleri.</p>
+            </div>
+            <div id="stat-avg-rating" class="px-3 py-1 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-black flex items-center gap-1.5">
+              <span>⭐ 5.0</span>
+              <span class="text-[10px] text-gray-400 font-normal">(0 Değerlendirme)</span>
+            </div>
+          </div>
+
+          <div class="max-h-80 overflow-y-auto no-scrollbar space-y-2 pr-1" id="feedback-container">
+            <div class="py-8 text-center text-xs text-gray-500">Henüz müşteri geri bildirimi yok.</div>
+          </div>
+        </div>
+
       </section>
 
     </main>

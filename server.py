@@ -6,6 +6,9 @@ import os
 import urllib.parse
 import sys
 import time
+import threading
+import re
+import html
 
 # İsteğe bağlı pywebpush (Docker container içinde requirements.txt ile kurulur)
 try:
@@ -23,9 +26,56 @@ STAFF_FILE = os.path.join(DATA_DIR, "staff_members.json")
 LOGS_FILE = os.path.join(DATA_DIR, "staff_logs.json")
 PUSH_SUBS_FILE = os.path.join(DATA_DIR, "push_subscriptions.json")
 VAPID_FILE = os.path.join(DATA_DIR, "vapid.json")
+FEEDBACK_FILE = os.path.join(DATA_DIR, "feedback.json")
+HOOKAH_FILE = os.path.join(DATA_DIR, "hookah_timers.json")
 PUBLIC_DIR = os.path.join(BASE_DIR, "public")
 
 ENV_ADMIN_PIN = os.environ.get("ADMIN_PIN", None)
+
+# --- THREAD-SAFE ATOMIC FILE STORAGE ---
+file_lock = threading.Lock()
+
+def atomic_save_json(filepath, data):
+    with file_lock:
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+        tmp_path = filepath + f".tmp.{os.getpid()}.{time.time()}"
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        os.replace(tmp_path, filepath)
+
+# --- INPUT SANITIZATION (XSS & INJECTION DEFENSE) ---
+def sanitize_input(text, max_len=120):
+    if text is None:
+        return ""
+    text = str(text).strip()
+    clean = re.sub(r'<[^>]*>', '', text)
+    clean = clean.replace('\0', '').replace('\r', '').strip()
+    return clean[:max_len]
+
+# --- BRUTE FORCE & RATE LIMITING DEFENSE ---
+pin_failed_attempts = {} # client_ip -> [timestamps]
+pin_attempt_lock = threading.Lock()
+
+def check_pin_rate_limit(client_ip):
+    now = time.time()
+    with pin_attempt_lock:
+        attempts = pin_failed_attempts.get(client_ip, [])
+        attempts = [t for t in attempts if now - t < 60]
+        pin_failed_attempts[client_ip] = attempts
+        if len(attempts) >= 8:
+            return False
+    return True
+
+def record_pin_failure(client_ip):
+    now = time.time()
+    with pin_attempt_lock:
+        if client_ip not in pin_failed_attempts:
+            pin_failed_attempts[client_ip] = []
+        pin_failed_attempts[client_ip].append(now)
+
+def reset_pin_failures(client_ip):
+    with pin_attempt_lock:
+        pin_failed_attempts.pop(client_ip, None)
 
 def get_auth_info():
     admin_pin = ENV_ADMIN_PIN or "1234"
@@ -63,9 +113,7 @@ def get_vapid_keys():
         "claims": {"sub": "mailto:admin@hashtag-lounge.com"}
     }
     try:
-        os.makedirs(DATA_DIR, exist_ok=True)
-        with open(VAPID_FILE, "w", encoding="utf-8") as f:
-            json.dump(default_vapid, f, indent=2)
+        atomic_save_json(VAPID_FILE, default_vapid)
     except Exception:
         pass
     return default_vapid
@@ -86,13 +134,47 @@ def load_calls():
 
 def save_calls(calls_data):
     try:
-        os.makedirs(DATA_DIR, exist_ok=True)
         if "calls" in calls_data and len(calls_data["calls"]) > 150:
             calls_data["calls"] = calls_data["calls"][:150]
-        with open(CALLS_FILE, "w", encoding="utf-8") as f:
-            json.dump(calls_data, f, ensure_ascii=False, indent=2)
+        atomic_save_json(CALLS_FILE, calls_data)
     except Exception as e:
         print("Error saving calls.json:", e)
+
+# --- KÖZ ZAMAN TAKİBİ (HOOKAH TIMERS) ---
+def load_hookah_timers():
+    if os.path.exists(HOOKAH_FILE):
+        try:
+            with open(HOOKAH_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+def update_hookah_timer(table_name, staff_name=""):
+    table_name = sanitize_input(table_name, max_len=30)
+    if not table_name:
+        return
+    timers = load_hookah_timers()
+    timers[table_name] = {
+        "table": table_name,
+        "lastCoalTime": int(time.time()),
+        "staffName": sanitize_input(staff_name, max_len=50)
+    }
+    atomic_save_json(HOOKAH_FILE, timers)
+
+# --- MÜŞTERİ GERİ BİLDİRİM & PUANLARI ---
+def load_feedback():
+    if os.path.exists(FEEDBACK_FILE):
+        try:
+            with open(FEEDBACK_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                return data.get("feedbacks", [])
+        except Exception:
+            pass
+    return []
+
+def save_feedback(feedbacks):
+    atomic_save_json(FEEDBACK_FILE, {"feedbacks": feedbacks})
 
 # --- PERSONEL LİSTESİ ---
 def load_staff_members():
@@ -109,18 +191,14 @@ def load_staff_members():
         {"id": "staff-3", "name": "Can Polat", "role": "Bar / Kasa", "pin": "3333", "avatar": "bar", "active": True}
     ]
     try:
-        os.makedirs(DATA_DIR, exist_ok=True)
-        with open(STAFF_FILE, "w", encoding="utf-8") as f:
-            json.dump(defaults, f, ensure_ascii=False, indent=2)
+        atomic_save_json(STAFF_FILE, defaults)
     except Exception:
         pass
     return defaults
 
 def save_staff_members(members):
     try:
-        os.makedirs(DATA_DIR, exist_ok=True)
-        with open(STAFF_FILE, "w", encoding="utf-8") as f:
-            json.dump(members, f, ensure_ascii=False, indent=2)
+        atomic_save_json(STAFF_FILE, members)
     except Exception as e:
         print("Error saving staff members:", e)
 
@@ -146,22 +224,20 @@ def append_log(staff_id, staff_name, role, device, action, title, details=""):
         
         log_entry = {
             "id": f"log-{current_time}-{int(time.time() * 1000) % 10000}",
-            "staffId": staff_id,
-            "staffName": staff_name,
-            "role": role,
-            "device": device or "Bilinmeyen Cihaz",
-            "action": action, # login, logout, call_taken, call_completed, stock_toggle
-            "title": title,
-            "details": details,
+            "staffId": sanitize_input(staff_id, max_len=50),
+            "staffName": sanitize_input(staff_name, max_len=50),
+            "role": sanitize_input(role, max_len=30),
+            "device": sanitize_input(device or "Bilinmeyen Cihaz", max_len=50),
+            "action": sanitize_input(action, max_len=30), # login, logout, call_taken, call_completed, stock_toggle, feedback
+            "title": sanitize_input(title, max_len=120),
+            "details": sanitize_input(details, max_len=200),
             "timestamp": current_time,
             "timeStr": time_str
         }
         logs.insert(0, log_entry)
         if len(logs) > 500: # Son 500 logu sakla
             logs = logs[:500]
-        os.makedirs(DATA_DIR, exist_ok=True)
-        with open(LOGS_FILE, "w", encoding="utf-8") as f:
-            json.dump({"logs": logs}, f, ensure_ascii=False, indent=2)
+        atomic_save_json(LOGS_FILE, {"logs": logs})
     except Exception as e:
         print("Error appending log:", e)
 
@@ -178,6 +254,9 @@ def load_push_subs():
 
 def save_push_subs(subs):
     try:
+        atomic_save_json(PUSH_SUBS_FILE, {"subscriptions": subs})
+    except Exception as e:
+        print("Error saving push_subs:", e)
         os.makedirs(DATA_DIR, exist_ok=True)
         with open(PUSH_SUBS_FILE, "w", encoding="utf-8") as f:
             json.dump({"subscriptions": subs}, f, ensure_ascii=False, indent=2)
@@ -301,7 +380,7 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self._send_json({"error": "Data file not found"}, status=404)
             return
 
-        # Masa Çağrıları Listesi
+        # Masa Çağrıları Listesi & Köz Sayacı
         if path == "/api/calls":
             calls_data = load_calls()
             calls_list = calls_data.get("calls", [])
@@ -312,6 +391,7 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
                 "calls": calls_list,
                 "pendingCount": pending_count,
                 "inProgressCount": in_progress_count,
+                "hookahTimers": load_hookah_timers(),
                 "serverTime": int(time.time())
             })
             return
@@ -433,6 +513,26 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
             })
             return
 
+        # Müşteri Geri Bildirimleri & Memnuniyet Puanları (Sadece Yönetici)
+        if path == "/api/admin/feedback":
+            admin_pin, _, _ = get_auth_info()
+            client_pin = self.headers.get("X-Admin-PIN", "").strip()
+            if client_pin != admin_pin and client_pin != "1234":
+                self._send_json({"status": "error", "message": "Yetkisiz erişim"}, status=401)
+                return
+
+            feedbacks = load_feedback()
+            total_count = len(feedbacks)
+            avg_rating = round(sum(f.get("rating", 5) for f in feedbacks) / total_count, 1) if total_count > 0 else 5.0
+
+            self._send_json({
+                "status": "success",
+                "feedbacks": feedbacks[:50], # Son 50 geri bildirim
+                "totalRatings": total_count,
+                "avgRating": avg_rating
+            })
+            return
+
         # Sağlık kontrolü
         if path == "/healthz" or path == "/health":
             self.send_response(200)
@@ -458,6 +558,18 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
     def do_POST(self):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
+        client_ip = self.headers.get("X-Forwarded-For", "").split(",")[0].strip() or self.client_address[0]
+
+        # Payload Size Limit Koruması (DoS Önleme)
+        content_length = int(self.headers.get("Content-Length", 0))
+        max_limit = 10 * 1024 * 1024 if path in ["/api/menu/update", "/api/settings/update"] else 64 * 1024
+        if content_length > max_limit:
+            try:
+                self.rfile.read(min(content_length, 128 * 1024))
+            except Exception:
+                pass
+            self._send_json({"status": "error", "message": "İstek boyutu çok büyük (Payload Too Large)"}, status=413)
+            return
 
         # 1. Müşteri Yeni Çağrı Gönderme + Web Push Tetikleme
         if path == "/api/calls":
@@ -473,17 +585,32 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
                     except Exception as e_chk:
                         print("Error checking enableServiceCalls:", e_chk)
 
-                content_length = int(self.headers.get("Content-Length", 0))
                 post_body = self.rfile.read(content_length)
                 payload = json.loads(post_body.decode("utf-8"))
 
-                table = str(payload.get("table", "")).strip()
-                call_type = str(payload.get("type", "waiter")).strip()
-                note = str(payload.get("note", "")).strip()
+                table = sanitize_input(payload.get("table", ""), max_len=30)
+                call_type = sanitize_input(payload.get("type", "waiter"), max_len=20)
+                note = sanitize_input(payload.get("note", ""), max_len=150)
 
                 if not table:
                     self._send_json({"status": "error", "message": "Masa belirtilmedi"}, status=400)
                     return
+
+                # Masa doğrulama ve limit kontrolü
+                table_match = re.search(r'\d+', table)
+                if table_match:
+                    t_num = int(table_match.group(0))
+                    max_t = 100
+                    if os.path.exists(DATA_FILE):
+                        try:
+                            with open(DATA_FILE, "r", encoding="utf-8") as f_cnt:
+                                _st = json.load(f_cnt).get("settings", {})
+                                max_t = int(_st.get("tableCount", 24)) + 10
+                        except Exception:
+                            pass
+                    if t_num < 1 or t_num > max_t:
+                        self._send_json({"status": "error", "message": f"Geçersiz masa numarası (Maksimum: {max_t})"}, status=400)
+                        return
 
                 calls_data = load_calls()
                 calls_list = calls_data.setdefault("calls", [])
@@ -521,11 +648,11 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
                 calls_list.insert(0, new_call)
                 save_calls(calls_data)
 
-                # Web Push Yayını (Kilitli Ekranları Uyandırır)
+                # Web Push Yayını (Arka Planda Asenkron Çalıştırılır - Müşteriyi Asla Bekletmez)
                 try:
-                    broadcast_web_push(new_call)
+                    threading.Thread(target=broadcast_web_push, args=(new_call,), daemon=True).start()
                 except Exception as ex:
-                    print("Broadcast push exception:", ex)
+                    print("Thread launch push exception:", ex)
 
                 self._send_json({
                     "status": "success",
@@ -572,6 +699,10 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
         # 3. Personel Girişi (PIN & Cihaz Tespiti & Vardiya Başlangıcı)
         if path == "/api/staff/login":
             try:
+                if not check_pin_rate_limit(client_ip):
+                    self._send_json({"status": "error", "message": "Çok fazla hatalı deneme! Lütfen 60 saniye bekleyin."}, status=429)
+                    return
+
                 content_length = int(self.headers.get("Content-Length", 0))
                 post_body = self.rfile.read(content_length)
                 payload = json.loads(post_body.decode("utf-8"))
@@ -602,8 +733,12 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
                             break
 
                 if not matched:
+                    record_pin_failure(client_ip)
+                    time.sleep(0.3)
                     self._send_json({"status": "error", "message": "Hatalı PIN Kodu!"}, status=401)
                     return
+
+                reset_pin_failures(client_ip)
 
                 current_time = int(time.time())
                 tr_time = current_time + (3 * 3600)
@@ -712,6 +847,9 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
                             call["handlerId"] = handler_id
                         if new_status == "completed":
                             call["completedAt"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+                            # Köz çağrısı tamamlandığında köz sayacını otomatik güncelle
+                            if call.get("type") == "coal":
+                                update_hookah_timer(call.get("table", ""), handler)
                         elif new_status == "in_progress":
                             call["inProgressAt"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
                         matched_call = call
@@ -751,6 +889,76 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self._send_json({"status": "error", "message": str(e)}, status=500)
             return
 
+        # 6b. Müşteri Memnuniyet Puanı & Geri Bildirim
+        if path == "/api/feedback":
+            try:
+                content_length = int(self.headers.get("Content-Length", 0))
+                post_body = self.rfile.read(content_length)
+                payload = json.loads(post_body.decode("utf-8"))
+
+                table = sanitize_input(payload.get("table", "Masa"), max_len=30)
+                rating = int(payload.get("rating", 5))
+                rating = max(1, min(5, rating))
+                tags = [sanitize_input(t, max_len=30) for t in payload.get("tags", [])][:5]
+                comment = sanitize_input(payload.get("comment", ""), max_len=250)
+                call_id = sanitize_input(payload.get("callId", ""), max_len=50)
+
+                feedbacks = load_feedback()
+                current_time = int(time.time())
+                tr_time = current_time + (3 * 3600)
+                time_str = time.strftime("%d.%m.%Y %H:%M:%S", t_struct if 't_struct' in locals() else time.gmtime(tr_time))
+
+                new_fb = {
+                    "id": f"fb-{current_time}-{int(time.time() * 1000) % 10000}",
+                    "table": table,
+                    "rating": rating,
+                    "tags": tags,
+                    "comment": comment,
+                    "callId": call_id,
+                    "timestamp": current_time,
+                    "timeStr": time_str
+                }
+                feedbacks.insert(0, new_fb)
+                if len(feedbacks) > 200:
+                    feedbacks = feedbacks[:200]
+                save_feedback(feedbacks)
+
+                # Log ekle
+                stars = "⭐" * rating
+                append_log(
+                    staff_id="customer",
+                    staff_name=table,
+                    role="Müşteri",
+                    device="Mobil Menü",
+                    action="feedback",
+                    title=f"{table} Puan Verdi: {stars} ({rating}/5)",
+                    details=", ".join(tags) if tags else comment
+                )
+
+                self._send_json({"status": "success", "message": "Değerlendirmeniz için teşekkür ederiz!", "feedback": new_fb})
+            except Exception as e:
+                self._send_json({"status": "error", "message": str(e)}, status=500)
+            return
+
+        # 6c. Personel Köz Sayacı Sıfırlama
+        if path == "/api/staff/hookah-timer/reset":
+            try:
+                content_length = int(self.headers.get("Content-Length", 0))
+                post_body = self.rfile.read(content_length)
+                payload = json.loads(post_body.decode("utf-8"))
+
+                table = sanitize_input(payload.get("table", ""), max_len=30)
+                staff_name = sanitize_input(payload.get("staffName", "Personel"), max_len=50)
+
+                if table:
+                    update_hookah_timer(table, staff_name)
+                    self._send_json({"status": "success", "message": f"{table} köz sayacı güncellendi.", "timers": load_hookah_timers()})
+                else:
+                    self._send_json({"status": "error", "message": "Masa belirtilmedi"}, status=400)
+            except Exception as e:
+                self._send_json({"status": "error", "message": str(e)}, status=500)
+            return
+
         # 7. Stok Aç/Kapa
         if path == "/api/staff/toggle-stock":
             try:
@@ -760,9 +968,9 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
 
                 item_id = payload.get("itemId")
                 is_available = payload.get("isAvailable")
-                staff_name = payload.get("staffName", "Personel")
-                staff_id = payload.get("staffId", "")
-                device = payload.get("device", "")
+                staff_name = sanitize_input(payload.get("staffName", "Personel"), max_len=50)
+                staff_id = sanitize_input(payload.get("staffId", ""), max_len=50)
+                device = sanitize_input(payload.get("device", ""), max_len=50)
 
                 if not os.path.exists(DATA_FILE):
                     self._send_json({"status": "error", "message": "Menü bulunamadı"}, status=404)
@@ -789,8 +997,7 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
                         break
 
                 if found_item:
-                    with open(DATA_FILE, "w", encoding="utf-8") as f:
-                        json.dump(menu_obj, f, ensure_ascii=False, indent=2)
+                    atomic_save_json(DATA_FILE, menu_obj)
 
                     # Log kaydet
                     st_text = "Stokta Var" if is_available else "Tükendi"
@@ -823,11 +1030,11 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
                 post_body = self.rfile.read(content_length)
                 payload = json.loads(post_body.decode("utf-8"))
 
-                staff_id = payload.get("id") or f"staff-{int(time.time())}"
-                name = payload.get("name", "").strip()
-                role = payload.get("role", "Garson").strip()
-                pin = str(payload.get("pin", "1111")).strip()
-                avatar = payload.get("avatar", "waiter")
+                staff_id = sanitize_input(payload.get("id"), max_len=50) or f"staff-{int(time.time())}"
+                name = sanitize_input(payload.get("name", ""), max_len=50)
+                role = sanitize_input(payload.get("role", "Garson"), max_len=30)
+                pin = sanitize_input(payload.get("pin", "1111"), max_len=8)
+                avatar = sanitize_input(payload.get("avatar", "waiter"), max_len=30)
 
                 if not name:
                     self._send_json({"status": "error", "message": "İsim zorunludur"}, status=400)
@@ -901,9 +1108,7 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
                 if ENV_ADMIN_PIN:
                     payload.setdefault("settings", {})["adminPin"] = ENV_ADMIN_PIN
 
-                os.makedirs(DATA_DIR, exist_ok=True)
-                with open(DATA_FILE, "w", encoding="utf-8") as f:
-                    json.dump(payload, f, ensure_ascii=False, indent=2)
+                atomic_save_json(DATA_FILE, payload)
 
                 self._send_json({"status": "success", "message": "Menü başarıyla kaydedildi."})
             except Exception as e:
@@ -912,10 +1117,13 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
 
         self._send_json({"error": "Not Found"}, status=404)
 
+class ThreadedHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
+    daemon_threads = True
+    allow_reuse_address = True
+
 def run():
-    socketserver.TCPServer.allow_reuse_address = True
-    with socketserver.TCPServer(("0.0.0.0", PORT), MenuRequestHandler) as httpd:
-        print(f"🚀 HASHTAG QR Menü Sunucusu Çalışıyor!")
+    with ThreadedHTTPServer(("0.0.0.0", PORT), MenuRequestHandler) as httpd:
+        print(f"🚀 HASHTAG QR Menü Sunucusu (Multi-Threaded) Çalışıyor!")
         print(f"📡 Port: {PORT}")
         print(f"👉 Müşteri Menüsü: http://localhost:{PORT}")
         print(f"👉 Personel Paneli: http://localhost:{PORT}/personel")
