@@ -324,8 +324,50 @@
                 <input type="text" id="set-instagram" placeholder="hashtagcafe07" class="w-full px-3 py-2 rounded-xl bg-black border border-white/10 text-sm text-white focus:outline-none focus:border-amber-500" />
               </div>
               <div>
+                <label class="block text-xs font-semibold text-gray-300 mb-1.5">Google Haritalar Yorum Linki</label>
+                <input type="text" id="set-google-maps" placeholder="https://www.google.com/maps/place/..." class="w-full px-3 py-2 rounded-xl bg-black border border-white/10 text-xs text-white focus:outline-none focus:border-amber-500 font-mono" />
+              </div>
+              <div>
                 <label class="block text-xs font-semibold text-gray-300 mb-1.5">Yönetici PIN Kodu</label>
                 <input type="text" id="set-admin-pin" class="w-full px-3 py-2 rounded-xl bg-black border border-white/10 text-sm text-amber-400 focus:outline-none focus:border-amber-500 font-mono" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Haftanın / Günün Duyurusu & Canlı Banner Yönetimi -->
+          <div class="pt-4 border-t border-white/10">
+            <div class="flex items-center justify-between mb-3">
+              <div>
+                <h3 class="text-sm font-semibold text-white flex items-center gap-2">
+                  <i data-lucide="megaphone" class="w-4 h-4 text-amber-400"></i>
+                  Haftanın / Günün Duyurusu & Banner Yönetimi
+                </h3>
+                <p class="text-xs text-gray-400 mt-0.5">Müşteri menüsündeki canlı hero carousel'inde 2. slayt olarak gösterilir.</p>
+              </div>
+              <label class="relative inline-flex items-center cursor-pointer flex-shrink-0" title="Duyuruyu Menüde Göster / Gizle">
+                <input type="checkbox" id="set-announcement-enabled" class="sr-only peer" checked />
+                <div class="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+              </label>
+            </div>
+
+            <div class="space-y-3 p-4 rounded-2xl bg-black border border-white/10">
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-xs font-semibold text-gray-300 mb-1.5">Duyuru / Rozet Başlığı</label>
+                  <input type="text" id="set-announcement-badge" placeholder="Örn: 🔥 ŞEFİN TAVSİYESİ" class="w-full px-3 py-2 rounded-xl bg-neutral-900 border border-white/10 text-sm text-white focus:outline-none focus:border-amber-500" />
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-gray-300 mb-1.5">Başlık / Ürün İsmi</label>
+                  <input type="text" id="set-announcement-title" placeholder="Örn: Love 66 & Lady Killer Özel Mix" class="w-full px-3 py-2 rounded-xl bg-neutral-900 border border-white/10 text-sm text-white focus:outline-none focus:border-amber-500" />
+                </div>
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-gray-300 mb-1.5">Duyuru / Açıklama Metni</label>
+                <input type="text" id="set-announcement-desc" placeholder="Örn: Özel buzlu marpuç ve taze nane esintisiyle hazırlanan günün karışımı." class="w-full px-3 py-2 rounded-xl bg-neutral-900 border border-white/10 text-sm text-white focus:outline-none focus:border-amber-500" />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-gray-300 mb-1.5">Özel Görsel Linki (Opsiyonel - Boşsa şık lounge görseli gösterilir)</label>
+                <input type="text" id="set-announcement-image" placeholder="https://images.unsplash.com/... veya dosya yolu" class="w-full px-3 py-2 rounded-xl bg-neutral-900 border border-white/10 text-xs text-white focus:outline-none focus:border-amber-500 font-mono" />
               </div>
             </div>
           </div>
@@ -336,7 +378,7 @@
                 <i data-lucide="users" class="w-4 h-4 text-amber-400"></i>
                 Personel Portalı & Yetki Yönetimi
               </h3>
-              <a href="/personel" target="_blank" class="px-2.5 py-1 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[11px] font-bold hover:bg-amber-500/30 transition-colors flex items-center gap-1">
+              <a href="/personel" onclick="openStaffPortalFromAdmin(event)" target="_blank" class="px-2.5 py-1 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[11px] font-bold hover:bg-amber-500/30 transition-colors flex items-center gap-1 cursor-pointer">
                 <span>Paneli Aç</span>
                 <i data-lucide="external-link" class="w-3 h-3"></i>
               </a>
@@ -348,7 +390,7 @@
                 <div class="text-sm font-medium text-white">Köz İste & Garson Çağır Butonları</div>
                 <div class="text-xs text-gray-400">Menünün altında müşterilere tek tıkla köz veya garson çağırma butonunu göster.</div>
               </div>
-              <label class="relative inline-flex items-center cursor-pointer">
+              <label class="relative inline-flex items-center cursor-pointer flex-shrink-0">
                 <input type="checkbox" id="set-enable-calls" class="sr-only peer" />
                 <div class="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
               </label>
@@ -361,7 +403,12 @@
                   <div class="text-sm font-medium text-white">Ortak Personel PIN Kodu</div>
                   <div class="text-xs text-gray-400">Kişisel PIN'lerin yanı sıra tüm personelin kullanabileceği ortak PIN.</div>
                 </div>
-                <input type="password" id="set-staff-pin" placeholder="••••" maxlength="6" class="w-28 px-3 py-2 rounded-xl bg-neutral-900 border border-white/15 text-sm text-center text-amber-400 font-mono font-bold focus:outline-none focus:border-amber-500" />
+                <div class="relative flex items-center">
+                  <input type="password" id="set-staff-pin" placeholder="5555" maxlength="8" class="w-28 pr-8 pl-3 py-2 rounded-xl bg-neutral-900 border border-white/15 text-sm text-center text-amber-400 font-mono font-bold focus:outline-none focus:border-amber-500" />
+                  <button type="button" onclick="toggleStaffPinVisibility()" class="absolute right-2 text-gray-400 hover:text-amber-400 transition-colors p-1" title="PIN'i Göster/Gizle">
+                    <i data-lucide="eye" id="staff-pin-eye-icon" class="w-4 h-4"></i>
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -369,20 +416,26 @@
             <div class="p-4 rounded-xl bg-black border border-white/10 space-y-3">
               <div class="text-xs font-bold text-gray-400 uppercase tracking-wider">Personel İzinleri & Kısıtlamalar</div>
               
-              <label class="flex items-center justify-between cursor-pointer">
+              <label class="flex items-center justify-between cursor-pointer py-1">
                 <div>
                   <div class="text-xs font-medium text-white">Ürün Stok Durumunu Değiştirebilsin</div>
                   <div class="text-[11px] text-gray-400">Garsonlar biten ürünleri "Tükendi" veya "Mevcut" yapabilir.</div>
                 </div>
-                <input type="checkbox" id="set-staff-allow-stock" class="w-4 h-4 rounded text-amber-500 bg-neutral-900 border-white/20 focus:ring-amber-500 focus:ring-offset-black" />
+                <div class="relative inline-flex items-center cursor-pointer flex-shrink-0">
+                  <input type="checkbox" id="set-staff-allow-stock" class="sr-only peer" />
+                  <div class="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+                </div>
               </label>
 
-              <label class="flex items-center justify-between cursor-pointer pt-2 border-t border-white/5 opacity-75">
+              <label class="flex items-center justify-between cursor-pointer pt-3 border-t border-white/5 opacity-75">
                 <div>
                   <div class="text-xs font-medium text-white">Fiyat Değiştirebilsin (Önerilmez)</div>
                   <div class="text-[11px] text-gray-500">Güvenlik için kapalı kalması önerilir. Sadece yönetici fiyat değiştirebilir.</div>
                 </div>
-                <input type="checkbox" id="set-staff-allow-price" class="w-4 h-4 rounded text-amber-500 bg-neutral-900 border-white/20 focus:ring-amber-500 focus:ring-offset-black" />
+                <div class="relative inline-flex items-center cursor-pointer flex-shrink-0">
+                  <input type="checkbox" id="set-staff-allow-price" class="sr-only peer" />
+                  <div class="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+                </div>
               </label>
             </div>
           </div>
@@ -499,6 +552,186 @@
           <div class="max-h-96 overflow-y-auto no-scrollbar space-y-2 pr-1" id="logs-container">
             <!-- JS tarafından doldurulur -->
           </div>
+        </div>
+
+        <!-- 3. Müşteri Memnuniyeti, Grafik Analizleri & Akıllı Gelişim Merkezi -->
+        <div class="p-6 rounded-3xl bg-neutral-900/95 border border-white/10 shadow-2xl space-y-6">
+          
+          <!-- Üst Başlık & Zaman Periyodu Butonları -->
+          <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-white/10">
+            <div>
+              <div class="flex items-center gap-2.5">
+                <div class="w-9 h-9 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400 flex items-center justify-center">
+                  <i data-lucide="award" class="w-5 h-5"></i>
+                </div>
+                <div>
+                  <h3 class="text-base font-bold text-white tracking-tight flex items-center gap-2">
+                    Müşteri Memnuniyeti & Hizmet Analitiği
+                    <span id="feedback-live-indicator" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-semibold border border-emerald-500/30">
+                      <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Canlı
+                    </span>
+                  </h3>
+                  <p class="text-xs text-gray-400 mt-0.5">Müşteri puanları, dönemsel grafik şablonu ve operasyonel çözüm tavsiyeleri</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Periyot Filtreleme Butonları -->
+            <div class="flex items-center gap-1 bg-black/60 p-1.5 rounded-2xl border border-white/10 self-start md:self-auto overflow-x-auto max-w-full">
+              <button type="button" onclick="setFeedbackTimeFilter('daily')" id="fb-filter-daily" class="px-3 py-1.5 rounded-xl text-xs font-bold transition-all bg-amber-500 text-black shadow">
+                Günlük
+              </button>
+              <button type="button" onclick="setFeedbackTimeFilter('weekly')" id="fb-filter-weekly" class="px-3 py-1.5 rounded-xl text-xs font-semibold transition-all text-gray-400 hover:text-white">
+                Haftalık
+              </button>
+              <button type="button" onclick="setFeedbackTimeFilter('monthly')" id="fb-filter-monthly" class="px-3 py-1.5 rounded-xl text-xs font-semibold transition-all text-gray-400 hover:text-white">
+                Aylık
+              </button>
+              <button type="button" onclick="setFeedbackTimeFilter('yearly')" id="fb-filter-yearly" class="px-3 py-1.5 rounded-xl text-xs font-semibold transition-all text-gray-400 hover:text-white">
+                Yıllık
+              </button>
+              <button type="button" onclick="setFeedbackTimeFilter('all')" id="fb-filter-all" class="px-3 py-1.5 rounded-xl text-xs font-semibold transition-all text-gray-400 hover:text-white">
+                Tüm Zamanlar
+              </button>
+              <button type="button" onclick="loadFeedbackList(false)" title="Yenile" class="p-1.5 rounded-xl text-gray-400 hover:text-amber-400 hover:bg-white/5 transition-all">
+                <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- 4'lü KPI Özet Kartları -->
+          <div class="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+            <!-- 1. Ortalama Puan -->
+            <div class="p-4 rounded-2xl bg-black/60 border border-white/5 flex flex-col justify-between relative overflow-hidden">
+              <div class="flex items-center justify-between text-xs text-gray-400">
+                <span>Ortalama Puan</span>
+                <span id="fb-period-badge" class="text-[10px] text-amber-400/90 font-medium">Günlük</span>
+              </div>
+              <div class="flex items-baseline gap-2 mt-2">
+                <span id="fb-kpi-avg" class="text-2xl font-black text-amber-400 font-mono">5.0</span>
+                <span class="text-xs text-gray-500">/ 5.0</span>
+              </div>
+              <div id="fb-kpi-stars" class="text-xs text-amber-400 mt-1">⭐⭐⭐⭐⭐</div>
+            </div>
+
+            <!-- 2. Toplam Değerlendirme -->
+            <div class="p-4 rounded-2xl bg-black/60 border border-white/5 flex flex-col justify-between">
+              <div class="text-xs text-gray-400">Toplam Geri Bildirim</div>
+              <div class="flex items-baseline gap-2 mt-2">
+                <span id="fb-kpi-total" class="text-2xl font-black text-white font-mono">0</span>
+                <span class="text-xs text-gray-400">Masa</span>
+              </div>
+              <div id="fb-kpi-period-label" class="text-[11px] text-gray-500 mt-1">Seçili periyotta</div>
+            </div>
+
+            <!-- 3. Memnuniyet Oranı (NPS) -->
+            <div class="p-4 rounded-2xl bg-black/60 border border-white/5 flex flex-col justify-between">
+              <div class="text-xs text-gray-400">Memnuniyet Oranı (4-5⭐)</div>
+              <div class="flex items-baseline gap-2 mt-2">
+                <span id="fb-kpi-nps" class="text-2xl font-black text-emerald-400 font-mono">%100</span>
+              </div>
+              <div class="text-[11px] text-emerald-400/80 mt-1 flex items-center gap-1">
+                <i data-lucide="trending-up" class="w-3.5 h-3.5"></i>
+                <span>Pozitif Geri Bildirim</span>
+              </div>
+            </div>
+
+            <!-- 4. Kritik / İnceleme Bekleyen (<= 3 Yıldız) -->
+            <div class="p-4 rounded-2xl bg-black/60 border border-white/5 flex flex-col justify-between">
+              <div class="text-xs text-gray-400">Geliştirme / Düşük Puan</div>
+              <div class="flex items-baseline gap-2 mt-2">
+                <span id="fb-kpi-critical" class="text-2xl font-black text-amber-500 font-mono">0</span>
+                <span class="text-xs text-gray-400">Adet (≤3⭐)</span>
+              </div>
+              <div id="fb-kpi-critical-sub" class="text-[11px] text-gray-400 mt-1">Aksiyon gerektiren</div>
+            </div>
+          </div>
+
+          <!-- Grafikler: Yıldız Dağılımı ve Dönemsel Zaman Grafiği -->
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            
+            <!-- Sol: 5 Yıldız Dağılımı Bar Grafiği -->
+            <div class="p-4 rounded-2xl bg-black/40 border border-white/5">
+              <h4 class="text-xs font-bold text-gray-300 uppercase tracking-wider mb-3 flex items-center justify-between">
+                <span>Puan Dağılımı</span>
+                <span class="text-[10px] text-gray-500 lowercase font-normal">(oran & adet)</span>
+              </h4>
+              <div id="fb-star-bars-container" class="space-y-2.5">
+                <!-- JS doldurur -->
+              </div>
+            </div>
+
+            <!-- Sağ: Dönemsel Zaman Dağılım Grafiği (Şablon Bar Grafiği) -->
+            <div class="p-4 rounded-2xl bg-black/40 border border-white/5 flex flex-col justify-between">
+              <div class="flex items-center justify-between mb-3">
+                <h4 class="text-xs font-bold text-gray-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <i data-lucide="bar-chart-3" class="w-3.5 h-3.5 text-amber-400"></i>
+                  <span id="fb-trend-chart-title">Dönemsel Hizmet Yoğunluğu</span>
+                </h4>
+                <span id="fb-trend-chart-subtitle" class="text-[10px] text-gray-500 font-medium"></span>
+              </div>
+              
+              <!-- Grafik Alanı -->
+              <div id="fb-trend-bars-container" class="h-36 flex items-end justify-between gap-2 pt-4 px-2 pb-1 border-b border-white/10">
+                <!-- JS doldurur -->
+              </div>
+              <div id="fb-trend-labels-container" class="flex items-center justify-between gap-2 pt-2 px-1 text-[10px] text-gray-400">
+                <!-- JS doldurur -->
+              </div>
+            </div>
+
+          </div>
+
+          <!-- 💡 DÜŞÜK PUANLAR İÇİN ÇÖZÜM ODAKLI GELİŞİM & TAVSİYELER MERKEZİ -->
+          <div class="p-5 rounded-2xl bg-gradient-to-br from-amber-950/20 via-black to-neutral-900 border border-amber-500/20 shadow-xl space-y-3">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <div class="w-7 h-7 rounded-lg bg-amber-500/20 text-amber-300 flex items-center justify-center text-xs">
+                  <i data-lucide="lightbulb" class="w-4 h-4 text-amber-400"></i>
+                </div>
+                <div>
+                  <h4 class="text-xs font-bold text-white uppercase tracking-wider">Operasyonel Gelişim & Çözüm Tavsiyeleri</h4>
+                  <p class="text-[10px] text-gray-400">Düşük puanlı masaların geri bildirimlerine göre oluşturulan somut aksiyon rehberi</p>
+                </div>
+              </div>
+              <span id="fb-action-status-badge" class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                Analiz Aktif
+              </span>
+            </div>
+
+            <!-- Tavsiye Kartları Alanı -->
+            <div id="fb-smart-recommendations-container" class="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+              <!-- JS dinamik olarak düşük puanlara göre doldurur -->
+            </div>
+          </div>
+
+          <!-- Müşteri Değerlendirmeleri Listesi & Filtresi -->
+          <div class="space-y-3 pt-2">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div class="flex items-center gap-2">
+                <h4 class="text-xs font-bold text-gray-300 uppercase tracking-wider">Masa Geri Bildirim Kayıtları</h4>
+                <span id="fb-list-count" class="text-[11px] text-gray-400 font-mono">(0)</span>
+              </div>
+              
+              <!-- Liste İçi Puan Filtresi -->
+              <div class="flex items-center gap-1.5">
+                <button type="button" onclick="setFeedbackRatingFilter('all')" id="fb-rating-all" class="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-amber-500 text-black">
+                  Tümü
+                </button>
+                <button type="button" onclick="setFeedbackRatingFilter('critical')" id="fb-rating-critical" class="px-2.5 py-1 rounded-lg text-[11px] font-medium bg-white/5 hover:bg-white/10 text-amber-300 border border-amber-500/20 flex items-center gap-1">
+                  <span>⚠️ Yalnızca Düşük (1-3⭐)</span>
+                </button>
+                <button type="button" onclick="setFeedbackRatingFilter('positive')" id="fb-rating-positive" class="px-2.5 py-1 rounded-lg text-[11px] font-medium bg-white/5 hover:bg-white/10 text-gray-300 border border-white/5">
+                  ⭐ 4-5 Yıldız
+                </button>
+              </div>
+            </div>
+
+            <div class="max-h-96 overflow-y-auto no-scrollbar space-y-2 pr-1" id="feedback-container">
+              <div class="py-8 text-center text-xs text-gray-500">Değerlendirmeler yükleniyor...</div>
+            </div>
+          </div>
+
         </div>
 
       </section>
@@ -677,8 +910,8 @@
   </div>
 
   <!-- Scriptler -->
-  <script src="default-data.js?v=2.6"></script>
-  <script src="app.js?v=2.6"></script>
-  <script src="admin.js?v=2.6"></script>
+  <script src="default-data.js?v=3.0"></script>
+  <script src="app.js?v=3.0"></script>
+  <script src="admin.js?v=3.0"></script>
 </body>
 </html>

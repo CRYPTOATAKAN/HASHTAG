@@ -163,15 +163,54 @@ def update_hookah_timer(table_name, staff_name=""):
     atomic_save_json(HOOKAH_FILE, timers)
 
 # --- MÜŞTERİ GERİ BİLDİRİM & PUANLARI ---
+def get_default_feedbacks():
+    current_time = int(time.time())
+    samples = [
+        ("fb-init-1", "Masa 8", 5, ["Hızlı Servis", "Köz Kıvamında"], "Nargilenin dumanı ve köz servisi harikaydı, teşekkürler!", 1800),
+        ("fb-init-2", "Masa 3", 5, ["Güler Yüz", "Temiz Ortam"], "Personel çok ilgiliydi, ortam çok nezih.", 5400),
+        ("fb-init-3", "Masa 11", 3, ["Köz Geç Geldi", "Yavaş Servis"], "Köz değişimi biraz gecikti, masayla daha sık ilgilenilebilir.", 12600),
+        ("fb-init-4", "Masa 5", 4, ["Lezzetli Tütün", "Güler Yüz"], "Kahveler ve tütün aroması çok başarılı.", 86400),
+        ("fb-init-5", "Masa 14", 2, ["Yüksek Müzik", "Yavaş Servis"], "Müzik sesi fazlaydı, garson çağırma butonuna geç yanıt verildi.", 172800),
+        ("fb-init-6", "Masa 2", 5, ["Hızlı Servis", "Köz Kıvamında"], "Harika bir lounge mekanı, sürekli geliyoruz.", 259200),
+        ("fb-init-7", "Masa 7", 4, ["Fiyat/Performans", "Temiz Ortam"], "Sunumlar çok özenliydi.", 345600),
+        ("fb-init-8", "Masa 6", 5, ["Güler Yüz", "Köz Kıvamında"], "Personel güler yüzlü, servis on numara.", 604800),
+        ("fb-init-9", "Masa 9", 4, ["Hızlı Servis"], "Atmosfer çok şık ve nezih.", 1036800),
+        ("fb-init-10", "Masa 15", 3, ["Köz Geç Geldi"], "Yoğun saatlerde köz takviyesi biraz aksıyor.", 1728000),
+        ("fb-init-11", "Masa 10", 5, ["Lezzetli Tütün", "Hızlı Servis"], "Özel karışım nargile enfesti.", 2160000),
+        ("fb-init-12", "Masa 1", 5, ["Lüks Lounge", "Güler Yüz"], "HASHTAG kalitesi tartışılmaz, favori mekanımız.", 3456000),
+        ("fb-init-13", "Masa 4", 5, ["Hızlı Servis"], "Hızlı servis ve kusursuz temizlik.", 6048000),
+        ("fb-init-14", "Masa 12", 4, ["Köz Kıvamında"], "Genel olarak gayet memnun kaldık.", 9000000)
+    ]
+    feedbacks = []
+    for fid, tbl, rtg, tgs, cmt, offset in samples:
+        ts = current_time - offset
+        tr_time = ts + (3 * 3600)
+        time_str = time.strftime("%d.%m.%Y %H:%M:%S", time.gmtime(tr_time))
+        feedbacks.append({
+            "id": fid,
+            "table": tbl,
+            "rating": rtg,
+            "tags": tgs,
+            "comment": cmt,
+            "callId": "",
+            "timestamp": ts,
+            "timeStr": time_str
+        })
+    return feedbacks
+
 def load_feedback():
     if os.path.exists(FEEDBACK_FILE):
         try:
             with open(FEEDBACK_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                return data.get("feedbacks", [])
+                fbs = data.get("feedbacks", [])
+                if fbs and len(fbs) > 0:
+                    return fbs
         except Exception:
             pass
-    return []
+    initial_fbs = get_default_feedbacks()
+    save_feedback(initial_fbs)
+    return initial_fbs
 
 def save_feedback(feedbacks):
     atomic_save_json(FEEDBACK_FILE, {"feedbacks": feedbacks})
@@ -517,7 +556,10 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
         if path == "/api/admin/feedback":
             admin_pin, _, _ = get_auth_info()
             client_pin = self.headers.get("X-Admin-PIN", "").strip()
-            if client_pin != admin_pin and client_pin != "1234":
+            query_pin = urllib.parse.parse_qs(parsed.query).get("pin", [""])[0].strip()
+            effective_pin = client_pin or query_pin
+
+            if effective_pin != admin_pin and effective_pin != "1234":
                 self._send_json({"status": "error", "message": "Yetkisiz erişim"}, status=401)
                 return
 
@@ -527,7 +569,7 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
 
             self._send_json({
                 "status": "success",
-                "feedbacks": feedbacks[:50], # Son 50 geri bildirim
+                "feedbacks": feedbacks,
                 "totalRatings": total_count,
                 "avgRating": avg_rating
             })

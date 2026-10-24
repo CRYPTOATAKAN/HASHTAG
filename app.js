@@ -10,6 +10,8 @@ let selectedTable = null;
 let estimatedBillItems = {};
 let currentRating = 5;
 let currentFeedbackTags = new Set();
+let standaloneRating = 5;
+let standaloneFeedbackTags = new Set();
 
 function escapeHtml(text) {
   if (text === null || text === undefined) return '';
@@ -210,6 +212,7 @@ window.refreshCustomerMenu = async function(btn) {
   renderHeaderInfo();
   renderCategoryPills();
   renderMenuItems();
+  initHeroBanner();
   showToast('✅ Menü güncellendi!');
   if (btn) {
     setTimeout(() => btn.classList.remove('animate-spin'), 600);
@@ -224,6 +227,7 @@ document.addEventListener('visibilitychange', () => {
         renderHeaderInfo();
         renderCategoryPills();
         renderMenuItems();
+        initHeroBanner();
       }
     });
   }
@@ -231,7 +235,19 @@ document.addEventListener('visibilitychange', () => {
 
 // DOM Hazır Olduğunda Menüyü Başlat
 document.addEventListener('DOMContentLoaded', async () => {
-  selectedTable = getTableFromUrl();
+  const urlTable = getTableFromUrl();
+  if (urlTable) {
+    selectedTable = String(urlTable);
+    try { sessionStorage.setItem('hashtag_active_table', String(urlTable)); } catch (e) {}
+  } else {
+    try {
+      localStorage.removeItem('hashtag_table');
+      selectedTable = sessionStorage.getItem('hashtag_active_table') || null;
+    } catch (e) {
+      selectedTable = null;
+    }
+  }
+
   await loadMenuData();
 
   if (document.getElementById('menu-app')) {
@@ -253,6 +269,7 @@ function initCustomerMenu() {
   setupWifiModal();
   setupServiceCallModal();
   initHookahSmokeEngine();
+  initHeroBanner();
 }
 
 /* ==========================================================================
@@ -480,6 +497,304 @@ function initHookahSmokeEngine() {
   window.requestAnimationFrame(render);
 }
 
+/* ==========================================================================
+   DİNAMİK HİBRİT HERO BANNER SİSTEMİ (INSTAGRAM STORY CAROUSEL & CANLI MOOD)
+   - Slayt 1: Neon Atmosfer & İkonik HashtaG Görseli (Ken Burns + Neon Breathe)
+   - Slayt 2: Haftanın / Günün Duyurusu (Yönetici Paneli Kontrollü)
+   - Slayt 3: Saat Bazlı Adaptif Canlı Mood (Öğle / Akşam Prime / Gece Chill)
+   ========================================================================== */
+
+let heroCurrentSlideIndex = 0;
+let heroSlidesList = [];
+let heroProgressAnimFrame = null;
+let heroSlideStartTime = 0;
+const HERO_SLIDE_DURATION = 5000; // Her slayt 5 saniye
+let heroIsPaused = false;
+let heroPauseStartTime = 0;
+let heroTotalPausedDuration = 0;
+
+function getHeroTimeAdaptiveConfig() {
+  const now = new Date();
+  const hour = now.getHours();
+
+  if (hour >= 12 && hour < 18) {
+    return {
+      badgeIcon: 'coffee',
+      badgeText: 'GÜN ORTASI KAHVE MOLASI',
+      badgeClass: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
+      title: 'Spesiyal Kahveler & Tatlılar',
+      desc: 'Güne leziz bir mola: 3. nesil demlemeler, taze kahveler ve spesiyaller.',
+      image: 'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?auto=format&fit=crop&w=1200&q=80',
+      timeLabel: 'GÜNDÜZ MODU'
+    };
+  } else if (hour >= 18 && hour < 23) {
+    return {
+      badgeIcon: 'flame',
+      badgeText: 'PRIME TIME LOUNGE SEANSI',
+      badgeClass: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
+      title: 'Yoğun Duman & Premium Tütünler',
+      desc: 'Al Fakher, Darkside & Tangiers özel dolumları ve buzlu marpuç keyfi.',
+      image: 'https://images.unsplash.com/photo-1517256064527-09c73fc73e38?auto=format&fit=crop&w=1200&q=80',
+      timeLabel: 'AKŞAM SEANSI'
+    };
+  } else if (hour >= 23 || hour < 5) {
+    return {
+      badgeIcon: 'sparkles',
+      badgeText: 'LATE NIGHT CHILL VIBES',
+      badgeClass: 'bg-purple-500/20 text-purple-300 border-purple-500/30',
+      title: 'Gece Modu & İmza Mocktailler',
+      desc: 'Loş ışıklar, derin bass ritimleri ve ferahlatıcı imza lezzetler.',
+      image: 'https://images.unsplash.com/photo-1572116469696-31de0f17cc34?auto=format&fit=crop&w=1200&q=80',
+      timeLabel: 'GECE MODU'
+    };
+  } else {
+    return {
+      badgeIcon: 'sun',
+      badgeText: 'GÜNE ENERJİK BAŞLANGIÇ',
+      badgeClass: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
+      title: 'Taze Başlangıç & Lounge Huzuru',
+      desc: 'Yeni demlenmiş Türk kahvesi ve ferahlatıcı içeceklerle güne başla.',
+      image: 'https://images.unsplash.com/photo-1509042239860-f550ce710b93?auto=format&fit=crop&w=1200&q=80',
+      timeLabel: 'GÜN BAŞLANGICI'
+    };
+  }
+}
+
+function buildHeroSlides() {
+  const slides = [];
+  const s = (menuData && menuData.settings) ? menuData.settings : {};
+  const cafeName = (s.cafeName || 'HASHTAG').toUpperCase();
+
+  // Slayt 1: İkonik Neon Atmosfer & Banner
+  slides.push({
+    id: 'neon-banner',
+    image: 'hashtag-banner.jpg?v=3.0',
+    fallbackImage: 'images/hashtag-banner.jpg?v=3.0',
+    badgeIcon: 'sparkles',
+    badgeText: 'PREMİUM ATMOSFER',
+    badgeClass: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
+    title: `${cafeName} LOUNGE & HOOKAH`,
+    desc: '💨 Özel Nargile Karışımları • 🍹 Mocktail & Kahve',
+    liveLabel: 'CANLI'
+  });
+
+  // Slayt 2: Yönetici Kontrollü Günün / Haftanın Duyurusu
+  const ann = s.announcement || {};
+  if (ann.enabled !== false) {
+    slides.push({
+      id: 'admin-announcement',
+      image: ann.image || 'https://images.unsplash.com/photo-1527661591475-527312dd65f5?auto=format&fit=crop&w=1200&q=80',
+      fallbackImage: 'hashtag-banner.jpg?v=3.0',
+      badgeIcon: 'flame',
+      badgeText: ann.badge || '🔥 ŞEFİN TAVSİYESİ',
+      badgeClass: 'bg-amber-500/25 text-amber-200 border-amber-400/40',
+      title: ann.title || 'Love 66 & Lady Killer Özel Mix',
+      desc: ann.desc || 'Özel buzlu marpuç ve taze nane esintisiyle hazırlanan günün karışımı.',
+      liveLabel: 'GÜNÜN ÖZELİ'
+    });
+  } else {
+    // Duyuru kapalıysa alternatif VIP Lounge kartı
+    slides.push({
+      id: 'lounge-vip',
+      image: 'https://images.unsplash.com/photo-1527661591475-527312dd65f5?auto=format&fit=crop&w=1200&q=80',
+      fallbackImage: 'hashtag-banner.jpg?v=3.0',
+      badgeIcon: 'crown',
+      badgeText: 'VIP LOCALAR & REZERVASYON',
+      badgeClass: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
+      title: 'Özel Gruplar & Doğum Günleri',
+      desc: 'Konforlu VIP oturma alanları ve kişiye özel nargile servisi.',
+      liveLabel: 'VIP'
+    });
+  }
+
+  // Slayt 3: Saat Bazlı Adaptif Canlı Mood
+  const timeMood = getHeroTimeAdaptiveConfig();
+  slides.push({
+    id: 'time-mood',
+    image: timeMood.image,
+    fallbackImage: 'hashtag-banner.jpg?v=3.0',
+    badgeIcon: timeMood.badgeIcon,
+    badgeText: timeMood.badgeText,
+    badgeClass: timeMood.badgeClass,
+    title: timeMood.title,
+    desc: timeMood.desc,
+    liveLabel: timeMood.timeLabel
+  });
+
+  return slides;
+}
+
+function initHeroBanner() {
+  const card = document.getElementById('hero-banner-card');
+  if (!card) return;
+
+  heroSlidesList = buildHeroSlides();
+  if (heroSlidesList.length === 0) return;
+
+  // Render progress bar segments
+  const progressContainer = document.getElementById('hero-progress-bars');
+  if (progressContainer) {
+    progressContainer.innerHTML = heroSlidesList.map((_, i) => `
+      <div class="h-1 flex-1 rounded-full bg-white/20 overflow-hidden cursor-pointer backdrop-blur-sm" onclick="jumpToHeroSlide(${i})">
+        <div id="hero-progress-fill-${i}" class="h-full bg-gradient-to-r from-amber-400 to-amber-200 rounded-full transition-all duration-75" style="width: 0%;"></div>
+      </div>
+    `).join('');
+  }
+
+  // Render slide image elements
+  const slidesWrapper = document.getElementById('hero-slides-wrapper');
+  if (slidesWrapper) {
+    slidesWrapper.innerHTML = heroSlidesList.map((slide, i) => `
+      <div id="hero-slide-${i}" class="hero-slide ${i === 0 ? 'active' : ''}">
+        <img 
+          src="${slide.image}" 
+          onerror="if(!this.src.includes('hashtag-banner.jpg')) this.src='${slide.fallbackImage}';" 
+          alt="${escapeHtml(slide.title)}" 
+          class="w-full h-full object-cover object-center brightness-90 hero-kenburns"
+        />
+      </div>
+    `).join('');
+  }
+
+  // Mouse hover & touch hold events to pause story
+  card.onmouseenter = () => {
+    heroIsPaused = true;
+    heroPauseStartTime = Date.now();
+  };
+  card.onmouseleave = () => {
+    if (heroIsPaused) {
+      heroTotalPausedDuration += (Date.now() - heroPauseStartTime);
+      heroIsPaused = false;
+    }
+  };
+
+  card.ontouchstart = () => {
+    heroIsPaused = true;
+    heroPauseStartTime = Date.now();
+  };
+  card.ontouchend = () => {
+    if (heroIsPaused) {
+      heroTotalPausedDuration += (Date.now() - heroPauseStartTime);
+      heroIsPaused = false;
+    }
+  };
+
+  heroCurrentSlideIndex = 0;
+  showHeroSlide(0);
+}
+
+function showHeroSlide(index) {
+  if (index < 0 || index >= heroSlidesList.length) return;
+  heroCurrentSlideIndex = index;
+  const slide = heroSlidesList[index];
+
+  // Update slide images visibility
+  heroSlidesList.forEach((_, i) => {
+    const el = document.getElementById(`hero-slide-${i}`);
+    if (el) {
+      if (i === index) {
+        el.classList.add('active');
+      } else {
+        el.classList.remove('active');
+      }
+    }
+  });
+
+  // Update animated text
+  const badgeEl = document.getElementById('hero-slide-badge');
+  const titleEl = document.getElementById('hero-slide-title');
+  const descEl = document.getElementById('hero-slide-desc');
+  const clockEl = document.getElementById('hero-live-clock');
+  const textContainer = document.getElementById('hero-slide-text-container');
+
+  if (textContainer) {
+    textContainer.classList.remove('hero-content-fade');
+    void textContainer.offsetWidth; // trigger reflow
+    textContainer.classList.add('hero-content-fade');
+  }
+
+  if (badgeEl) {
+    badgeEl.className = `inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider uppercase mb-1.5 backdrop-blur-md shadow-sm border ${slide.badgeClass || 'bg-amber-500/20 text-amber-300 border-amber-500/30'}`;
+    badgeEl.innerHTML = `<i data-lucide="${slide.badgeIcon || 'sparkles'}" class="w-3 h-3 text-amber-400"></i><span>${slide.badgeText}</span>`;
+  }
+
+  if (titleEl) {
+    titleEl.textContent = slide.title;
+  }
+
+  if (descEl) {
+    descEl.textContent = slide.desc;
+  }
+
+  if (clockEl) {
+    clockEl.textContent = slide.liveLabel || 'CANLI';
+  }
+
+  if (window.lucide) {
+    window.lucide.createIcons();
+  }
+
+  // Reset and restart progress tracking
+  heroSlideStartTime = Date.now();
+  heroTotalPausedDuration = 0;
+  heroIsPaused = false;
+  startHeroProgressLoop();
+}
+
+function startHeroProgressLoop() {
+  if (heroProgressAnimFrame) {
+    cancelAnimationFrame(heroProgressAnimFrame);
+  }
+
+  function step() {
+    if (!heroIsPaused) {
+      const elapsed = Date.now() - heroSlideStartTime - heroTotalPausedDuration;
+      const progressPercent = Math.min((elapsed / HERO_SLIDE_DURATION) * 100, 100);
+
+      heroSlidesList.forEach((_, i) => {
+        const fill = document.getElementById(`hero-progress-fill-${i}`);
+        if (fill) {
+          if (i < heroCurrentSlideIndex) {
+            fill.style.width = '100%';
+          } else if (i === heroCurrentSlideIndex) {
+            fill.style.width = `${progressPercent}%`;
+          } else {
+            fill.style.width = '0%';
+          }
+        }
+      });
+
+      if (progressPercent >= 100) {
+        nextHeroSlide();
+        return;
+      }
+    }
+    heroProgressAnimFrame = requestAnimationFrame(step);
+  }
+
+  heroProgressAnimFrame = requestAnimationFrame(step);
+}
+
+window.nextHeroSlide = function(e) {
+  if (e) e.stopPropagation();
+  if (!heroSlidesList || heroSlidesList.length === 0) return;
+  const nextIdx = (heroCurrentSlideIndex + 1) % heroSlidesList.length;
+  showHeroSlide(nextIdx);
+};
+
+window.prevHeroSlide = function(e) {
+  if (e) e.stopPropagation();
+  if (!heroSlidesList || heroSlidesList.length === 0) return;
+  const prevIdx = (heroCurrentSlideIndex - 1 + heroSlidesList.length) % heroSlidesList.length;
+  showHeroSlide(prevIdx);
+};
+
+window.jumpToHeroSlide = function(index) {
+  if (index >= 0 && index < heroSlidesList.length) {
+    showHeroSlide(index);
+  }
+};
+
 function renderHeaderInfo() {
   const { settings } = menuData;
   const nameEl = document.getElementById('cafe-name');
@@ -506,13 +821,20 @@ function renderHeaderInfo() {
 
   if (tableBadgeEl) {
     if (selectedTable) {
-      tableBadgeEl.innerHTML = `<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-semibold tracking-wider uppercase">
-        <i data-lucide="map-pin" class="w-3.5 h-3.5"></i> MASA ${selectedTable}
-      </span>`;
+      tableBadgeEl.innerHTML = `
+        <button type="button" onclick="openTablePickerModal()" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-semibold tracking-wider uppercase hover:bg-amber-500/30 transition-all cursor-pointer" title="Masa numarasını değiştir">
+          <i data-lucide="map-pin" class="w-3.5 h-3.5 text-amber-400"></i>
+          <span>MASA ${selectedTable}</span>
+          <span class="text-[9px] text-amber-400 font-normal underline ml-0.5">Değiştir</span>
+        </button>
+      `;
     } else {
-      tableBadgeEl.innerHTML = `<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/5 text-gray-300 border border-white/10 text-xs font-medium">
-        Hoş Geldiniz
-      </span>`;
+      tableBadgeEl.innerHTML = `
+        <button type="button" onclick="openTablePickerModal()" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/30 text-xs font-semibold tracking-wider hover:bg-amber-500/20 transition-all cursor-pointer animate-pulse" title="Masa numaranızı seçin">
+          <i data-lucide="map-pin" class="w-3.5 h-3.5 text-amber-400"></i>
+          <span>Masa Seçin</span>
+        </button>
+      `;
     }
   }
 
@@ -553,6 +875,15 @@ function renderHeaderInfo() {
     } else {
       instaCardSec.classList.add('hidden');
     }
+  }
+
+  // Google Haritalar Bağlantısı ve Şık Kartı
+  const mapsCardBtn = document.getElementById('google-maps-card-btn');
+  const defaultGoogleMapsUrl = 'https://www.google.com/maps/place/HashTag+Sh%C4%B1sha+TowN/@36.5441256,31.9875018,17z/data=!4m8!3m7!1s0x14dca29d1fbf1249:0x4b3340264cde0fb8!8m2!3d36.5441256!4d31.9900767!9m1!1b1!16s%2Fg%2F11c5swfnsx?entry=ttu&g_ep=EgoyMDI2MTAyMC4wIKXMDSoASAFQAw%3D%3D';
+  const fullMapsUrl = (settings.googleMapsUrl && settings.googleMapsUrl.trim()) ? settings.googleMapsUrl.trim() : defaultGoogleMapsUrl;
+
+  if (mapsCardBtn) {
+    mapsCardBtn.href = fullMapsUrl;
   }
 
   // Gelecek özellik (Köz & Garson) kontrolü
@@ -853,10 +1184,16 @@ function openItemDetails(itemId) {
         </div>
       ` : ''}
 
-      <div class="mt-6 pt-4 border-t border-white/10 flex justify-end">
+      <div class="mt-6 pt-4 border-t border-white/10 grid ${(item.inStock === false || item.isAvailable === false) ? 'grid-cols-1' : 'grid-cols-2'} gap-3 font-sans">
         <button onclick="closeItemModal()" class="w-full py-3 rounded-xl bg-white/10 hover:bg-white/15 text-white font-medium text-sm transition-colors">
           Kapat
         </button>
+        ${!(item.inStock === false || item.isAvailable === false) ? `
+          <button onclick="addItemToBillEstimate('${item.id}'); closeItemModal();" class="w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold text-sm transition-all flex items-center justify-center gap-1.5 shadow-lg active:scale-95">
+            <i data-lucide="plus" class="w-4 h-4"></i>
+            <span>Hesaba Ekle</span>
+          </button>
+        ` : ''}
       </div>
     </div>
   `;
@@ -947,8 +1284,17 @@ let lastCallTime = 0;
 let cooldownInterval = null;
 
 function setupServiceCallModal() {
-  if (!selectedTable) {
-    selectedTable = localStorage.getItem('hashtag_table') || null;
+  const urlTable = getTableFromUrl();
+  if (urlTable) {
+    selectedTable = String(urlTable);
+    try { sessionStorage.setItem('hashtag_active_table', String(urlTable)); } catch (e) {}
+  } else {
+    try {
+      localStorage.removeItem('hashtag_table');
+      selectedTable = sessionStorage.getItem('hashtag_active_table') || null;
+    } catch (e) {
+      selectedTable = null;
+    }
   }
 
   window.requestService = function(serviceType) {
@@ -1003,13 +1349,29 @@ async function executeServiceCall(serviceType, tableNum) {
 function openTablePickerModal() {
   const modal = document.getElementById('table-picker-modal');
   const grid = document.getElementById('table-picker-grid');
+  const subtitleEl = modal ? modal.querySelector('p') : null;
   if (!modal || !grid) return;
+
+  if (subtitleEl) {
+    if (pendingCallType === 'bill') {
+      subtitleEl.textContent = 'Hesap çağrınızın doğru masaya iletilebilmesi için lütfen oturduğunuz masayı seçiniz.';
+    } else if (pendingCallType === 'coal') {
+      subtitleEl.textContent = 'Köz talebinizin doğru masaya iletilebilmesi için lütfen oturduğunuz masayı seçiniz.';
+    } else if (pendingCallType === 'waiter') {
+      subtitleEl.textContent = 'Garson çağrınızın doğru masaya iletilebilmesi için lütfen oturduğunuz masayı seçiniz.';
+    } else {
+      subtitleEl.textContent = 'Çağrınızın doğru masaya iletilebilmesi için lütfen oturduğunuz masayı seçiniz.';
+    }
+  }
 
   const count = (menuData && menuData.settings && menuData.settings.tableCount) || 24;
   let html = '';
   for (let i = 1; i <= count; i++) {
+    const isCurrent = String(selectedTable) === String(i);
     html += `
-      <button onclick="selectTableFromPicker('${i}')" class="py-2.5 rounded-xl bg-black border border-white/10 hover:border-amber-500 hover:text-amber-400 font-bold text-sm text-white transition-all active:scale-95">
+      <button type="button" onclick="selectTableFromPicker('${i}')" class="py-2.5 rounded-xl ${
+        isCurrent ? 'bg-amber-500 text-black border-amber-400 font-black shadow-lg shadow-amber-500/20' : 'bg-black border-white/10 hover:border-amber-500 hover:text-amber-400 font-bold text-white'
+      } border text-sm transition-all active:scale-95 flex items-center justify-center">
         ${i}
       </button>
     `;
@@ -1025,18 +1387,36 @@ function closeTablePickerModal() {
     modal.classList.add('hidden');
     modal.classList.remove('flex');
   }
+  pendingCallType = null;
 }
 
 function selectTableFromPicker(tableNum) {
-  selectedTable = tableNum;
-  localStorage.setItem('hashtag_table', tableNum);
+  selectedTable = String(tableNum);
+  try {
+    sessionStorage.setItem('hashtag_active_table', String(tableNum));
+    localStorage.removeItem('hashtag_table');
+  } catch (e) {}
+
   closeTablePickerModal();
   renderHeaderInfo();
-  
+
   if (pendingCallType) {
-    executeServiceCall(pendingCallType, tableNum);
+    const typeToCall = pendingCallType;
     pendingCallType = null;
+    executeServiceCall(typeToCall, selectedTable);
+  } else {
+    showToast(`📍 Masa ${selectedTable} seçildi`, 'info');
   }
+}
+
+function requestBillFromCalculator() {
+  closeBillEstimateModal();
+  if (!selectedTable) {
+    pendingCallType = 'bill';
+    openTablePickerModal();
+    return;
+  }
+  executeServiceCall('bill', selectedTable);
 }
 
 let activeCallStatusInterval = null;
@@ -1286,6 +1666,97 @@ function closeCallSuccessModal() {
   }
 }
 
+/* =========================================================================
+   MÜŞTERİ BAĞIMSIZ GERİ BİLDİRİM & PUANLAMA MODALI
+   ========================================================================= */
+
+function openCustomerFeedbackModal() {
+  const modal = document.getElementById('customer-feedback-modal');
+  if (!modal) return;
+  standaloneRating = 5;
+  standaloneFeedbackTags.clear();
+  setStandaloneFeedbackRating(5);
+  
+  const tagBtns = document.querySelectorAll('#standalone-feedback-tags button');
+  tagBtns.forEach(b => {
+    b.className = 'px-2.5 py-1 rounded-xl text-[10px] font-semibold bg-white/5 border border-white/10 text-gray-400 hover:text-white transition-all';
+  });
+  
+  const commentInput = document.getElementById('standalone-feedback-comment');
+  if (commentInput) commentInput.value = '';
+
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
+  if (window.lucide) lucide.createIcons();
+}
+
+function closeCustomerFeedbackModal() {
+  const modal = document.getElementById('customer-feedback-modal');
+  if (modal) {
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+  }
+}
+
+function setStandaloneFeedbackRating(stars) {
+  standaloneRating = stars;
+  const labels = {
+    5: 'Harika (5 / 5)',
+    4: 'Çok İyi (4 / 5)',
+    3: 'Orta (3 / 5)',
+    2: 'Geliştirilmeli (2 / 5)',
+    1: 'Kötü (1 / 5)'
+  };
+  const labelEl = document.getElementById('standalone-rating-label');
+  if (labelEl) labelEl.textContent = labels[stars] || `${stars} / 5`;
+
+  for (let i = 1; i <= 5; i++) {
+    const btn = document.getElementById(`s-star-${i}`);
+    if (btn) {
+      btn.style.opacity = i <= stars ? '1' : '0.25';
+      btn.style.filter = i <= stars ? 'none' : 'grayscale(100%)';
+    }
+  }
+}
+
+function toggleStandaloneFeedbackTag(tag, btn) {
+  if (standaloneFeedbackTags.has(tag)) {
+    standaloneFeedbackTags.delete(tag);
+    btn.classList.remove('bg-amber-500/20', 'text-amber-300', 'border-amber-500/40');
+    btn.classList.add('bg-white/5', 'text-gray-400', 'border-white/10');
+  } else {
+    standaloneFeedbackTags.add(tag);
+    btn.classList.remove('bg-white/5', 'text-gray-400', 'border-white/10');
+    btn.classList.add('bg-amber-500/20', 'text-amber-300', 'border-amber-500/40');
+  }
+}
+
+async function submitStandaloneFeedback() {
+  const commentInput = document.getElementById('standalone-feedback-comment');
+  const comment = commentInput ? commentInput.value.trim() : '';
+  const table = selectedTable ? `Masa ${selectedTable}` : 'Masa Bilinmiyor';
+
+  try {
+    const apiBase = getApiBaseUrl();
+    await fetch(apiBase + '/api/feedback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        table: table,
+        rating: standaloneRating,
+        tags: Array.from(standaloneFeedbackTags),
+        comment: comment,
+        callId: ''
+      })
+    });
+  } catch (e) {
+    console.warn("Feedback submit err:", e);
+  }
+
+  showToast('❤️ Değerlendirmeniz için çok teşekkür ederiz!', 'success');
+  closeCustomerFeedbackModal();
+}
+
 // =========================================================================
 // MASA ADİSYON / HESAP HESAPLAYICI (ESTIMATED BILL CALCULATOR)
 // =========================================================================
@@ -1342,7 +1813,7 @@ function updateBillEstimateUI() {
     floatingBar.classList.remove('hidden');
     floatingBar.classList.add('flex');
     if (countEl) countEl.textContent = `${totalCount} Ürün`;
-    if (priceEl) priceEl.textContent = `${totalPrice.toLocaleString('tr-TR')} ₺`;
+    if (priceEl) priceEl.textContent = totalPrice.toLocaleString('tr-TR');
   } else {
     floatingBar.classList.add('hidden');
     floatingBar.classList.remove('flex');
@@ -1355,6 +1826,7 @@ function openBillEstimateModal() {
   modal.classList.remove('hidden');
   modal.classList.add('flex');
   renderBillModalContent();
+  if (window.lucide) lucide.createIcons();
 }
 
 function closeBillEstimateModal() {
@@ -1370,28 +1842,38 @@ function renderBillModalContent() {
   const modalTotal = document.getElementById('estimated-bill-modal-total');
   const { totalCount, totalPrice } = getBillEstimateTotals();
 
-  if (modalTotal) modalTotal.textContent = `${totalPrice.toLocaleString('tr-TR')} ₺`;
+  if (modalTotal) modalTotal.textContent = totalPrice.toLocaleString('tr-TR');
   if (!listEl) return;
 
   const items = Object.values(estimatedBillItems);
   if (items.length === 0) {
-    listEl.innerHTML = `<div class="py-8 text-center text-xs text-gray-500">Listenizde henüz ürün yok.</div>`;
+    listEl.innerHTML = `<div class="py-8 text-center text-xs text-gray-400 font-sans">Listenizde henüz ürün bulunmuyor.</div>`;
     return;
   }
 
-  listEl.innerHTML = items.map(({ item, count }) => `
-    <div class="flex items-center justify-between p-3 rounded-2xl bg-black/60 border border-white/5">
-      <div class="min-w-0 flex-1 pr-2">
-        <h4 class="text-xs font-bold text-white truncate">${escapeHtml(item.name)}</h4>
-        <div class="text-[11px] text-amber-400 font-mono mt-0.5">${item.price} ₺</div>
+  listEl.innerHTML = items.map(({ item, count }) => {
+    const itemTotal = (parseFloat(item.price) || 0) * count;
+    return `
+    <div class="flex items-center justify-between p-3 rounded-2xl bg-black/40 border border-white/5 hover:border-amber-500/20 transition-all font-sans">
+      <div class="min-w-0 flex-1 pr-3">
+        <h4 class="text-sm font-semibold text-white tracking-tight truncate">${escapeHtml(item.name)}</h4>
+        <div class="flex items-center gap-2 mt-1">
+          <div class="lounge-price-sm">
+            <span class="amount">${parseFloat(item.price) || 0}</span>
+            <span class="currency">₺</span>
+          </div>
+          ${count > 1 ? `<span class="text-[11px] text-gray-400 font-medium">(${count} x ${item.price} ₺ = <span class="text-amber-400 font-bold">${itemTotal.toLocaleString('tr-TR')} ₺</span>)</span>` : ''}
+        </div>
       </div>
-      <div class="flex items-center gap-2 flex-shrink-0">
-        <button onclick="changeBillItemQty('${item.id}', -1)" class="w-6 h-6 rounded-lg bg-white/5 hover:bg-white/10 text-white flex items-center justify-center font-bold text-xs">-</button>
-        <span class="text-xs font-bold text-white w-5 text-center">${count}</span>
-        <button onclick="changeBillItemQty('${item.id}', 1)" class="w-6 h-6 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 flex items-center justify-center font-bold text-xs">+</button>
+      <div class="flex items-center gap-1.5 flex-shrink-0 bg-white/5 px-2 py-1 rounded-xl border border-white/10">
+        <button onclick="changeBillItemQty('${item.id}', -1)" class="w-6 h-6 rounded-lg bg-white/10 hover:bg-white/20 active:scale-90 text-white flex items-center justify-center font-bold text-xs transition-all" aria-label="Eksilt">-</button>
+        <span class="text-xs font-bold text-white w-6 text-center select-none">${count}</span>
+        <button onclick="changeBillItemQty('${item.id}', 1)" class="w-6 h-6 rounded-lg bg-amber-500/25 hover:bg-amber-500/40 active:scale-90 text-amber-300 flex items-center justify-center font-bold text-xs transition-all" aria-label="Artır">+</button>
       </div>
     </div>
-  `).join('');
+  `}).join('');
+
+  if (window.lucide) lucide.createIcons();
 }
 
 // Müşteri Menüsü İçin Akıllı Arka Plan Otomatik Güncelleme (3.5 sn)

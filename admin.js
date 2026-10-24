@@ -103,6 +103,7 @@ function unlockAdmin() {
   try { switchTab('products'); } catch (e) { console.error('switchTab error:', e); }
   try { updateAdminStats(); } catch (e) { console.error('updateAdminStats error:', e); }
   try { fillSettingsForm(); } catch (e) { console.error('fillSettingsForm error:', e); }
+  try { loadFeedbackList(true); } catch (e) {}
 }
 
 function logoutAdmin() {
@@ -162,6 +163,7 @@ function switchTab(tab) {
   if (tab === 'staff') {
     loadStaffPerformanceData();
     loadStaffLogsData();
+    loadFeedbackList();
     startStaffLivePolling();
   } else {
     stopStaffLivePolling();
@@ -827,6 +829,7 @@ function fillSettingsForm() {
   setVal('set-wifi-name', s.wifiName);
   setVal('set-wifi-pass', s.wifiPassword);
   setVal('set-instagram', s.instagram);
+  setVal('set-google-maps', s.googleMapsUrl || 'https://www.google.com/maps/place/HashTag+Shısha+TowN/@36.5441256,31.9875018,17z/data=!4m8!3m7!1s0x14dca29d1fbf1249:0x4b3340264cde0fb8!8m2!3d36.5441256!4d31.9900767!9m1!1b1!16s%2Fg%2F11c5swfnsx?entry=ttu&g_ep=EgoyMDI2MTAyMC4wIKXMDSoASAFQAw%3D%3D');
   setVal('set-admin-pin', s.adminPin);
   setVal('set-base-url', s.baseUrl);
   setVal('set-table-count', s.tableCount || 24);
@@ -841,6 +844,15 @@ function fillSettingsForm() {
 
   const priceEditEl = document.getElementById('set-staff-allow-price');
   if (priceEditEl) priceEditEl.checked = !!staffPerms.allowPriceEdit;
+
+  // Haftanın / Günün Duyurusu & Banner Ayarları
+  const ann = s.announcement || {};
+  const annEnabledEl = document.getElementById('set-announcement-enabled');
+  if (annEnabledEl) annEnabledEl.checked = ann.enabled !== false;
+  setVal('set-announcement-badge', ann.badge || '🔥 ŞEFİN TAVSİYESİ');
+  setVal('set-announcement-title', ann.title || 'Love 66 & Lady Killer Özel Mix');
+  setVal('set-announcement-desc', ann.desc || 'Özel buzlu marpuç ve taze nane esintisiyle hazırlanan günün karışımı.');
+  setVal('set-announcement-image', ann.image || '');
 }
 
 function openStaffPortalFromAdmin(e) {
@@ -879,12 +891,20 @@ async function handleSaveSettings(e) {
     wifiName: document.getElementById('set-wifi-name').value.trim(),
     wifiPassword: document.getElementById('set-wifi-pass').value.trim(),
     instagram: document.getElementById('set-instagram').value.trim(),
+    googleMapsUrl: document.getElementById('set-google-maps') ? document.getElementById('set-google-maps').value.trim() : (menuData.settings.googleMapsUrl || ''),
     adminPin: newPin,
     staffPin: newStaffPin,
     staffPermissions: {
       allowStockToggle: allowStock,
       allowPriceEdit: allowPrice,
       allowCallsView: true
+    },
+    announcement: {
+      enabled: document.getElementById('set-announcement-enabled') ? document.getElementById('set-announcement-enabled').checked : true,
+      badge: document.getElementById('set-announcement-badge') ? document.getElementById('set-announcement-badge').value.trim() || '🔥 ŞEFİN TAVSİYESİ' : '🔥 ŞEFİN TAVSİYESİ',
+      title: document.getElementById('set-announcement-title') ? document.getElementById('set-announcement-title').value.trim() || 'Love 66 & Lady Killer Özel Mix' : 'Love 66 & Lady Killer Özel Mix',
+      desc: document.getElementById('set-announcement-desc') ? document.getElementById('set-announcement-desc').value.trim() || 'Özel buzlu marpuç ve taze nane esintisiyle hazırlanan günün karışımı.' : 'Özel buzlu marpuç ve taze nane esintisiyle hazırlanan günün karışımı.',
+      image: document.getElementById('set-announcement-image') ? document.getElementById('set-announcement-image').value.trim() : ''
     },
     baseUrl: document.getElementById('set-base-url').value.trim() || window.location.origin,
     tableCount: parseInt(document.getElementById('set-table-count').value) || 24,
@@ -953,7 +973,8 @@ function startStaffLivePolling() {
     if (currentTab === 'staff' && typeof document !== 'undefined' && document.visibilityState === 'visible') {
       await Promise.allSettled([
         loadStaffPerformanceData(true),
-        loadStaffLogsData(true)
+        loadStaffLogsData(true),
+        loadFeedbackList(true)
       ]);
     }
   }, 2500);
@@ -1199,60 +1220,492 @@ function renderLogsList() {
   if (window.lucide) lucide.createIcons();
 }
 
+/* ==========================================================================
+   MÜŞTERİ GERİ BİLDİRİM & GELİŞMİŞ PERİYOT ANALİTİĞİ
+   ========================================================================== */
+
+let currentFeedbackTimeFilter = 'daily'; // 'daily', 'weekly', 'monthly', 'yearly', 'all'
+let currentFeedbackRatingFilter = 'all'; // 'all', 'critical', 'positive'
+
 async function loadFeedbackList(silent = false) {
   try {
     const apiBase = getApiBaseUrl();
     const pin = getAdminPin();
-    const res = await fetch(apiBase + '/api/admin/feedback', {
+    const res = await fetch(apiBase + '/api/admin/feedback?pin=' + encodeURIComponent(pin), {
       headers: { 'X-Admin-PIN': pin },
       cache: 'no-store'
     });
     if (res.ok) {
       const data = await res.json();
       adminFeedbackList = data.feedbacks || [];
-      const avgBadge = document.getElementById('stat-avg-rating');
-      if (avgBadge) {
-        avgBadge.innerHTML = `<span>⭐ ${data.avgRating || '5.0'}</span><span class="text-[10px] text-gray-400 font-normal">(${data.totalRatings || 0} Değerlendirme)</span>`;
-      }
-      renderFeedbackList();
+      renderFeedbackDashboard();
     }
   } catch (e) {
     if (!silent) console.error("Load feedback error:", e);
   }
 }
 
-function renderFeedbackList() {
-  const container = document.getElementById('feedback-container');
-  if (!container) return;
+function setFeedbackTimeFilter(filter) {
+  currentFeedbackTimeFilter = filter;
+  ['daily', 'weekly', 'monthly', 'yearly', 'all'].forEach(f => {
+    const btn = document.getElementById(`fb-filter-${f}`);
+    if (btn) {
+      if (f === filter) {
+        btn.className = 'px-3 py-1.5 rounded-xl text-xs font-bold transition-all bg-amber-500 text-black shadow';
+      } else {
+        btn.className = 'px-3 py-1.5 rounded-xl text-xs font-semibold transition-all text-gray-400 hover:text-white';
+      }
+    }
+  });
 
-  if (adminFeedbackList.length === 0) {
-    container.innerHTML = `<div class="py-8 text-center text-xs text-gray-500">Henüz müşteri geri bildirimi yok.</div>`;
+  const periodBadge = document.getElementById('fb-period-badge');
+  const labels = {
+    daily: 'Günlük (24s)',
+    weekly: 'Haftalık (7G)',
+    monthly: 'Aylık (30G)',
+    yearly: 'Yıllık (365G)',
+    all: 'Tüm Zamanlar'
+  };
+  if (periodBadge) periodBadge.textContent = labels[filter] || 'Günlük';
+
+  renderFeedbackDashboard();
+}
+
+function setFeedbackRatingFilter(filter) {
+  currentFeedbackRatingFilter = filter;
+  ['all', 'critical', 'positive'].forEach(f => {
+    const btn = document.getElementById(`fb-rating-${f}`);
+    if (btn) {
+      if (f === filter) {
+        btn.className = 'px-2.5 py-1 rounded-lg text-[11px] font-bold bg-amber-500 text-black shadow';
+      } else {
+        btn.className = 'px-2.5 py-1 rounded-lg text-[11px] font-medium bg-white/5 hover:bg-white/10 text-gray-300 border border-white/5';
+      }
+    }
+  });
+  renderFeedbackListOnly();
+}
+
+function getFeedbacksForCurrentTimeFilter() {
+  const now = Math.floor(Date.now() / 1000);
+  if (!adminFeedbackList || adminFeedbackList.length === 0) return [];
+
+  let list = adminFeedbackList.slice();
+  if (currentFeedbackTimeFilter === 'daily') {
+    list = list.filter(f => (now - (f.timestamp || 0)) <= 86400);
+  } else if (currentFeedbackTimeFilter === 'weekly') {
+    list = list.filter(f => (now - (f.timestamp || 0)) <= (7 * 86400));
+  } else if (currentFeedbackTimeFilter === 'monthly') {
+    list = list.filter(f => (now - (f.timestamp || 0)) <= (30 * 86400));
+  } else if (currentFeedbackTimeFilter === 'yearly') {
+    list = list.filter(f => (now - (f.timestamp || 0)) <= (365 * 86400));
+  }
+  return list;
+}
+
+function renderFeedbackDashboard() {
+  const periodFeedbacks = getFeedbacksForCurrentTimeFilter();
+
+  updateFeedbackKPIs(periodFeedbacks);
+  renderFeedbackStarBars(periodFeedbacks);
+  renderFeedbackTrendChart(periodFeedbacks);
+  generateSmartRecommendations(periodFeedbacks);
+  renderFeedbackListOnly();
+
+  if (window.lucide) lucide.createIcons();
+}
+
+function updateFeedbackKPIs(feedbacks) {
+  const kpiAvg = document.getElementById('fb-kpi-avg');
+  const kpiStars = document.getElementById('fb-kpi-stars');
+  const kpiTotal = document.getElementById('fb-kpi-total');
+  const kpiPeriodLabel = document.getElementById('fb-kpi-period-label');
+  const kpiNps = document.getElementById('fb-kpi-nps');
+  const kpiCritical = document.getElementById('fb-kpi-critical');
+  const kpiCriticalSub = document.getElementById('fb-kpi-critical-sub');
+
+  const count = feedbacks.length;
+  if (count === 0) {
+    if (kpiAvg) kpiAvg.textContent = '-';
+    if (kpiStars) kpiStars.textContent = 'Henüz değerlendirme yok';
+    if (kpiTotal) kpiTotal.textContent = '0';
+    if (kpiPeriodLabel) kpiPeriodLabel.textContent = 'Bu periyotta kayıt yok';
+    if (kpiNps) kpiNps.textContent = '%0';
+    if (kpiCritical) kpiCritical.textContent = '0';
+    if (kpiCriticalSub) kpiCriticalSub.textContent = 'Aksiyon gerekmiyor';
     return;
   }
 
-  container.innerHTML = adminFeedbackList.map(fb => `
-    <div class="p-3.5 rounded-2xl bg-black border border-white/5 flex items-start justify-between text-xs hover:border-white/10 transition-colors">
-      <div class="flex items-start gap-3">
-        <div class="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/20 flex flex-col items-center justify-center flex-shrink-0 text-amber-400 font-bold">
-          <span class="text-[11px] leading-none">${fb.rating}</span>
-          <span class="text-[8px] leading-none mt-0.5">★</span>
+  const sum = feedbacks.reduce((acc, f) => acc + (f.rating || 5), 0);
+  const avg = (sum / count).toFixed(1);
+  const starsStr = '⭐'.repeat(Math.max(1, Math.min(5, Math.round(avg))));
+
+  const positiveCount = feedbacks.filter(f => (f.rating || 5) >= 4).length;
+  const npsPct = Math.round((positiveCount / count) * 100);
+
+  const criticalCount = feedbacks.filter(f => (f.rating || 5) <= 3).length;
+
+  if (kpiAvg) kpiAvg.textContent = avg;
+  if (kpiStars) kpiStars.textContent = `${starsStr} (${avg}/5)`;
+  if (kpiTotal) kpiTotal.textContent = count;
+  if (kpiPeriodLabel) kpiPeriodLabel.textContent = `${count} müşteri puanı`;
+  if (kpiNps) kpiNps.textContent = `%${npsPct}`;
+  if (kpiCritical) kpiCritical.textContent = criticalCount;
+  if (kpiCriticalSub) {
+    kpiCriticalSub.textContent = criticalCount > 0 
+      ? `⚠️ ${criticalCount} masada aksiyon gerek` 
+      : '✅ Tüm masalar mutlu';
+  }
+}
+
+function renderFeedbackStarBars(feedbacks) {
+  const container = document.getElementById('fb-star-bars-container');
+  if (!container) return;
+
+  const total = feedbacks.length;
+  const counts = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+  feedbacks.forEach(f => {
+    const r = f.rating || 5;
+    if (counts[r] !== undefined) counts[r]++;
+    else counts[5]++;
+  });
+
+  const barColors = {
+    5: 'from-amber-500 to-amber-300',
+    4: 'from-amber-600 to-amber-400',
+    3: 'from-yellow-600 to-amber-600',
+    2: 'from-orange-600 to-amber-600',
+    1: 'from-red-600 to-orange-600'
+  };
+
+  let html = '';
+  for (let star = 5; star >= 1; star--) {
+    const cnt = counts[star];
+    const pct = total > 0 ? Math.round((cnt / total) * 100) : 0;
+    html += `
+      <div class="flex items-center gap-2 text-xs">
+        <span class="w-7 font-bold text-amber-400 flex items-center gap-0.5 flex-shrink-0">
+          ${star} <span class="text-[10px]">★</span>
+        </span>
+        <div class="flex-1 h-3 rounded-full bg-white/5 overflow-hidden p-0.5 border border-white/5">
+          <div class="h-full rounded-full bg-gradient-to-r ${barColors[star]} transition-all duration-500" style="width: ${Math.max(pct, cnt > 0 ? 4 : 0)}%"></div>
         </div>
-        <div>
-          <div class="flex items-center gap-2">
-            <span class="font-bold text-white">${escapeHtml(fb.table)}</span>
-            <span class="text-amber-400 font-medium">${'⭐'.repeat(fb.rating)}</span>
-          </div>
-          ${fb.tags && fb.tags.length > 0 ? `
-            <div class="flex flex-wrap gap-1 mt-1.5">
-              ${fb.tags.map(t => `<span class="px-2 py-0.5 rounded-md bg-white/5 text-gray-300 border border-white/5 text-[10px]">${escapeHtml(t)}</span>`).join('')}
-            </div>
-          ` : ''}
-          ${fb.comment ? `<p class="text-gray-400 text-xs mt-1 italic">"${escapeHtml(fb.comment)}"</p>` : ''}
-        </div>
+        <span class="w-16 text-right text-[11px] text-gray-400 font-mono flex-shrink-0">
+          %${pct} <span class="text-[10px] text-gray-500">(${cnt})</span>
+        </span>
       </div>
-      <div class="text-[10px] text-gray-500 font-mono text-right flex-shrink-0">${escapeHtml(fb.timeStr || '')}</div>
+    `;
+  }
+  container.innerHTML = html;
+}
+
+function renderFeedbackTrendChart(feedbacks) {
+  const barsContainer = document.getElementById('fb-trend-bars-container');
+  const labelsContainer = document.getElementById('fb-trend-labels-container');
+  const titleEl = document.getElementById('fb-trend-chart-title');
+  const subtitleEl = document.getElementById('fb-trend-chart-subtitle');
+
+  if (!barsContainer || !labelsContainer) return;
+
+  const filter = currentFeedbackTimeFilter;
+  let columns = [];
+
+  if (filter === 'daily') {
+    if (titleEl) titleEl.textContent = 'Günün Saat Dilimi Dağılımı';
+    if (subtitleEl) subtitleEl.textContent = 'Son 24 saat içindeki yoğunluk';
+    columns = [
+      { id: 'shift1', label: '12-16', sub: 'Öğlen', minH: 12, maxH: 16 },
+      { id: 'shift2', label: '16-20', sub: 'İkindi', minH: 16, maxH: 20 },
+      { id: 'shift3', label: '20-00', sub: 'Akşam', minH: 20, maxH: 24 },
+      { id: 'shift4', label: '00-04', sub: 'Gece', minH: 0, maxH: 4 }
+    ];
+
+    columns.forEach(col => {
+      const matching = feedbacks.filter(f => {
+        const trHour = (Math.floor((f.timestamp || 0) + 3 * 3600) % 86400) / 3600;
+        return (trHour >= col.minH && trHour < col.maxH);
+      });
+      col.count = matching.length;
+      col.avg = matching.length > 0 ? (matching.reduce((a, b) => a + (b.rating || 5), 0) / matching.length).toFixed(1) : '-';
+    });
+
+  } else if (filter === 'weekly') {
+    if (titleEl) titleEl.textContent = 'Haftalık Gün Dağılımı';
+    if (subtitleEl) subtitleEl.textContent = 'Son 7 gün içindeki puanlar';
+    columns = [
+      { day: 1, label: 'Pzt' },
+      { day: 2, label: 'Sal' },
+      { day: 3, label: 'Çar' },
+      { day: 4, label: 'Per' },
+      { day: 5, label: 'Cum' },
+      { day: 6, label: 'Cmt' },
+      { day: 0, label: 'Paz' }
+    ];
+
+    columns.forEach(col => {
+      const matching = feedbacks.filter(f => {
+        const d = new Date(((f.timestamp || 0) + 3 * 3600) * 1000).getUTCDay();
+        return d === col.day;
+      });
+      col.count = matching.length;
+      col.avg = matching.length > 0 ? (matching.reduce((a, b) => a + (b.rating || 5), 0) / matching.length).toFixed(1) : '-';
+    });
+
+  } else if (filter === 'monthly') {
+    if (titleEl) titleEl.textContent = 'Aylık Hafta Dağılımı';
+    if (subtitleEl) subtitleEl.textContent = 'Son 30 günün 4 haftası';
+    const now = Math.floor(Date.now() / 1000);
+    columns = [
+      { label: '1. Hafta', minD: 0, maxD: 7 },
+      { label: '2. Hafta', minD: 7, maxD: 14 },
+      { label: '3. Hafta', minD: 14, maxD: 21 },
+      { label: '4. Hafta', minD: 21, maxD: 31 }
+    ];
+
+    columns.forEach(col => {
+      const matching = feedbacks.filter(f => {
+        const ageDays = (now - (f.timestamp || 0)) / 86400;
+        return ageDays >= col.minD && ageDays < col.maxD;
+      });
+      col.count = matching.length;
+      col.avg = matching.length > 0 ? (matching.reduce((a, b) => a + (b.rating || 5), 0) / matching.length).toFixed(1) : '-';
+    });
+
+  } else {
+    // yearly / all
+    if (titleEl) titleEl.textContent = 'Yıllık Ay Dağılımı';
+    if (subtitleEl) subtitleEl.textContent = 'Son 12 ayın dökümü';
+    const monthNames = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'];
+    columns = monthNames.map((m, idx) => ({ monthIdx: idx, label: m }));
+
+    columns.forEach(col => {
+      const matching = feedbacks.filter(f => {
+        const mIdx = new Date(((f.timestamp || 0) + 3 * 3600) * 1000).getUTCMonth();
+        return mIdx === col.monthIdx;
+      });
+      col.count = matching.length;
+      col.avg = matching.length > 0 ? (matching.reduce((a, b) => a + (b.rating || 5), 0) / matching.length).toFixed(1) : '-';
+    });
+  }
+
+  const maxCount = Math.max(...columns.map(c => c.count), 1);
+
+  barsContainer.innerHTML = columns.map(c => {
+    const heightPercent = c.count > 0 ? Math.max(22, Math.round((c.count / maxCount) * 100)) : 8;
+    const isHigh = c.avg !== '-' && parseFloat(c.avg) >= 4.5;
+    return `
+      <div class="flex-1 flex flex-col items-center justify-end h-full group relative">
+        <!-- Hover / Sabit Puan Rozeti -->
+        ${c.count > 0 ? `
+          <div class="text-[9px] font-mono font-bold text-amber-300 mb-1 flex items-center gap-0.5">
+            <span>${c.count}</span>
+            <span class="text-[8px] text-gray-400">(${c.avg}★)</span>
+          </div>
+        ` : `
+          <div class="text-[9px] text-gray-600 mb-1">0</div>
+        `}
+        <!-- Bar Sütun -->
+        <div class="w-full max-w-[34px] rounded-t-lg transition-all duration-300 ${
+          c.count > 0 
+            ? (isHigh ? 'bg-gradient-to-t from-amber-600 via-amber-500 to-amber-300 shadow-md shadow-amber-500/20 group-hover:brightness-110' : 'bg-gradient-to-t from-yellow-700 to-amber-500')
+            : 'bg-white/5 border-t border-white/10'
+        }" style="height: ${heightPercent}%"></div>
+      </div>
+    `;
+  }).join('');
+
+  labelsContainer.innerHTML = columns.map(c => `
+    <div class="flex-1 text-center font-bold text-gray-400 truncate">
+      ${c.label}
     </div>
   `).join('');
+}
+
+function generateSmartRecommendations(feedbacks) {
+  const container = document.getElementById('fb-smart-recommendations-container');
+  const badge = document.getElementById('fb-action-status-badge');
+  if (!container) return;
+
+  const lowRatings = feedbacks.filter(f => (f.rating || 5) <= 3);
+
+  if (lowRatings.length === 0) {
+    if (badge) {
+      badge.textContent = 'Mükemmel Memnuniyet';
+      badge.className = 'px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
+    }
+    container.innerHTML = `
+      <div class="col-span-full p-4 rounded-xl bg-emerald-950/20 border border-emerald-500/30 flex items-start gap-3 text-xs">
+        <span class="text-2xl">🌟</span>
+        <div>
+          <h5 class="font-bold text-emerald-300 text-sm">Tebrikler! Bu Periyotta Düşük Puan Bulunmuyor</h5>
+          <p class="text-gray-300 mt-1 leading-relaxed">
+            Seçili periyotta masalardan gelen tüm puanlar 4 ve 5 yıldız seviyesinde. Yüksek hizmet standardını sürdürmek için servis ve nargile ekibinize gün sonu teşekkür brifingi yapabilir, sadık masalara küçük ikram jestlerini sürdürebilirsiniz.
+          </p>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  if (badge) {
+    badge.textContent = `${lowRatings.length} Gelişim Fırsatı Tespit Edildi`;
+    badge.className = 'px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30';
+  }
+
+  const allText = lowRatings.map(f => (f.tags || []).join(' ') + ' ' + (f.comment || '')).join(' ').toLowerCase();
+
+  const hasCoalIssue = allText.includes('köz') || allText.includes('nargile') || allText.includes('duman') || allText.includes('kömür');
+  const hasSpeedIssue = allText.includes('yavaş') || allText.includes('servis') || allText.includes('gecik') || allText.includes('garson') || allText.includes('bekle');
+  const hasMusicIssue = allText.includes('müzik') || allText.includes('ses') || allText.includes('gürültü');
+  const hasPriceIssue = allText.includes('fiyat') || allText.includes('pahalı') || allText.includes('hesap');
+
+  const cards = [];
+
+  // 1. Köz & Nargile İyileştirmesi
+  if (hasCoalIssue) {
+    cards.push(`
+      <div class="p-3.5 rounded-xl bg-black/70 border border-amber-500/30 text-xs space-y-1.5 hover:border-amber-400 transition-colors">
+        <div class="flex items-center gap-2 text-amber-400 font-bold">
+          <span>🔥</span>
+          <span>Köz & Nargile İyileştirmesi</span>
+        </div>
+        <p class="text-[11px] text-gray-300 leading-relaxed">
+          <b class="text-amber-200">Geri Bildirim Tespiti:</b> Müşteriler köz tazeleme gecikmesinden veya duman kıvamından bahsetti.
+        </p>
+        <div class="p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-200 leading-normal">
+          💡 <b>Aksiyon:</b> Masa haritasındaki 15 dakikalık köz sayaçlarını aktif takip edin. Masalara köz yenileme aralığı 18 dakikayı aşmamalı; közcü personele düzenli devriye görevi verin.
+        </div>
+      </div>
+    `);
+  }
+
+  // 2. Servis Hızı & Garson Koordinasyonu
+  if (hasSpeedIssue || cards.length === 0) {
+    cards.push(`
+      <div class="p-3.5 rounded-xl bg-black/70 border border-blue-500/30 text-xs space-y-1.5 hover:border-blue-400 transition-colors">
+        <div class="flex items-center gap-2 text-blue-400 font-bold">
+          <span>⚡</span>
+          <span>Servis Hızı & Garson Koordinasyonu</span>
+        </div>
+        <p class="text-[11px] text-gray-300 leading-relaxed">
+          <b class="text-blue-200">Geri Bildirim Tespiti:</b> Garson çağırma butonuna basıldığında masaya ulaşma süresi eleştirilmiş.
+        </p>
+        <div class="p-2 rounded-lg bg-blue-500/10 border border-blue-500/20 text-[11px] text-blue-200 leading-normal">
+          💡 <b>Aksiyon:</b> Yoğun saatlerde (20:00 - 23:00) salonu Bölüm A ve B olarak iki garsona zimmetleyin. Personel panelindeki çağrı butonlarının 60 saniyede 'Yanıtlandı' durumuna geçmesini kural haline getirin.
+        </div>
+      </div>
+    `);
+  }
+
+  // 3. Akustik & Müzik Seviyesi Ayarı
+  if (hasMusicIssue) {
+    cards.push(`
+      <div class="p-3.5 rounded-xl bg-black/70 border border-purple-500/30 text-xs space-y-1.5 hover:border-purple-400 transition-colors">
+        <div class="flex items-center gap-2 text-purple-400 font-bold">
+          <span>🔊</span>
+          <span>Akustik & Müzik Seviyesi Ayarı</span>
+        </div>
+        <p class="text-[11px] text-gray-300 leading-relaxed">
+          <b class="text-purple-200">Geri Bildirim Tespiti:</b> Müzik sesinin yüksekliği müşterilerin sohbet etmesini zorlaştırmış.
+        </p>
+        <div class="p-2 rounded-lg bg-purple-500/10 border border-purple-500/20 text-[11px] text-purple-200 leading-normal">
+          💡 <b>Aksiyon:</b> Akşam 22:00 öncesinde müzik sesini 65-70 dB lounge/chillout temposunda tutun. Hoparlör altı masaların bağımsız ses ayarını kısın.
+        </div>
+      </div>
+    `);
+  }
+
+  // 4. Fiyat & Algılanan Değer İyileştirmesi
+  if (hasPriceIssue) {
+    cards.push(`
+      <div class="p-3.5 rounded-xl bg-black/70 border border-emerald-500/30 text-xs space-y-1.5 hover:border-emerald-400 transition-colors">
+        <div class="flex items-center gap-2 text-emerald-400 font-bold">
+          <span>🏷️</span>
+          <span>Fiyat & Algılanan Değer İyileştirmesi</span>
+        </div>
+        <p class="text-[11px] text-gray-300 leading-relaxed">
+          <b class="text-emerald-200">Geri Bildirim Tespiti:</b> Fiyat veya porsiyon beklentisi karşılanamamış.
+        </p>
+        <div class="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[11px] text-emerald-200 leading-normal">
+          💡 <b>Aksiyon:</b> Nargile servisi yanında mini ikram (nane şekeri/şişe su/fındık) sunarak algılanan lounge değerini artırın.
+        </div>
+      </div>
+    `);
+  }
+
+  // 5. Her zaman: Masa Kurtarma & Anlık Telafi Aksiyonu
+  cards.push(`
+    <div class="p-3.5 rounded-xl bg-black/70 border border-rose-500/30 text-xs space-y-1.5 hover:border-rose-400 transition-colors">
+      <div class="flex items-center gap-2 text-rose-400 font-bold">
+        <span>🤝</span>
+        <span>Anlık Masa Kurtarma (Müşteri Telafi Adımı)</span>
+      </div>
+      <p class="text-[11px] text-gray-300 leading-relaxed">
+        <b class="text-rose-200">Operasyonel Taktik:</b> Düşük puan veren masayı personel panelinde tespit edin.
+      </p>
+      <div class="p-2 rounded-lg bg-rose-500/10 border border-rose-500/20 text-[11px] text-rose-200 leading-normal">
+        💡 <b>Aksiyon:</b> Şef garsonun derhal masaya nezaketle uğrayıp 'Memnun kalmadığınız noktayı telafi etmek isteriz' diyerek çay/kahve ikramı yapması olumsuz yorumun dış platformlara yansımasını önler.
+      </div>
+    </div>
+  `);
+
+  container.innerHTML = cards.join('');
+}
+
+function renderFeedbackListOnly() {
+  const container = document.getElementById('feedback-container');
+  const countEl = document.getElementById('fb-list-count');
+  if (!container) return;
+
+  const periodFeedbacks = getFeedbacksForCurrentTimeFilter();
+  let filtered = periodFeedbacks;
+
+  if (currentFeedbackRatingFilter === 'critical') {
+    filtered = filtered.filter(f => (f.rating || 5) <= 3);
+  } else if (currentFeedbackRatingFilter === 'positive') {
+    filtered = filtered.filter(f => (f.rating || 5) >= 4);
+  }
+
+  if (countEl) countEl.textContent = `(${filtered.length})`;
+
+  if (filtered.length === 0) {
+    container.innerHTML = `<div class="py-8 text-center text-xs text-gray-500">Seçili periyot ve filtrede geri bildirim kaydı bulunmuyor.</div>`;
+    return;
+  }
+
+  container.innerHTML = filtered.map(fb => {
+    const isCritical = (fb.rating || 5) <= 3;
+    return `
+      <div class="p-3.5 rounded-2xl bg-black/60 border ${
+        isCritical ? 'border-amber-500/40 bg-amber-950/10' : 'border-white/5'
+      } flex items-start justify-between text-xs hover:border-white/20 transition-all">
+        <div class="flex items-start gap-3">
+          <div class="w-9 h-9 rounded-xl ${
+            isCritical ? 'bg-amber-500/20 border-amber-500/40 text-amber-300' : 'bg-white/5 border-white/10 text-amber-400'
+          } border flex flex-col items-center justify-center flex-shrink-0 font-bold">
+            <span class="text-[12px] leading-none">${fb.rating}</span>
+            <span class="text-[8px] leading-none mt-0.5">★</span>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="font-bold text-white text-sm">${escapeHtml(fb.table)}</span>
+              <span class="text-amber-400 font-medium">${'⭐'.repeat(fb.rating)}</span>
+              ${isCritical ? '<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">⚠️ İnceleme Gerekiyor</span>' : ''}
+            </div>
+            ${fb.tags && fb.tags.length > 0 ? `
+              <div class="flex flex-wrap gap-1 mt-1.5">
+                ${fb.tags.map(t => `<span class="px-2 py-0.5 rounded-md bg-white/5 text-gray-300 border border-white/5 text-[10px]">${escapeHtml(t)}</span>`).join('')}
+              </div>
+            ` : ''}
+            ${fb.comment ? `<p class="text-gray-300 text-xs mt-1.5 italic font-sans leading-relaxed">"${escapeHtml(fb.comment)}"</p>` : ''}
+          </div>
+        </div>
+        <div class="text-[10px] text-gray-500 font-mono text-right flex-shrink-0 pl-2">
+          ${escapeHtml(fb.timeStr || '')}
+        </div>
+      </div>
+    `;
+  }).join('');
 
   if (window.lucide) lucide.createIcons();
 }

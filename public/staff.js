@@ -9,11 +9,22 @@ let currentStockCategory = 'all';
 let stockSearchQuery = '';
 let activeCalls = [];
 let knownCallIds = new Set();
+let activeHookahTimers = {};
 let menuData = null;
 let staffList = [];
 let audioEnabled = true;
 let audioCtx = null;
 let pollInterval = null;
+
+function escapeHtml(text) {
+  if (text === null || text === undefined) return '';
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 
 // =========================================================================
 // 1. CİHAZ TESPİTİ (USER-AGENT ANALİZİ)
@@ -467,9 +478,33 @@ async function fetchCalls() {
     const res = await fetch(apiBase + '/api/calls', { cache: 'no-store' });
     if (!res.ok) throw new Error("Fetch calls failed");
     const data = await res.json();
+    if (data.hookahTimers) {
+      activeHookahTimers = data.hookahTimers;
+    }
     return data.calls || [];
   } catch (e) {
     return [];
+  }
+}
+
+async function resetTableHookahTimer(tableName) {
+  try {
+    const apiBase = getApiBaseUrl();
+    const res = await fetch(apiBase + '/api/staff/hookah-timer/reset', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        table: tableName,
+        staffName: currentStaff ? currentStaff.name : 'Personel'
+      })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.timers) activeHookahTimers = data.timers;
+      renderTablesGrid();
+    }
+  } catch (e) {
+    console.error("Reset hookah timer error:", e);
   }
 }
 
@@ -535,10 +570,10 @@ function renderCallsView() {
         <div class="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/5 text-xs text-gray-400">
           <div class="flex items-center gap-2">
             <i data-lucide="check-circle" class="w-4 h-4 text-emerald-400"></i>
-            <span class="font-bold text-gray-300">${c.table}</span>
+            <span class="font-bold text-gray-300">${escapeHtml(c.table)}</span>
             <span>•</span>
-            <span>${c.typeName}</span>
-            ${c.handler ? `<span class="text-amber-400 font-medium">(${c.handler})</span>` : ''}
+            <span>${escapeHtml(c.typeName)}</span>
+            ${c.handler ? `<span class="text-amber-400 font-medium">(${escapeHtml(c.handler)})</span>` : ''}
           </div>
           <span class="text-[11px] text-gray-500">${getElapsedText(c.createdTimestamp)}</span>
         </div>
@@ -570,19 +605,19 @@ function renderCallCard(call) {
         <div class="flex items-center gap-3">
           <div class="w-14 h-14 rounded-2xl bg-black border border-white/15 flex flex-col items-center justify-center font-black text-amber-400 shadow-inner">
             <span class="text-[9px] text-gray-400 font-semibold uppercase tracking-wider">MASA</span>
-            <span class="text-xl leading-none mt-0.5 text-white">${call.table.replace(/\D/g, '') || call.table}</span>
+            <span class="text-xl leading-none mt-0.5 text-white">${escapeHtml(call.table.replace(/\D/g, '') || call.table)}</span>
           </div>
 
           <div>
             <div class="flex items-center gap-2">
               <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl border text-xs font-bold tracking-wide uppercase ${typeBg}">
                 <i data-lucide="${call.icon || 'bell'}" class="w-3.5 h-3.5 ${isCoal ? 'flame-anim text-amber-400' : ''}"></i>
-                ${call.typeName || (isCoal ? 'Köz Değişimi' : 'Garson Çağrısı')}
+                ${escapeHtml(call.typeName || (isCoal ? 'Köz Değişimi' : 'Garson Çağrısı'))}
               </span>
               
               ${isInProgress ? `
                 <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-500/20 text-blue-300 border border-blue-500/30 text-[10px] font-bold">
-                  🏃 ${call.handler || 'Yolda'}
+                  🏃 ${escapeHtml(call.handler || 'Yolda')}
                 </span>
               ` : `
                 <span class="text-[11px] font-medium text-amber-400 animate-pulse">Yeni Çağrı</span>
@@ -593,7 +628,7 @@ function renderCallCard(call) {
               <span class="flex items-center gap-1">
                 <i data-lucide="clock" class="w-3 h-3 text-gray-500"></i> ${elapsed}
               </span>
-              ${call.note ? `<span class="text-gray-300 bg-white/5 px-2 py-0.5 rounded-md">"${call.note}"</span>` : ''}
+              ${call.note ? `<span class="text-gray-300 bg-white/5 px-2 py-0.5 rounded-md">"${escapeHtml(call.note)}"</span>` : ''}
             </div>
           </div>
         </div>
@@ -723,6 +758,8 @@ function renderStockItems() {
   const container = document.getElementById('stock-items-container');
   if (!container || !menuData) return;
 
+  const canToggleStock = menuData.settings?.staffPermissions?.allowStockToggle !== false;
+
   let items = menuData.items || [];
 
   if (currentStockCategory !== 'all') {
@@ -741,7 +778,16 @@ function renderStockItems() {
     return;
   }
 
-  container.innerHTML = items.map(item => {
+  const permissionNotice = !canToggleStock 
+    ? `<div class="col-span-full p-3.5 rounded-xl bg-red-500/10 border border-red-500/25 text-red-300 text-xs flex items-center gap-2.5 mb-2">
+         <i data-lucide="shield-alert" class="w-4 h-4 text-red-400 flex-shrink-0"></i>
+         <div>
+           <b class="text-white">Yetki Kısıtlaması:</b> Stok durumu değiştirme yetkisi yönetici tarafından kapatılmıştır. Ürünler yalnızca görüntülenebilir.
+         </div>
+       </div>`
+    : '';
+
+  container.innerHTML = permissionNotice + items.map(item => {
     const isAvailable = (item.isAvailable !== false) && (item.inStock !== false);
     return `
       <div class="flex items-center justify-between p-3.5 rounded-2xl bg-neutral-900/80 border border-white/10 transition-colors ${!isAvailable ? 'opacity-60 bg-red-950/10 border-red-500/20' : ''}">
@@ -765,13 +811,24 @@ function renderStockItems() {
           </div>
         </div>
 
-        <button 
-          onclick="toggleItemStock('${item.id}', ${!isAvailable})" 
-          class="px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all active:scale-95 flex-shrink-0 ${isAvailable ? 'bg-red-500/15 hover:bg-red-500/25 text-red-400 border border-red-500/30' : 'bg-emerald-500 hover:bg-emerald-400 text-black shadow-md shadow-emerald-500/20'}"
-        >
-          <i data-lucide="${isAvailable ? 'slash' : 'check'}" class="w-3.5 h-3.5"></i>
-          <span>${isAvailable ? 'Tükendi Yap' : 'Stokta Var'}</span>
-        </button>
+        ${canToggleStock ? `
+          <button 
+            onclick="toggleItemStock('${item.id}', ${!isAvailable})" 
+            class="px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all active:scale-95 flex-shrink-0 ${isAvailable ? 'bg-red-500/15 hover:bg-red-500/25 text-red-400 border border-red-500/30' : 'bg-emerald-500 hover:bg-emerald-400 text-black shadow-md shadow-emerald-500/20'}"
+          >
+            <i data-lucide="${isAvailable ? 'slash' : 'check'}" class="w-3.5 h-3.5"></i>
+            <span>${isAvailable ? 'Tükendi Yap' : 'Stokta Var'}</span>
+          </button>
+        ` : `
+          <button 
+            disabled 
+            class="px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 opacity-50 cursor-not-allowed bg-neutral-800 text-gray-400 border border-white/10 flex-shrink-0"
+            title="Yönetici stok durumu değiştirme yetkisini kapattı"
+          >
+            <i data-lucide="lock" class="w-3.5 h-3.5"></i>
+            <span>Yetki Kapalı</span>
+          </button>
+        `}
 
       </div>
     `;
@@ -781,6 +838,12 @@ function renderStockItems() {
 }
 
 async function toggleItemStock(itemId, newAvailable) {
+  const canToggleStock = menuData?.settings?.staffPermissions?.allowStockToggle !== false;
+  if (!canToggleStock) {
+    alert("⚠️ Ürün stok durumu değiştirme yetkisi yönetici tarafından kapatılmıştır.");
+    return;
+  }
+
   if (menuData && menuData.items) {
     const item = menuData.items.find(i => i.id === itemId);
     if (item) {
@@ -804,7 +867,8 @@ async function toggleItemStock(itemId, newAvailable) {
       })
     });
     if (!res.ok) {
-      alert("Stok durumu güncellenemedi veya yetkiniz yok.");
+      const errData = await res.json().catch(() => ({}));
+      alert(errData.message || "Stok durumu güncellenemedi veya yetkiniz yok.");
       await loadMenuData();
       renderStockItems();
     }
@@ -852,6 +916,20 @@ function renderTablesGrid() {
       }
     }
 
+    const tableName = `Masa ${i}`;
+    const hTimer = activeHookahTimers && activeHookahTimers[tableName];
+    let timerBadge = '';
+    if (hTimer && hTimer.lastCoalTime) {
+      const min = Math.max(0, Math.floor((Date.now() / 1000 - hTimer.lastCoalTime) / 60));
+      if (min >= 45) {
+        timerBadge = `<button onclick="resetTableHookahTimer('${tableName}')" class="mt-1.5 px-2 py-0.5 rounded-lg bg-red-500/25 text-red-300 border border-red-500/40 text-[9px] font-black animate-pulse hover:bg-red-500/40 transition-all flex items-center gap-1" title="Köz yenileme zamanı! Sıfırlamak için tıkla">🔥 ${min} dk (Tazele!)</button>`;
+      } else if (min >= 30) {
+        timerBadge = `<button onclick="resetTableHookahTimer('${tableName}')" class="mt-1.5 px-2 py-0.5 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[9px] font-bold hover:bg-amber-500/30 transition-all flex items-center gap-1" title="Köz yenilendiyse tıkla">🔥 ${min} dk</button>`;
+      } else {
+        timerBadge = `<button onclick="resetTableHookahTimer('${tableName}')" class="mt-1.5 px-1.5 py-0.5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[9px] font-medium hover:bg-emerald-500/20 transition-all" title="Köz taze. Sıfırlamak için tıkla">🔥 ${min} dk</button>`;
+      }
+    }
+
     html += `
       <div class="p-3 rounded-2xl border flex flex-col items-center justify-center text-center transition-all ${cardBg}">
         <span class="text-[10px] text-gray-400 font-semibold uppercase">Masa</span>
@@ -859,6 +937,7 @@ function renderTablesGrid() {
         <div class="h-5 flex items-center justify-center mt-1">
           ${icon || '<span class="w-1.5 h-1.5 rounded-full bg-white/20"></span>'}
         </div>
+        ${timerBadge}
       </div>
     `;
   }
@@ -894,6 +973,10 @@ function switchTab(tabId) {
   if (tabId === 'stock') {
     renderStockCategories();
     renderStockItems();
+    loadMenuData().then(() => {
+      renderStockCategories();
+      renderStockItems();
+    });
   } else if (tabId === 'tables') {
     renderTablesGrid();
   }

@@ -1,0 +1,16 @@
+{
+  "logs": [
+    {
+      "id": "log-1792851234-4637",
+      "staffId": "customer",
+      "staffName": "Masa 19",
+      "role": "Müşteri",
+      "device": "Mobil Menü",
+      "action": "feedback",
+      "title": "Masa 19 Puan Verdi: ⭐⭐⭐ (3/5)",
+      "details": "Köz Geç Geldi, Yavaş Servis",
+      "timestamp": 1792851234,
+      "timeStr": "24.10.2026 17:13:54"
+    }
+  ]
+}

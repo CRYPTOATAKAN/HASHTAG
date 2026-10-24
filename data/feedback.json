@@ -1,0 +1,195 @@
+{
+  "feedbacks": [
+    {
+      "id": "fb-1792851234-4637",
+      "table": "Masa 19",
+      "rating": 3,
+      "tags": [
+        "Köz Geç Geldi",
+        "Yavaş Servis"
+      ],
+      "comment": "Köz takviyesi 25 dakika gecikti, biraz bekledik.",
+      "callId": "",
+      "timestamp": 1792851234,
+      "timeStr": "24.10.2026 17:13:54"
+    },
+    {
+      "id": "fb-init-1",
+      "table": "Masa 8",
+      "rating": 5,
+      "tags": [
+        "Hızlı Servis",
+        "Köz Kıvamında"
+      ],
+      "comment": "Nargilenin dumanı ve köz servisi harikaydı, teşekkürler!",
+      "callId": "",
+      "timestamp": 1792849434,
+      "timeStr": "24.10.2026 16:43:54"
+    },
+    {
+      "id": "fb-init-2",
+      "table": "Masa 3",
+      "rating": 5,
+      "tags": [
+        "Güler Yüz",
+        "Temiz Ortam"
+      ],
+      "comment": "Personel çok ilgiliydi, ortam çok nezih.",
+      "callId": "",
+      "timestamp": 1792845834,
+      "timeStr": "24.10.2026 15:43:54"
+    },
+    {
+      "id": "fb-init-3",
+      "table": "Masa 11",
+      "rating": 3,
+      "tags": [
+        "Köz Geç Geldi",
+        "Yavaş Servis"
+      ],
+      "comment": "Köz değişimi biraz gecikti, masayla daha sık ilgilenilebilir.",
+      "callId": "",
+      "timestamp": 1792838634,
+      "timeStr": "24.10.2026 13:43:54"
+    },
+    {
+      "id": "fb-init-4",
+      "table": "Masa 5",
+      "rating": 4,
+      "tags": [
+        "Lezzetli Tütün",
+        "Güler Yüz"
+      ],
+      "comment": "Kahveler ve tütün aroması çok başarılı.",
+      "callId": "",
+      "timestamp": 1792764834,
+      "timeStr": "23.10.2026 17:13:54"
+    },
+    {
+      "id": "fb-init-5",
+      "table": "Masa 14",
+      "rating": 2,
+      "tags": [
+        "Yüksek Müzik",
+        "Yavaş Servis"
+      ],
+      "comment": "Müzik sesi fazlaydı, garson çağırma butonuna geç yanıt verildi.",
+      "callId": "",
+      "timestamp": 1792678434,
+      "timeStr": "22.10.2026 17:13:54"
+    },
+    {
+      "id": "fb-init-6",
+      "table": "Masa 2",
+      "rating": 5,
+      "tags": [
+        "Hızlı Servis",
+        "Köz Kıvamında"
+      ],
+      "comment": "Harika bir lounge mekanı, sürekli geliyoruz.",
+      "callId": "",
+      "timestamp": 1792592034,
+      "timeStr": "21.10.2026 17:13:54"
+    },
+    {
+      "id": "fb-init-7",
+      "table": "Masa 7",
+      "rating": 4,
+      "tags": [
+        "Fiyat/Performans",
+        "Temiz Ortam"
+      ],
+      "comment": "Sunumlar çok özenliydi.",
+      "callId": "",
+      "timestamp": 1792505634,
+      "timeStr": "20.10.2026 17:13:54"
+    },
+    {
+      "id": "fb-init-8",
+      "table": "Masa 6",
+      "rating": 5,
+      "tags": [
+        "Güler Yüz",
+        "Köz Kıvamında"
+      ],
+      "comment": "Personel güler yüzlü, servis on numara.",
+      "callId": "",
+      "timestamp": 1792246434,
+      "timeStr": "17.10.2026 17:13:54"
+    },
+    {
+      "id": "fb-init-9",
+      "table": "Masa 9",
+      "rating": 4,
+      "tags": [
+        "Hızlı Servis"
+      ],
+      "comment": "Atmosfer çok şık ve nezih.",
+      "callId": "",
+      "timestamp": 1791814434,
+      "timeStr": "12.10.2026 17:13:54"
+    },
+    {
+      "id": "fb-init-10",
+      "table": "Masa 15",
+      "rating": 3,
+      "tags": [
+        "Köz Geç Geldi"
+      ],
+      "comment": "Yoğun saatlerde köz takviyesi biraz aksıyor.",
+      "callId": "",
+      "timestamp": 1791123234,
+      "timeStr": "04.10.2026 17:13:54"
+    },
+    {
+      "id": "fb-init-11",
+      "table": "Masa 10",
+      "rating": 5,
+      "tags": [
+        "Lezzetli Tütün",
+        "Hızlı Servis"
+      ],
+      "comment": "Özel karışım nargile enfesti.",
+      "callId": "",
+      "timestamp": 1790691234,
+      "timeStr": "29.09.2026 17:13:54"
+    },
+    {
+      "id": "fb-init-12",
+      "table": "Masa 1",
+      "rating": 5,
+      "tags": [
+        "Lüks Lounge",
+        "Güler Yüz"
+      ],
+      "comment": "HASHTAG kalitesi tartışılmaz, favori mekanımız.",
+      "callId": "",
+      "timestamp": 1789395234,
+      "timeStr": "14.09.2026 17:13:54"
+    },
+    {
+      "id": "fb-init-13",
+      "table": "Masa 4",
+      "rating": 5,
+      "tags": [
+        "Hızlı Servis"
+      ],
+      "comment": "Hızlı servis ve kusursuz temizlik.",
+      "callId": "",
+      "timestamp": 1786803234,
+      "timeStr": "15.08.2026 17:13:54"
+    },
+    {
+      "id": "fb-init-14",
+      "table": "Masa 12",
+      "rating": 4,
+      "tags": [
+        "Köz Kıvamında"
+      ],
+      "comment": "Genel olarak gayet memnun kaldık.",
+      "callId": "",
+      "timestamp": 1783851234,
+      "timeStr": "12.07.2026 13:13:54"
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "calls": [
+    {
+      "id": "call-1792852041-1419",
+      "table": "Masa 7",
+      "type": "bill",
+      "typeName": "Hesap Talebi",
+      "icon": "credit-card",
+      "status": "pending",
+      "createdAt": "2026-10-24T14:27:21Z",
+      "createdTimestamp": 1792852041,
+      "handler": "",
+      "handlerId": "",
+      "note": ""
+    }
+  ]
+}
