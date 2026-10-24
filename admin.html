@@ -328,8 +328,19 @@
           </div>
 
           <div class="pt-4 border-t border-white/10">
-            <h3 class="text-sm font-semibold text-white mb-2">Gelecek Özellikleri (Altyapı)</h3>
-            <div class="flex items-center justify-between p-4 rounded-xl bg-black border border-white/10">
+            <div class="flex items-center justify-between mb-2">
+              <h3 class="text-sm font-semibold text-white flex items-center gap-2">
+                <i data-lucide="users" class="w-4 h-4 text-amber-400"></i>
+                Personel Portalı & Yetki Yönetimi
+              </h3>
+              <a href="/personel" target="_blank" class="px-2.5 py-1 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[11px] font-bold hover:bg-amber-500/30 transition-colors flex items-center gap-1">
+                <span>Paneli Aç</span>
+                <i data-lucide="external-link" class="w-3 h-3"></i>
+              </a>
+            </div>
+
+            <!-- Köz İste & Garson Çağır Butonları Aç-Kapa -->
+            <div class="flex items-center justify-between p-4 rounded-xl bg-black border border-white/10 mb-3">
               <div>
                 <div class="text-sm font-medium text-white">Köz İste & Garson Çağır Butonları</div>
                 <div class="text-xs text-gray-400">Menünün altında müşterilere tek tıkla köz veya garson çağırma butonunu göster.</div>
@@ -337,6 +348,38 @@
               <label class="relative inline-flex items-center cursor-pointer">
                 <input type="checkbox" id="set-enable-calls" class="sr-only peer" />
                 <div class="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+              </label>
+            </div>
+
+            <!-- Personel Giriş PIN Kodu -->
+            <div class="p-4 rounded-xl bg-black border border-white/10 mb-3">
+              <div class="flex items-center justify-between gap-4">
+                <div>
+                  <div class="text-sm font-medium text-white">Personel PIN Kodu</div>
+                  <div class="text-xs text-gray-400">Garson ve servis ekibinin personel paneline girmesi için PIN.</div>
+                </div>
+                <input type="text" id="set-staff-pin" placeholder="5555" maxlength="6" class="w-28 px-3 py-2 rounded-xl bg-neutral-900 border border-white/15 text-sm text-center text-amber-400 font-mono font-bold focus:outline-none focus:border-amber-500" />
+              </div>
+            </div>
+
+            <!-- Yetki Kısıtlamaları -->
+            <div class="p-4 rounded-xl bg-black border border-white/10 space-y-3">
+              <div class="text-xs font-bold text-gray-400 uppercase tracking-wider">Personel İzinleri & Kısıtlamalar</div>
+              
+              <label class="flex items-center justify-between cursor-pointer">
+                <div>
+                  <div class="text-xs font-medium text-white">Ürün Stok Durumunu Değiştirebilsin</div>
+                  <div class="text-[11px] text-gray-400">Garsonlar biten ürünleri "Tükendi" veya "Mevcut" yapabilir.</div>
+                </div>
+                <input type="checkbox" id="set-staff-allow-stock" class="w-4 h-4 rounded text-amber-500 bg-neutral-900 border-white/20 focus:ring-amber-500 focus:ring-offset-black" />
+              </label>
+
+              <label class="flex items-center justify-between cursor-pointer pt-2 border-t border-white/5 opacity-75">
+                <div>
+                  <div class="text-xs font-medium text-white">Fiyat Değiştirebilsin (Önerilmez)</div>
+                  <div class="text-[11px] text-gray-500">Güvenlik için kapalı kalması önerilir. Sadece yönetici fiyat değiştirebilir.</div>
+                </div>
+                <input type="checkbox" id="set-staff-allow-price" class="w-4 h-4 rounded text-amber-500 bg-neutral-900 border-white/20 focus:ring-amber-500 focus:ring-offset-black" />
               </label>
             </div>
           </div>

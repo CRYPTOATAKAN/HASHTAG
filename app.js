@@ -915,16 +915,140 @@ function fallbackCopy(text, cb) {
   }
 }
 
-// Garson / Köz İsteme (Altyapı hazırlandı, admin panelinden istendiği an açılabilir)
-function setupServiceCallModal() {
-  window.requestService = function(serviceType) {
-    const title = serviceType === 'coal' ? 'Köz Değişimi Talebi' : 'Garson Çağrısı';
-    const desc = selectedTable 
-      ? `Masa ${selectedTable} için ${title.toLowerCase()} personelimize iletildi. Birkaç dakika içinde ilgileneceğiz.`
-      : `Talebiniz personele iletildi. Lütfen sipariş verirken masanızı belirtiniz.`;
+// Garson / Köz / Hesap İsteme (Personel Paneline Anlık Bildirim Gönderir)
+let pendingCallType = null;
+let lastCallTime = 0;
+let cooldownInterval = null;
 
-    alert(`🛎️ ${title}\n\n${desc}`);
+function setupServiceCallModal() {
+  if (!selectedTable) {
+    selectedTable = localStorage.getItem('hashtag_table') || null;
+  }
+
+  window.requestService = function(serviceType) {
+    if (!selectedTable) {
+      pendingCallType = serviceType;
+      openTablePickerModal();
+      return;
+    }
+    executeServiceCall(serviceType, selectedTable);
   };
+}
+
+async function executeServiceCall(serviceType, tableNum) {
+  const now = Date.now();
+  if (now - lastCallTime < 20000) {
+    const remaining = Math.ceil((20000 - (now - lastCallTime)) / 1000);
+    alert(`⏳ Talebiniz zaten personele iletildi. Lütfen ${remaining} saniye bekleyiniz.`);
+    return;
+  }
+  lastCallTime = now;
+
+  try {
+    await fetch('/api/calls', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        table: `Masa ${tableNum}`,
+        type: serviceType
+      })
+    });
+  } catch (err) {
+    console.warn("Call dispatch error:", err);
+  }
+
+  openCallSuccessModal(serviceType, tableNum);
+}
+
+function openTablePickerModal() {
+  const modal = document.getElementById('table-picker-modal');
+  const grid = document.getElementById('table-picker-grid');
+  if (!modal || !grid) return;
+
+  const count = (menuData && menuData.settings && menuData.settings.tableCount) || 24;
+  let html = '';
+  for (let i = 1; i <= count; i++) {
+    html += `
+      <button onclick="selectTableFromPicker('${i}')" class="py-2.5 rounded-xl bg-black border border-white/10 hover:border-amber-500 hover:text-amber-400 font-bold text-sm text-white transition-all active:scale-95">
+        ${i}
+      </button>
+    `;
+  }
+  grid.innerHTML = html;
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
+}
+
+function closeTablePickerModal() {
+  const modal = document.getElementById('table-picker-modal');
+  if (modal) {
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+  }
+}
+
+function selectTableFromPicker(tableNum) {
+  selectedTable = tableNum;
+  localStorage.setItem('hashtag_table', tableNum);
+  closeTablePickerModal();
+  renderHeaderInfo();
+  
+  if (pendingCallType) {
+    executeServiceCall(pendingCallType, tableNum);
+    pendingCallType = null;
+  }
+}
+
+function openCallSuccessModal(serviceType, tableNum) {
+  const modal = document.getElementById('call-success-modal');
+  const titleEl = document.getElementById('call-success-title');
+  const descEl = document.getElementById('call-success-desc');
+  const iconWrap = document.getElementById('call-success-icon-wrap');
+  const iconEl = document.getElementById('call-success-icon');
+  const timerEl = document.getElementById('call-cooldown-timer');
+
+  if (!modal) return;
+
+  if (serviceType === 'coal') {
+    if (titleEl) titleEl.textContent = 'Köz Talebiniz Alındı!';
+    if (descEl) descEl.textContent = `Masa ${tableNum} için köz değişimi bildirimi personelimize iletildi. Közcü arkadaşımız yola çıktı!`;
+    if (iconWrap) iconWrap.className = 'w-16 h-16 rounded-2xl bg-amber-500/20 border border-amber-500/40 mx-auto flex items-center justify-center text-amber-400 mb-3 shadow-lg shadow-amber-500/10';
+    if (iconEl) iconEl.setAttribute('data-lucide', 'flame');
+  } else if (serviceType === 'bill') {
+    if (titleEl) titleEl.textContent = 'Hesap Talebiniz Alındı!';
+    if (descEl) descEl.textContent = `Masa ${tableNum} için hesap bildirimi kasaya iletildi. Personelimiz birazdan masanızda olacaktır.`;
+    if (iconWrap) iconWrap.className = 'w-16 h-16 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 mx-auto flex items-center justify-center text-emerald-400 mb-3 shadow-lg shadow-emerald-500/10';
+    if (iconEl) iconEl.setAttribute('data-lucide', 'credit-card');
+  } else {
+    if (titleEl) titleEl.textContent = 'Garson Çağrınız Alındı!';
+    if (descEl) descEl.textContent = `Masa ${tableNum} için servis çağrısı iletildi. Garsonumuz masanıza geliyor.`;
+    if (iconWrap) iconWrap.className = 'w-16 h-16 rounded-2xl bg-cyan-500/20 border border-cyan-500/40 mx-auto flex items-center justify-center text-cyan-400 mb-3 shadow-lg shadow-cyan-500/10';
+    if (iconEl) iconEl.setAttribute('data-lucide', 'bell');
+  }
+
+  if (typeof lucide !== 'undefined') lucide.createIcons();
+
+  let cooldown = 20;
+  if (timerEl) timerEl.textContent = cooldown;
+  if (cooldownInterval) clearInterval(cooldownInterval);
+  cooldownInterval = setInterval(() => {
+    cooldown--;
+    if (timerEl) timerEl.textContent = cooldown;
+    if (cooldown <= 0) {
+      clearInterval(cooldownInterval);
+    }
+  }, 1000);
+
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
+}
+
+function closeCallSuccessModal() {
+  const modal = document.getElementById('call-success-modal');
+  if (modal) {
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+  }
 }
 
 // Müşteri Menüsü İçin Akıllı Arka Plan Otomatik Güncelleme (15 sn)

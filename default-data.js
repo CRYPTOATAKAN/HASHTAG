@@ -9,8 +9,14 @@ window.DEFAULT_MENU_DATA = {
     "instagram": "hashtagcafe07",
     "phone": "+90 (555) 000 00 00",
     "address": "Lounge Caddesi No: 42, İstanbul",
-    "enableServiceCalls": false,
+    "enableServiceCalls": true,
     "tableCount": 24,
+    "staffPin": "5555",
+    "staffPermissions": {
+      "allowStockToggle": true,
+      "allowPriceEdit": false,
+      "allowCallsView": true
+    },
     "baseUrl": ""
   },
   "categories": [

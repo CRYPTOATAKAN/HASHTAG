@@ -1,0 +1,24 @@
+{
+  "name": "HASHTAG Lounge & Personel",
+  "short_name": "HASHTAG",
+  "description": "HASHTAG Lounge & Hookah Masa Çağrı ve Personel Paneli",
+  "start_url": "/personel",
+  "display": "standalone",
+  "background_color": "#0a0b10",
+  "theme_color": "#0a0b10",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "hashtag-logo.jpg",
+      "sizes": "192x192",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "hashtag-logo.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    }
+  ]
+}

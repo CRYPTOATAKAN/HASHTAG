@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="tr" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>HASHTAG | Personel & Garson Portalı</title>
+  
+  <!-- PWA Meta Etiketleri -->
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#0a0b10" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="HASHTAG Personel" />
+  <link rel="apple-touch-icon" href="hashtag-logo.jpg" />
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              gold: '#f59e0b',
+              amber: '#d97706',
+              dark: '#0a0b10',
+              card: 'rgba(20, 23, 34, 0.85)'
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    /* Özel Animasyonlar */
+    @keyframes pulseGlow {
+      0%, 100% { box-shadow: 0 0 15px rgba(245, 158, 11, 0.35); }
+      50% { box-shadow: 0 0 35px rgba(245, 158, 11, 0.75); }
+    }
+    @keyframes flameBounce {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.15) rotate(4deg); }
+    }
+    .call-pulse-coal {
+      animation: pulseGlow 1.8s infinite ease-in-out;
+      border-color: rgba(245, 158, 11, 0.6) !important;
+    }
+    .call-pulse-waiter {
+      animation: pulseGlow 2.2s infinite ease-in-out;
+      border-color: rgba(6, 182, 212, 0.6) !important;
+    }
+    .flame-anim {
+      display: inline-block;
+      animation: flameBounce 1.2s infinite ease-in-out;
+    }
+    /* iOS dokunma hissi ve kaydırma çubuğu gizleme */
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    button:active { transform: scale(0.97); }
+  </style>
+</head>
+<body class="bg-[#0a0b10] text-gray-100 min-h-screen font-sans selection:bg-amber-500 selection:text-black">
+
+  <!-- =========================================================================
+       1. GİRİŞ PANELİ (PIN KODU DOĞRULAMA)
+       ========================================================================= -->
+  <div id="login-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-xl">
+    <div class="w-full max-w-sm rounded-3xl bg-neutral-900/90 border border-white/10 p-6 sm:p-8 shadow-2xl text-center">
+      
+      <!-- Logo -->
+      <div class="w-16 h-16 rounded-2xl overflow-hidden border border-amber-500/40 mx-auto mb-4 shadow-xl shadow-amber-500/10 bg-black flex items-center justify-center">
+        <img src="hashtag-logo.jpg?v=2.7" onerror="if(!this.src.includes('images/')) this.src='images/hashtag-logo.jpg?v=2.7';" alt="HASHTAG" class="w-full h-full object-cover" />
+      </div>
+
+      <h1 class="text-xl font-bold text-white tracking-wide">HASHTAG LOUNGE</h1>
+      <p class="text-xs text-amber-400 font-semibold uppercase tracking-widest mt-1">Personel & Garson Portalı</p>
+      <p class="text-xs text-gray-400 mt-2">Masa çağrılarını ve servis bildirimlerini yönetmek için PIN kodunuzu girin.</p>
+
+      <!-- PIN Input -->
+      <form id="pin-form" onsubmit="handlePinSubmit(event)" class="mt-6">
+        <div class="relative max-w-[220px] mx-auto">
+          <input 
+            type="password" 
+            id="staff-pin-input" 
+            maxlength="6" 
+            pattern="[0-9]*" 
+            inputmode="numeric" 
+            placeholder="••••" 
+            autofocus
+            class="w-full text-center text-3xl tracking-[0.5em] font-mono py-3.5 px-4 rounded-2xl bg-black border border-white/15 text-amber-400 focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20"
+          />
+        </div>
+
+        <!-- Hızlı Tuş Takımı (Mobil Ergonomisi) -->
+        <div class="grid grid-cols-3 gap-2.5 mt-5 max-w-[240px] mx-auto">
+          <button type="button" onclick="keypadPress('1')" class="py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white font-semibold text-lg border border-white/5 active:bg-amber-500/20">1</button>
+          <button type="button" onclick="keypadPress('2')" class="py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white font-semibold text-lg border border-white/5 active:bg-amber-500/20">2</button>
+          <button type="button" onclick="keypadPress('3')" class="py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white font-semibold text-lg border border-white/5 active:bg-amber-500/20">3</button>
+          <button type="button" onclick="keypadPress('4')" class="py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white font-semibold text-lg border border-white/5 active:bg-amber-500/20">4</button>
+          <button type="button" onclick="keypadPress('5')" class="py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white font-semibold text-lg border border-white/5 active:bg-amber-500/20">5</button>
+          <button type="button" onclick="keypadPress('6')" class="py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white font-semibold text-lg border border-white/5 active:bg-amber-500/20">6</button>
+          <button type="button" onclick="keypadPress('7')" class="py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white font-semibold text-lg border border-white/5 active:bg-amber-500/20">7</button>
+          <button type="button" onclick="keypadPress('8')" class="py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white font-semibold text-lg border border-white/5 active:bg-amber-500/20">8</button>
+          <button type="button" onclick="keypadPress('9')" class="py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white font-semibold text-lg border border-white/5 active:bg-amber-500/20">9</button>
+          <button type="button" onclick="keypadClear()" class="py-3 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 font-semibold text-sm border border-red-500/20">Sil</button>
+          <button type="button" onclick="keypadPress('0')" class="py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white font-semibold text-lg border border-white/5 active:bg-amber-500/20">0</button>
+          <button type="submit" class="py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold text-sm shadow-lg shadow-amber-500/20">Giriş</button>
+        </div>
+
+        <p id="pin-error" class="hidden text-xs text-red-400 mt-3 font-medium">Hatalı PIN Kodu! Lütfen tekrar deneyin.</p>
+        <p class="text-[11px] text-gray-500 mt-4">Varsayılan Personel PIN: <span class="text-gray-400 font-mono">5555</span></p>
+      </form>
+    </div>
+  </div>
+
+  <!-- =========================================================================
+       2. ANA PERSONEL UYGULAMASI (GİRİŞ YAPILDIKTAN SONRA)
+       ========================================================================= -->
+  <div id="staff-app" class="hidden min-h-screen flex flex-col pb-16">
+    
+    <!-- Üst Bar / Header -->
+    <header class="sticky top-0 z-40 bg-neutral-950/90 backdrop-blur-xl border-b border-white/10 shadow-lg">
+      <div class="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
+        
+        <!-- Sol: Logo & Başlık -->
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl overflow-hidden border border-amber-500/40 bg-black flex-shrink-0">
+            <img src="hashtag-logo.jpg?v=2.7" onerror="if(!this.src.includes('images/')) this.src='images/hashtag-logo.jpg?v=2.7';" alt="HASHTAG" class="w-full h-full object-cover" />
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h1 class="text-sm font-bold text-white tracking-wide">HASHTAG LOUNGE</h1>
+              <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-semibold">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> CANLI
+              </span>
+            </div>
+            <p class="text-[11px] text-gray-400">Personel & Servis Paneli</p>
+          </div>
+        </div>
+
+        <!-- Sağ: Hızlı Araçlar -->
+        <div class="flex items-center gap-2">
+          <!-- Ses Testi / Aç-Kapa Butonu -->
+          <button 
+            id="audio-toggle-btn" 
+            onclick="testOrToggleAudio()" 
+            title="Sesli Uyarıyı Test Et"
+            class="px-2.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-medium text-amber-300 flex items-center gap-1.5 transition-colors"
+          >
+            <i data-lucide="volume-2" class="w-4 h-4 text-amber-400"></i>
+            <span class="hidden sm:inline">Ses Testi</span>
+          </button>
+
+          <!-- Bildirim İzni Butonu -->
+          <button 
+            id="notify-perm-btn" 
+            onclick="requestNotificationPermission()" 
+            title="Kilit Ekranı Bildirimlerini Aç"
+            class="px-2.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-medium text-blue-300 flex items-center gap-1.5 transition-colors"
+          >
+            <i data-lucide="bell" class="w-4 h-4 text-blue-400"></i>
+            <span class="hidden sm:inline">Bildirimleri Aç</span>
+          </button>
+
+          <!-- Çıkış Yap -->
+          <button 
+            onclick="staffLogout()" 
+            title="Çıkış Yap"
+            class="p-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 transition-colors"
+          >
+            <i data-lucide="log-out" class="w-4 h-4"></i>
+          </button>
+        </div>
+
+      </div>
+
+      <!-- Alt Sekmeler / Tab Navigation -->
+      <div class="max-w-4xl mx-auto px-4 flex border-t border-white/5">
+        <button 
+          id="tab-btn-calls" 
+          onclick="switchTab('calls')" 
+          class="flex-1 py-3 text-xs sm:text-sm font-bold flex items-center justify-center gap-2 border-b-2 border-amber-500 text-amber-400 transition-all"
+        >
+          <i data-lucide="bell-ring" class="w-4 h-4"></i>
+          <span>Canlı Çağrılar</span>
+          <span id="badge-calls-count" class="px-2 py-0.5 rounded-full bg-amber-500 text-black text-[10px] font-black">0</span>
+        </button>
+
+        <button 
+          id="tab-btn-stock" 
+          onclick="switchTab('stock')" 
+          class="flex-1 py-3 text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 border-b-2 border-transparent text-gray-400 hover:text-white transition-all"
+        >
+          <i data-lucide="boxes" class="w-4 h-4"></i>
+          <span>Ürün Stok Durumu</span>
+          <span class="text-[10px] text-gray-500 hidden sm:inline">(Tükendi/Var)</span>
+        </button>
+
+        <button 
+          id="tab-btn-tables" 
+          onclick="switchTab('tables')" 
+          class="flex-1 py-3 text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 border-b-2 border-transparent text-gray-400 hover:text-white transition-all"
+        >
+          <i data-lucide="layout-grid" class="w-4 h-4"></i>
+          <span>Masa Haritası</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- =========================================================================
+         TAB 1: CANLI ÇAĞRILAR (KÖZ İSTE & GARSON ÇAĞIR)
+         ========================================================================= -->
+    <main id="tab-content-calls" class="flex-1 max-w-4xl w-full mx-auto p-4">
+      
+      <!-- Filtreler & Hızlı Sayaç -->
+      <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <!-- Filtre Hapları -->
+        <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
+          <button onclick="filterCalls('all')" id="filter-all" class="px-3 py-1.5 rounded-xl bg-amber-500 text-black text-xs font-bold transition-all">Tümü</button>
+          <button onclick="filterCalls('coal')" id="filter-coal" class="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300 text-xs font-medium border border-white/10 transition-all flex items-center gap-1">
+            <i data-lucide="flame" class="w-3.5 h-3.5 text-amber-400"></i> Köz Talepleri
+          </button>
+          <button onclick="filterCalls('waiter')" id="filter-waiter" class="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300 text-xs font-medium border border-white/10 transition-all flex items-center gap-1">
+            <i data-lucide="bell" class="w-3.5 h-3.5 text-cyan-400"></i> Garson Çağrısı
+          </button>
+          <button onclick="filterCalls('bill')" id="filter-bill" class="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300 text-xs font-medium border border-white/10 transition-all flex items-center gap-1">
+            <i data-lucide="credit-card" class="w-3.5 h-3.5 text-emerald-400"></i> Hesap
+          </button>
+        </div>
+
+        <!-- Geçmişi Temizle -->
+        <button 
+          onclick="clearCompletedCalls()" 
+          class="text-xs text-gray-400 hover:text-gray-200 flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 transition-colors"
+        >
+          <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Tamamlananları Temizle
+        </button>
+      </div>
+
+      <!-- Bekleyen Çağrılar Listesi -->
+      <div id="active-calls-container" class="space-y-3.5">
+        <!-- JS Tarafından Dinamik Doldurulur -->
+      </div>
+
+      <!-- Çağrı Yokken Boş Durum (Empty State) -->
+      <div id="no-calls-view" class="hidden text-center py-16 px-4">
+        <div class="w-20 h-20 rounded-3xl bg-neutral-900 border border-white/10 mx-auto flex items-center justify-center text-amber-400 shadow-xl mb-4">
+          <i data-lucide="coffee" class="w-10 h-10"></i>
+        </div>
+        <h3 class="text-base font-bold text-white">Bekleyen Çağrı Yok</h3>
+        <p class="text-xs text-gray-400 mt-1 max-w-xs mx-auto">Tüm masalar servis edildi. Müşterileriniz nargile ve kahvelerinin tadını çıkarıyor!</p>
+      </div>
+
+      <!-- Tamamlanmış Çağrılar Bölümü -->
+      <div id="completed-calls-section" class="mt-8 pt-6 border-t border-white/10 hidden">
+        <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+          <i data-lucide="check-circle" class="w-4 h-4 text-emerald-400"></i>
+          Son Tamamlanan Çağrılar
+        </h3>
+        <div id="completed-calls-container" class="space-y-2 opacity-60">
+          <!-- JS tarafından doldurulur -->
+        </div>
+      </div>
+
+    </main>
+
+    <!-- =========================================================================
+         TAB 2: ÜRÜN STOK DURUMU (KISITLI YETKİLİ MENÜ)
+         Personel SADECE "Stokta Var / Tükendi" yapabilir.
+         Fiyat veya ürün detaylarını DEĞİŞTİREMEZ!
+         ========================================================================= -->
+    <main id="tab-content-stock" class="hidden flex-1 max-w-4xl w-full mx-auto p-4">
+      
+      <!-- Bilgilendirme Kutusu -->
+      <div class="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 mb-4 flex items-start gap-3">
+        <i data-lucide="shield-check" class="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5"></i>
+        <div>
+          <h3 class="text-xs font-bold text-amber-300 uppercase tracking-wide">Personel Stok Modu (Korumalı)</h3>
+          <p class="text-xs text-gray-300 mt-0.5">Biten nargile aromaları veya içecekleri tek tıkla <b class="text-red-400">"Tükendi"</b> yapabilirsiniz. Fiyat ve ürün bilgileri güvenliğiniz için kilitlidir.</p>
+        </div>
+      </div>
+
+      <!-- Arama ve Kategori Filtresi -->
+      <div class="space-y-3 mb-4">
+        <div class="relative">
+          <i data-lucide="search" class="w-4 h-4 text-gray-400 absolute left-3.5 top-3.5"></i>
+          <input 
+            type="text" 
+            id="stock-search-input" 
+            oninput="handleStockSearch(this.value)" 
+            placeholder="Ürün veya nargile aroması ara..." 
+            class="w-full pl-10 pr-4 py-2.5 rounded-2xl bg-neutral-900 border border-white/10 text-sm text-white focus:outline-none focus:border-amber-500"
+          />
+        </div>
+
+        <div id="stock-categories-pills" class="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
+          <!-- JS tarafından doldurulur -->
+        </div>
+      </div>
+
+      <!-- Ürün Stok Listesi -->
+      <div id="stock-items-container" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <!-- JS tarafından doldurulur -->
+      </div>
+    </main>
+
+    <!-- =========================================================================
+         TAB 3: MASA HARİTASI (1-24 MASA GÖRÜNÜMÜ)
+         ========================================================================= -->
+    <main id="tab-content-tables" class="hidden flex-1 max-w-4xl w-full mx-auto p-4">
+      <div class="mb-4">
+        <h2 class="text-sm font-bold text-white">Masa Çağrı Haritası</h2>
+        <p class="text-xs text-gray-400">Köz veya servis bekleyen masalar renkli ve yanıp söner.</p>
+      </div>
+
+      <div id="tables-grid-container" class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
+        <!-- JS tarafından doldurulur -->
+      </div>
+    </main>
+
+    <!-- Mobil PWA Yardımcı Bilgi Kartı (Alt Kısım) -->
+    <footer class="mt-auto py-4 px-4 text-center text-xs text-gray-500 border-t border-white/5">
+      <p>💡 <span class="text-gray-400 font-medium">İpucu:</span> Ekran kilitliyken bildirim almak için tarayıcı menüsünden <b class="text-amber-400">"Ana Ekrana Ekle"</b> yapın.</p>
+    </footer>
+
+  </div>
+
+  <!-- Scriptler -->
+  <script src="default-data.js?v=2.7"></script>
+  <script src="staff.js?v=1.0"></script>
+</body>
+</html>

@@ -213,16 +213,20 @@
       </div>
     </section>
 
-    <!-- Gelecekteki Özellikler: Köz İste & Garson Çağır (Admin panelinden açıldığında görünür) -->
+    <!-- Köz İste & Garson Çağır Butonları -->
     <div id="service-call-actions" class="hidden fixed bottom-4 inset-x-4 max-w-md mx-auto z-30">
-      <div class="p-2 rounded-2xl bg-neutral-900/90 backdrop-blur-xl border border-white/10 shadow-2xl flex items-center gap-2">
-        <button onclick="requestService('coal')" class="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-amber-600 to-amber-500 text-white font-bold text-xs tracking-wider uppercase flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20 active:scale-95 transition-transform">
-          <i data-lucide="flame" class="w-4 h-4"></i>
-          Köz İste
+      <div class="p-2 rounded-2xl bg-neutral-900/95 backdrop-blur-xl border border-white/15 shadow-2xl flex items-center gap-2">
+        <button onclick="requestService('coal')" class="flex-1 py-3 px-3 rounded-xl bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-white font-bold text-xs tracking-wider uppercase flex items-center justify-center gap-1.5 shadow-lg shadow-amber-500/25 active:scale-95 transition-all">
+          <i data-lucide="flame" class="w-4 h-4 text-amber-200"></i>
+          <span>Köz İste</span>
         </button>
-        <button onclick="requestService('waiter')" class="flex-1 py-3 px-4 rounded-xl bg-white/10 hover:bg-white/15 text-white font-bold text-xs tracking-wider uppercase flex items-center justify-center gap-2 active:scale-95 transition-transform">
-          <i data-lucide="bell" class="w-4 h-4"></i>
-          Garson Çağır
+        <button onclick="requestService('waiter')" class="flex-1 py-3 px-3 rounded-xl bg-white/10 hover:bg-white/15 text-white font-bold text-xs tracking-wider uppercase flex items-center justify-center gap-1.5 active:scale-95 transition-all border border-white/5">
+          <i data-lucide="bell" class="w-4 h-4 text-cyan-400"></i>
+          <span>Garson Çağır</span>
+        </button>
+        <button onclick="requestService('bill')" class="py-3 px-3 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300 font-bold text-xs tracking-wider uppercase flex items-center justify-center gap-1.5 active:scale-95 transition-all border border-white/5">
+          <i data-lucide="credit-card" class="w-4 h-4 text-emerald-400"></i>
+          <span class="hidden sm:inline">Hesap</span>
         </button>
       </div>
     </div>
@@ -282,6 +286,45 @@
 
       <button onclick="closeWifiModal()" class="w-full mt-6 py-2.5 rounded-xl bg-white/10 text-white text-sm font-medium hover:bg-white/15 transition-colors">
         Tamam
+      </button>
+    </div>
+  </div>
+
+  <!-- Masa Seçim Modalı (Eğer URL'de masa yoksa otomatik sorulur) -->
+  <div id="table-picker-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+    <div class="w-full max-w-sm rounded-3xl bg-neutral-900 border border-white/10 p-6 shadow-2xl text-center">
+      <div class="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/30 mx-auto flex items-center justify-center text-amber-400 mb-3">
+        <i data-lucide="map-pin" class="w-6 h-6"></i>
+      </div>
+      <h3 class="text-base font-bold text-white">Masanızı Seçin</h3>
+      <p class="text-xs text-gray-400 mt-1">Çağrınızın doğru masaya iletilebilmesi için lütfen oturduğunuz masayı seçin.</p>
+
+      <div id="table-picker-grid" class="grid grid-cols-4 gap-2 mt-4 max-h-56 overflow-y-auto no-scrollbar p-1">
+        <!-- JS tarafından doldurulur -->
+      </div>
+
+      <button onclick="closeTablePickerModal()" class="w-full mt-4 py-2.5 rounded-xl bg-white/10 text-white text-xs font-semibold hover:bg-white/15 transition-colors">
+        Vazgeç
+      </button>
+    </div>
+  </div>
+
+  <!-- Çağrı Başarılı Bildirim Modalı / Toast -->
+  <div id="call-success-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+    <div class="w-full max-w-xs rounded-3xl bg-neutral-900 border border-white/15 p-6 shadow-2xl text-center">
+      <div id="call-success-icon-wrap" class="w-16 h-16 rounded-2xl bg-amber-500/20 border border-amber-500/40 mx-auto flex items-center justify-center text-amber-400 mb-3 shadow-lg shadow-amber-500/10">
+        <i id="call-success-icon" data-lucide="flame" class="w-8 h-8"></i>
+      </div>
+      <h3 id="call-success-title" class="text-base font-bold text-white">Köz Talebiniz Alındı!</h3>
+      <p id="call-success-desc" class="text-xs text-gray-300 mt-1.5 leading-relaxed">Masa 4 için servis bildirimi personele iletildi. Personelimiz yola çıktı.</p>
+
+      <div class="mt-4 p-2 rounded-xl bg-white/5 border border-white/5 flex items-center justify-center gap-2 text-xs text-amber-300 font-mono">
+        <i data-lucide="timer" class="w-3.5 h-3.5"></i>
+        <span>Yeniden çağrı: <b id="call-cooldown-timer">20</b> sn</span>
+      </div>
+
+      <button onclick="closeCallSuccessModal()" class="w-full mt-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold transition-colors">
+        Anladım, Teşekkürler
       </button>
     </div>
   </div>

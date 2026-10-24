@@ -782,15 +782,26 @@ function fillSettingsForm() {
   setVal('set-admin-pin', s.adminPin);
   setVal('set-base-url', s.baseUrl);
   setVal('set-table-count', s.tableCount || 24);
+  setVal('set-staff-pin', s.staffPin || '5555');
 
   const enableCalls = document.getElementById('set-enable-calls');
   if (enableCalls) enableCalls.checked = !!s.enableServiceCalls;
+
+  const staffPerms = s.staffPermissions || { allowStockToggle: true, allowPriceEdit: false };
+  const stockToggleEl = document.getElementById('set-staff-allow-stock');
+  if (stockToggleEl) stockToggleEl.checked = staffPerms.allowStockToggle !== false;
+
+  const priceEditEl = document.getElementById('set-staff-allow-price');
+  if (priceEditEl) priceEditEl.checked = !!staffPerms.allowPriceEdit;
 }
 
 async function handleSaveSettings(e) {
   e.preventDefault();
 
   const newPin = document.getElementById('set-admin-pin').value.trim() || '1234';
+  const newStaffPin = document.getElementById('set-staff-pin') ? document.getElementById('set-staff-pin').value.trim() || '5555' : '5555';
+  const allowStock = document.getElementById('set-staff-allow-stock') ? document.getElementById('set-staff-allow-stock').checked : true;
+  const allowPrice = document.getElementById('set-staff-allow-price') ? document.getElementById('set-staff-allow-price').checked : false;
 
   menuData.settings = {
     ...menuData.settings,
@@ -801,6 +812,12 @@ async function handleSaveSettings(e) {
     wifiPassword: document.getElementById('set-wifi-pass').value.trim(),
     instagram: document.getElementById('set-instagram').value.trim(),
     adminPin: newPin,
+    staffPin: newStaffPin,
+    staffPermissions: {
+      allowStockToggle: allowStock,
+      allowPriceEdit: allowPrice,
+      allowCallsView: true
+    },
     baseUrl: document.getElementById('set-base-url').value.trim() || window.location.origin,
     tableCount: parseInt(document.getElementById('set-table-count').value) || 24,
     enableServiceCalls: document.getElementById('set-enable-calls').checked
