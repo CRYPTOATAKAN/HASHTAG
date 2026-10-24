@@ -142,9 +142,11 @@ function switchTab(tab) {
   if (tab === 'qr-stands') setupQrGenerator();
   if (tab === 'settings') fillSettingsForm();
   if (tab === 'staff') {
-    loadStaffAdminData();
-    loadStaffLogsData();
     loadStaffPerformanceData();
+    loadStaffLogsData();
+    startStaffLivePolling();
+  } else {
+    stopStaffLivePolling();
   }
   if (window.lucide) lucide.createIcons();
 }
@@ -904,22 +906,55 @@ function importMenuBackup(event) {
 let adminStaffList = [];
 let adminLogsList = [];
 let currentLogFilter = 'all';
+let staffLivePollInterval = null;
+
+function startStaffLivePolling() {
+  stopStaffLivePolling();
+  // 2.5 saniyede bir kesintisiz canlı akış (Real-Time Background Polling)
+  staffLivePollInterval = setInterval(async () => {
+    if (currentTab === 'staff' && typeof document !== 'undefined' && document.visibilityState === 'visible') {
+      await Promise.allSettled([
+        loadStaffPerformanceData(true),
+        loadStaffLogsData(true)
+      ]);
+    }
+  }, 2500);
+}
+
+function stopStaffLivePolling() {
+  if (staffLivePollInterval) {
+    clearInterval(staffLivePollInterval);
+    staffLivePollInterval = null;
+  }
+}
+
+async function refreshStaffTab() {
+  const btn = event && event.currentTarget ? event.currentTarget : null;
+  if (btn) btn.classList.add('opacity-50', 'pointer-events-none');
+  await Promise.allSettled([
+    loadStaffPerformanceData(false),
+    loadStaffLogsData(false)
+  ]);
+  if (btn) btn.classList.remove('opacity-50', 'pointer-events-none');
+  showToast('🔄 Personel ve log verileri güncellendi', 'info');
+}
 
 async function loadStaffAdminData() {
-  const adminPin = getAdminPin();
   try {
     const res = await fetch('/api/staff/list', { cache: 'no-store' });
     if (res.ok) {
       const data = await res.json();
-      adminStaffList = data.staff || [];
-      renderAdminStaffTable();
+      if (!adminStaffList || adminStaffList.length === 0) {
+        adminStaffList = data.staff || [];
+        renderAdminStaffTable();
+      }
     }
   } catch (e) {
     console.error("Load staff admin error:", e);
   }
 }
 
-async function loadStaffPerformanceData() {
+async function loadStaffPerformanceData(silent = false) {
   const adminPin = getAdminPin();
   try {
     const res = await fetch('/api/staff/performance', {
@@ -932,7 +967,7 @@ async function loadStaffPerformanceData() {
       
       // İstatistik sayaçlarını güncelle
       const activeCount = perf.filter(p => p.isOnline).length;
-      const totalCalls = perf.reduce((acc, p) => acc + (p.completedCalls || 0), 0);
+      const totalCalls = (data.totalTodayCalls !== undefined) ? data.totalTodayCalls : perf.reduce((acc, p) => acc + (p.completedCalls || 0), 0);
       const star = perf.length > 0 && perf[0].completedCalls > 0 ? `${perf[0].name} (${perf[0].completedCalls} Çağrı)` : 'Henüz Yok';
 
       const statActive = document.getElementById('stat-active-staff');
@@ -946,9 +981,17 @@ async function loadStaffPerformanceData() {
       // Tabloyu zenginleştirilmiş verilerle doldur
       adminStaffList = perf;
       renderAdminStaffTable();
+    } else {
+      if (!silent) console.warn("Staff performance returned status:", res.status);
+      if (adminStaffList.length === 0) {
+        await loadStaffAdminData();
+      }
     }
   } catch (e) {
-    console.error("Load staff perf error:", e);
+    if (!silent) console.error("Load staff perf error:", e);
+    if (adminStaffList.length === 0) {
+      await loadStaffAdminData();
+    }
   }
 }
 
@@ -963,22 +1006,24 @@ function renderAdminStaffTable() {
 
   tbody.innerHTML = adminStaffList.map(s => {
     const isOnline = !!s.isOnline;
+    const name = s.name || 'Personel';
+    const firstChar = name.charAt(0) || 'P';
     return `
       <tr class="hover:bg-white/5 transition-colors">
         <td class="py-3 pr-3">
           <div class="flex items-center gap-2.5">
             <div class="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 font-bold text-xs">
-              ${s.name.charAt(0)}
+              ${firstChar}
             </div>
             <div>
-              <div class="font-bold text-white">${s.name}</div>
-              <div class="text-[10px] text-gray-500">ID: ${s.id}</div>
+              <div class="font-bold text-white">${name}</div>
+              <div class="text-[10px] text-gray-500">ID: ${s.id || ''}</div>
             </div>
           </div>
         </td>
         <td class="py-3 px-3">
           <span class="px-2 py-0.5 rounded-lg bg-white/5 border border-white/5 text-[11px] font-medium text-gray-300">
-            ${s.role}
+            ${s.role || 'Garson'}
           </span>
         </td>
         <td class="py-3 px-3 font-mono text-amber-400 font-bold">
@@ -1023,7 +1068,7 @@ function renderAdminStaffTable() {
   if (window.lucide) lucide.createIcons();
 }
 
-async function loadStaffLogsData() {
+async function loadStaffLogsData(silent = false) {
   const adminPin = getAdminPin();
   try {
     const res = await fetch('/api/staff/logs', {
@@ -1034,9 +1079,11 @@ async function loadStaffLogsData() {
       const data = await res.json();
       adminLogsList = data.logs || [];
       renderLogsList();
+    } else {
+      if (!silent) console.warn("Staff logs returned status:", res.status);
     }
   } catch (e) {
-    console.error("Load logs error:", e);
+    if (!silent) console.error("Load logs error:", e);
   }
 }
 
@@ -1089,13 +1136,13 @@ function renderLogsList() {
         </div>
         <div>
           <div class="flex items-center gap-2">
-            <span class="font-bold text-white">${l.staffName}</span>
-            <span class="text-[10px] text-gray-400">(${l.role})</span>
+            <span class="font-bold text-white">${l.staffName || 'Personel'}</span>
+            <span class="text-[10px] text-gray-400">(${l.role || 'Ekip'})</span>
             <span class="text-gray-600">•</span>
-            <span class="text-amber-300 font-medium">${l.title}</span>
+            <span class="text-amber-300 font-medium">${l.title || 'İşlem'}</span>
           </div>
           <div class="text-[11px] text-gray-500 mt-0.5 flex items-center gap-2">
-            <span>📱 ${l.device}</span>
+            <span>📱 ${l.device || 'Cihaz'}</span>
             ${l.details ? `<span>• ${l.details}</span>` : ''}
           </div>
         </div>

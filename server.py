@@ -139,8 +139,9 @@ def append_log(staff_id, staff_name, role, device, action, title, details=""):
     try:
         logs = load_logs()
         current_time = int(time.time())
-        # Yerel saat formatı (İstanbul / TR)
-        t_struct = time.localtime(current_time)
+        # Türkiye Saati Formatı (UTC+3 - İstanbul)
+        tr_time = current_time + (3 * 3600)
+        t_struct = time.gmtime(tr_time)
         time_str = time.strftime("%d.%m.%Y %H:%M:%S", t_struct)
         
         log_entry = {
@@ -425,7 +426,11 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
 
             # En çok çağrı çözen personele göre sırala (Lider Tablosu)
             perf_list.sort(key=lambda x: x["completedCalls"], reverse=True)
-            self._send_json({"status": "success", "performance": perf_list})
+            self._send_json({
+                "status": "success",
+                "performance": perf_list,
+                "totalTodayCalls": len(completed_calls)
+            })
             return
 
         # Sağlık kontrolü
@@ -584,7 +589,8 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
                     return
 
                 current_time = int(time.time())
-                t_struct = time.localtime(current_time)
+                tr_time = current_time + (3 * 3600)
+                t_struct = time.gmtime(tr_time)
                 time_str = time.strftime("%d.%m.%Y %H:%M:%S", t_struct)
 
                 # Personel durumunu güncelle
