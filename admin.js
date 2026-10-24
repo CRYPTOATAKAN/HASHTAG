@@ -832,6 +832,26 @@ function fillSettingsForm() {
   if (priceEditEl) priceEditEl.checked = !!staffPerms.allowPriceEdit;
 }
 
+function openStaffPortalFromAdmin(e) {
+  if (e) e.preventDefault();
+  const url = window.location.protocol.startsWith('http') ? '/personel' : 'staff.html';
+  window.open(url, '_blank');
+}
+
+function toggleStaffPinVisibility() {
+  const pinInput = document.getElementById('set-staff-pin');
+  const eyeIcon = document.getElementById('staff-pin-eye-icon');
+  if (!pinInput) return;
+  if (pinInput.type === 'password') {
+    pinInput.type = 'text';
+    if (eyeIcon) eyeIcon.setAttribute('data-lucide', 'eye-off');
+  } else {
+    pinInput.type = 'password';
+    if (eyeIcon) eyeIcon.setAttribute('data-lucide', 'eye');
+  }
+  if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
 async function handleSaveSettings(e) {
   e.preventDefault();
 

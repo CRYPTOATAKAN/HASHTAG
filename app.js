@@ -936,6 +936,11 @@ function setupServiceCallModal() {
 }
 
 async function executeServiceCall(serviceType, tableNum) {
+  if (menuData && menuData.settings && menuData.settings.enableServiceCalls === false) {
+    alert("⚠️ Çağrı servisi şu anda yönetici tarafından kapatılmıştır.");
+    return;
+  }
+
   const now = Date.now();
   if (now - lastCallTime < 7000) {
     const remaining = Math.ceil((7000 - (now - lastCallTime)) / 1000);
@@ -946,7 +951,8 @@ async function executeServiceCall(serviceType, tableNum) {
 
   let createdCall = null;
   try {
-    const res = await fetch('/api/calls', {
+    const apiBase = getApiBaseUrl();
+    const res = await fetch(apiBase + '/api/calls', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -957,6 +963,9 @@ async function executeServiceCall(serviceType, tableNum) {
     if (res.ok) {
       const data = await res.json();
       if (data.call) createdCall = data.call;
+    } else if (res.status === 403) {
+      alert("⚠️ Çağrı servisi şu anda kapalıdır.");
+      return;
     }
   } catch (err) {
     console.warn("Call dispatch error:", err);
@@ -1068,7 +1077,8 @@ function startCustomerCallStatusPolling(callId, tableNum) {
 
   activeCallStatusInterval = setInterval(async () => {
     try {
-      const res = await fetch(`/api/calls/status?callId=${encodeURIComponent(callId)}`, { cache: 'no-store' });
+      const apiBase = getApiBaseUrl();
+      const res = await fetch(`${apiBase}/api/calls/status?callId=${encodeURIComponent(callId)}`, { cache: 'no-store' });
       if (!res.ok) return;
 
       const data = await res.json();
