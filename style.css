@@ -142,122 +142,122 @@ body {
 .lounge-ambient-container {
   position: fixed;
   inset: 0;
+  width: 100vw;
+  height: 100vh;
   pointer-events: none;
   z-index: 0;
   overflow: hidden;
+  background-color: #07080c;
 }
 
-/* Orijinal Neon Tabela Ambiyans Filigranı */
-.ambient-neon-sign {
+/* 1. Orijinal Neon Tabela & Tuğla Duvar Fotoğraf Arka Planı */
+.lounge-ambient-photo-wrap {
   position: absolute;
-  top: 48%;
-  left: 50%;
-  width: 320px;
-  height: 320px;
-  max-width: 85vw;
-  max-height: 85vw;
-  transform: translate(-50%, calc(-50% + var(--neon-shift, 0px)));
-  border-radius: 50%;
-  opacity: 0.12;
-  mix-blend-mode: screen;
-  filter: drop-shadow(0 0 50px rgba(6, 182, 212, 0.45));
-  will-change: transform, opacity;
-  animation: neonBreathe 7s ease-in-out infinite alternate;
+  inset: -40px;
+  pointer-events: none;
+  will-change: transform;
 }
 
-@keyframes neonBreathe {
+.lounge-ambient-photo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 22%;
+  opacity: 0.36;
+  filter: contrast(1.15) brightness(0.88) saturate(1.1);
+  transform: translate3d(0, var(--bg-parallax-y, 0px), 0) scale(1.05);
+  transition: transform 0.12s ease-out;
+  will-change: transform;
+}
+
+/* 2. Sinematik Lüks Karartma & Vignette (Yazıların ve Fiyatların Net Okunması) */
+.lounge-ambient-vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    circle at 50% 32%,
+    rgba(10, 11, 16, 0.42) 0%,
+    rgba(10, 11, 16, 0.76) 55%,
+    rgba(7, 8, 12, 0.95) 100%
+  );
+  pointer-events: none;
+}
+
+/* 3. Gerçekçi, Hacimli & Kaydırmaya Duyarlı Nargile Dumanı Canvas Motoru */
+#hookah-smoke-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.92;
+  filter: blur(12px);
+  mix-blend-mode: screen;
+  pointer-events: none;
+  will-change: transform;
+}
+
+/* 4. Katmanlı Hacimli Nargile Dumanı Bulutları (Organic Ambient Billows) */
+.volumetric-smoke-cloud {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(50px);
+  pointer-events: none;
+  mix-blend-mode: screen;
+  will-change: transform, opacity;
+  animation: smokeBillow 20s ease-in-out infinite alternate;
+}
+
+@keyframes smokeBillow {
   0% {
-    transform: translate(-50%, calc(-50% + var(--neon-shift, 0px))) scale(0.96);
-    opacity: 0.10;
-    filter: drop-shadow(0 0 35px rgba(6, 182, 212, 0.35));
+    transform: translate3d(var(--drift-x, 0px), calc(var(--drift-y, 0px) + var(--smoke-scroll-y, 0px)), 0) rotate(0deg) scale(1);
+    opacity: 0.28;
   }
   50% {
-    opacity: 0.15;
-    filter: drop-shadow(0 0 65px rgba(245, 158, 11, 0.45));
+    transform: translate3d(calc(var(--drift-x, 0px) + 35px), calc(var(--drift-y, 0px) - 30px + var(--smoke-scroll-y, 0px)), 0) rotate(16deg) scale(1.16);
+    opacity: 0.44;
   }
   100% {
-    transform: translate(-50%, calc(-50% + var(--neon-shift, 0px))) scale(1.04);
-    opacity: 0.12;
-    filter: drop-shadow(0 0 75px rgba(139, 92, 246, 0.5));
+    transform: translate3d(calc(var(--drift-x, 0px) - 30px), calc(var(--drift-y, 0px) + 20px + var(--smoke-scroll-y, 0px)), 0) rotate(-14deg) scale(1.04);
+    opacity: 0.30;
   }
 }
 
-/* Akıcı Duman Püskürmeleri (Hookah Vapor Clouds) */
-.smoke-puff {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(65px);
-  pointer-events: none;
-  will-change: transform, opacity;
-  mix-blend-mode: screen;
-  animation: smokeCurl 18s ease-in-out infinite alternate;
-}
-
-@keyframes smokeCurl {
-  0% {
-    border-radius: 42% 58% 70% 30% / 45% 45% 55% 55%;
-    transform: translate3d(var(--smoke-drift-x, 0px), var(--smoke-scroll-y, 0px), 0) rotate(0deg) scale(0.95);
-  }
-  33% {
-    border-radius: 70% 30% 50% 50% / 30% 30% 70% 70%;
-    transform: translate3d(calc(var(--smoke-drift-x, 0px) + 25px), calc(var(--smoke-scroll-y, 0px) - 20px), 0) rotate(45deg) scale(1.05);
-  }
-  66% {
-    border-radius: 30% 70% 70% 30% / 50% 60% 40% 50%;
-    transform: translate3d(calc(var(--smoke-drift-x, 0px) - 30px), calc(var(--smoke-scroll-y, 0px) + 15px), 0) rotate(90deg) scale(0.98);
-  }
-  100% {
-    border-radius: 58% 42% 40% 60% / 60% 40% 60% 40%;
-    transform: translate3d(var(--smoke-drift-x, 0px), var(--smoke-scroll-y, 0px), 0) rotate(135deg) scale(1.06);
-  }
-}
-
-/* Farklı Katman ve Renklerde Duman Bulutları */
-.smoke-puff-1 {
-  top: 10%;
-  left: -5%;
-  width: 380px;
-  height: 380px;
-  background: radial-gradient(circle, rgba(6, 182, 212, 0.20) 0%, rgba(6, 182, 212, 0.06) 45%, transparent 70%);
-  --smoke-scroll-y: calc(var(--scroll-y, 0px) * -0.25);
-  --smoke-drift-x: 0px;
+.cloud-1 {
+  bottom: -5%;
+  left: -12%;
+  width: 550px;
+  height: 550px;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.35) 0%, rgba(215, 240, 255, 0.22) 36%, rgba(6, 182, 212, 0.10) 62%, transparent 75%);
+  --smoke-scroll-y: calc(var(--scroll-y, 0px) * -0.40);
+  --drift-x: 0px;
+  --drift-y: 0px;
   animation-duration: 20s;
 }
 
-.smoke-puff-2 {
-  top: 40%;
-  right: -8%;
-  width: 440px;
-  height: 440px;
-  background: radial-gradient(circle, rgba(245, 158, 11, 0.18) 0%, rgba(217, 119, 6, 0.05) 50%, transparent 70%);
-  --smoke-scroll-y: calc(var(--scroll-y, 0px) * -0.42);
-  --smoke-drift-x: 10px;
-  animation-duration: 24s;
-  animation-delay: -5s;
-}
-
-.smoke-puff-3 {
-  top: 70%;
-  left: 5%;
-  width: 420px;
-  height: 420px;
-  background: radial-gradient(circle, rgba(168, 85, 247, 0.18) 0%, rgba(139, 92, 246, 0.05) 50%, transparent 70%);
-  --smoke-scroll-y: calc(var(--scroll-y, 0px) * -0.32);
-  --smoke-drift-x: -15px;
-  animation-duration: 22s;
-  animation-delay: -10s;
-}
-
-.smoke-puff-4 {
+.cloud-2 {
   top: 25%;
-  left: 30%;
-  width: 300px;
-  height: 300px;
-  background: radial-gradient(circle, rgba(255, 255, 255, 0.10) 0%, rgba(180, 210, 240, 0.04) 55%, transparent 72%);
-  --smoke-scroll-y: calc(var(--scroll-y, 0px) * -0.55);
-  --smoke-drift-x: 20px;
-  animation-duration: 16s;
-  animation-delay: -7s;
+  right: -12%;
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.30) 0%, rgba(254, 243, 199, 0.18) 38%, rgba(245, 158, 11, 0.10) 62%, transparent 75%);
+  --smoke-scroll-y: calc(var(--scroll-y, 0px) * -0.60);
+  --drift-x: 20px;
+  --drift-y: -15px;
+  animation-duration: 25s;
+  animation-delay: -6s;
+}
+
+.cloud-3 {
+  top: 60%;
+  left: 10%;
+  width: 500px;
+  height: 500px;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.28) 0%, rgba(225, 235, 255, 0.16) 40%, rgba(139, 92, 246, 0.08) 65%, transparent 75%);
+  --smoke-scroll-y: calc(var(--scroll-y, 0px) * -0.80);
+  --drift-x: -20px;
+  --drift-y: 15px;
+  animation-duration: 22s;
+  animation-delay: -11s;
 }
 
 /* Mobile Admin Touch Ergonomics */

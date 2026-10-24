@@ -239,29 +239,232 @@ function initCustomerMenu() {
   setupSearchInput();
   setupWifiModal();
   setupServiceCallModal();
-  initAmbientSmokeScroll();
+  initHookahSmokeEngine();
 }
 
-// Akıcı Nargile Dumanı ve Arka Plan Kaydırma Efekti (GPU Hızlandırmalı)
-function initAmbientSmokeScroll() {
-  if (typeof window === 'undefined') return;
-  let ticking = false;
+/* ==========================================================================
+   GERÇEKÇİ & AKICI NARGİLE DUMANI SİMÜLASYON MOTORU (GPU HIZLANDIRMALI)
+   Sayfa yukarı/aşağı kaydırıldıkça dumanlar akıcı bir şekilde kıvrılır,
+   hızlanır ve sinematik nargile atmosferi yaratır.
+   ========================================================================== */
+function initHookahSmokeEngine() {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return;
 
-  function updateSmoke() {
-    const scrollY = window.pageYOffset || document.documentElement.scrollTop || 0;
-    document.documentElement.style.setProperty('--scroll-y', `${scrollY}px`);
-    document.documentElement.style.setProperty('--neon-shift', `${scrollY * 0.08}px`);
-    ticking = false;
+  const canvas = document.getElementById('hookah-smoke-canvas');
+  if (!canvas) return;
+
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  let width = 0;
+  let height = 0;
+  let dpr = 1;
+
+  function resizeCanvas() {
+    dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+    width = window.innerWidth;
+    height = window.innerHeight;
+    canvas.width = Math.floor(width * dpr);
+    canvas.height = Math.floor(height * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
 
-  window.addEventListener('scroll', () => {
-    if (!ticking) {
-      window.requestAnimationFrame(updateSmoke);
-      ticking = true;
-    }
-  }, { passive: true });
+  resizeCanvas();
+  window.addEventListener('resize', resizeCanvas, { passive: true });
 
-  updateSmoke();
+  // 1. GPU Hızlandırması için Hazır Önceden Hesaplanmış Duman Dokuları (Offscreen Sprites)
+  function createVaporSprite(colorStops) {
+    const sCanvas = document.createElement('canvas');
+    const size = 160;
+    sCanvas.width = size;
+    sCanvas.height = size;
+    const sCtx = sCanvas.getContext('2d');
+    const half = size / 2;
+    const grad = sCtx.createRadialGradient(half, half, 0, half, half, half);
+    colorStops.forEach(st => grad.addColorStop(st[0], st[1]));
+    sCtx.fillStyle = grad;
+    sCtx.beginPath();
+    sCtx.arc(half, half, half, 0, Math.PI * 2);
+    sCtx.fill();
+    return sCanvas;
+  }
+
+  // Saf beyaz/gümüş nargile buharı
+  const spriteWhite = createVaporSprite([
+    [0, 'rgba(255, 255, 255, 0.90)'],
+    [0.25, 'rgba(240, 248, 255, 0.68)'],
+    [0.52, 'rgba(220, 235, 255, 0.32)'],
+    [0.78, 'rgba(200, 220, 250, 0.10)'],
+    [1, 'rgba(200, 220, 250, 0)']
+  ]);
+
+  // Neon turkuaz yansımalı nargile buharı
+  const spriteCyan = createVaporSprite([
+    [0, 'rgba(255, 255, 255, 0.88)'],
+    [0.28, 'rgba(165, 243, 252, 0.60)'],
+    [0.56, 'rgba(6, 182, 212, 0.24)'],
+    [0.82, 'rgba(6, 182, 212, 0.06)'],
+    [1, 'rgba(6, 182, 212, 0)']
+  ]);
+
+  // Neon amber/altın yansımalı nargile buharı
+  const spriteAmber = createVaporSprite([
+    [0, 'rgba(255, 255, 255, 0.88)'],
+    [0.28, 'rgba(254, 240, 138, 0.58)'],
+    [0.56, 'rgba(245, 158, 11, 0.22)'],
+    [0.82, 'rgba(245, 158, 11, 0.05)'],
+    [1, 'rgba(245, 158, 11, 0)']
+  ]);
+
+  const sprites = [spriteWhite, spriteWhite, spriteWhite, spriteCyan, spriteAmber];
+
+  // 2. Parçacık Modeli
+  const particles = [];
+  const MAX_PARTICLES = 42;
+
+  function createParticle(initialScatter = false, edgeSpawn = null) {
+    const sprite = sprites[Math.floor(Math.random() * sprites.length)];
+    const size = 110 + Math.random() * 110;
+    
+    let x, y;
+    if (initialScatter) {
+      x = Math.random() * width;
+      y = Math.random() * height;
+    } else if (edgeSpawn === 'top') {
+      x = Math.random() * width;
+      y = -size * 0.4;
+    } else {
+      // Bottom spawn (default)
+      x = -size * 0.2 + Math.random() * (width + size * 0.4);
+      y = height + Math.random() * 60;
+    }
+
+    return {
+      x,
+      y,
+      vx: (Math.random() - 0.5) * 0.45,
+      vy: -(0.45 + Math.random() * 0.85), // Duman yukarı doğru süzülür
+      size,
+      growthRate: 0.22 + Math.random() * 0.35,
+      alpha: 0,
+      maxAlpha: 0.38 + Math.random() * 0.35,
+      rotation: Math.random() * Math.PI * 2,
+      rotationSpeed: (Math.random() - 0.5) * 0.007,
+      swirlPhase: Math.random() * Math.PI * 2,
+      swirlSpeed: 0.015 + Math.random() * 0.02,
+      swirlAmp: 0.6 + Math.random() * 1.0,
+      life: initialScatter ? Math.floor(Math.random() * 180) : 0,
+      maxLife: 240 + Math.floor(Math.random() * 220),
+      sprite
+    };
+  }
+
+  // İlk açılışta ekranın boş kalmaması için dağınık parçacıklar
+  for (let i = 0; i < MAX_PARTICLES; i++) {
+    particles.push(createParticle(true));
+  }
+
+  // 3. Sayfa Kaydırma Hızı & İvme Takibi (Scroll Coupling)
+  let lastScrollY = window.pageYOffset || document.documentElement.scrollTop || 0;
+  let scrollVelocity = 0;
+  let targetVelocity = 0;
+
+  function onScroll() {
+    const curY = window.pageYOffset || document.documentElement.scrollTop || 0;
+    const deltaY = curY - lastScrollY;
+    lastScrollY = curY;
+
+    // Hedef ivmeyi güncelle (Aşağı kaydırmada pozitif, yukarıda negatif)
+    targetVelocity += deltaY * 0.65;
+    if (targetVelocity > 40) targetVelocity = 40;
+    if (targetVelocity < -40) targetVelocity = -40;
+
+    // Hızlı kaydırmada ekstra duman püskürmesi tetikle
+    if (Math.abs(deltaY) > 12 && particles.length < 55) {
+      particles.push(createParticle(false, deltaY > 0 ? 'bottom' : 'top'));
+    }
+  }
+
+  window.addEventListener('scroll', onScroll, { passive: true });
+
+  // Sekme arka plana atıldığında CPU harcamayı durdur
+  let isTabVisible = true;
+  document.addEventListener('visibilitychange', () => {
+    isTabVisible = !document.hidden;
+  });
+
+  // 4. Ana Animasyon Döngüsü (60 FPS)
+  function render() {
+    if (!isTabVisible) {
+      window.requestAnimationFrame(render);
+      return;
+    }
+
+    // İvmeli yumuşatma (Damping & Inertia)
+    scrollVelocity += (targetVelocity - scrollVelocity) * 0.16;
+    targetVelocity *= 0.88;
+
+    // CSS Değişkenlerini senkronize güncelle (Parallax ve CSS Dumanlar için)
+    document.documentElement.style.setProperty('--scroll-y', `${lastScrollY}px`);
+    document.documentElement.style.setProperty('--bg-parallax-y', `${lastScrollY * -0.08}px`);
+
+    // Ekranı temizle
+    ctx.clearRect(0, 0, width, height);
+
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+
+      // Fizik: Kaydırma yönünde rüzgar & girdap etkisi
+      // Kullanıcı aşağı kaydırdıkça nargile dumanı yukarı doğru ivmelenir
+      p.y += p.vy - (scrollVelocity * 0.35);
+
+      // Yatay dalgalanma ve duman kıvrımı
+      p.swirlPhase += p.swirlSpeed + (Math.abs(scrollVelocity) * 0.003);
+      p.x += p.vx + Math.sin(p.swirlPhase) * p.swirlAmp + (scrollVelocity * 0.06);
+
+      // Kendi etrafında hafifçe dönme
+      p.rotation += p.rotationSpeed + (scrollVelocity * 0.001);
+
+      // Duman yükseldikçe doğal olarak genleşir
+      p.size += p.growthRate;
+
+      // Opaklık zarfı (Doğal beliriş ve sönümleme)
+      p.life++;
+      const progress = p.life / p.maxLife;
+      if (progress < 0.20) {
+        p.alpha = (progress / 0.20) * p.maxAlpha;
+      } else if (progress > 0.72) {
+        p.alpha = ((1 - progress) / 0.28) * p.maxAlpha;
+      } else {
+        p.alpha = p.maxAlpha;
+      }
+
+      // Çizim
+      if (p.alpha > 0.01 && p.size > 10) {
+        ctx.save();
+        ctx.globalAlpha = p.alpha;
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.rotation);
+        const halfSize = p.size / 2;
+        ctx.drawImage(p.sprite, -halfSize, -halfSize, p.size, p.size);
+        ctx.restore();
+      }
+
+      // Ömür bittiğinde veya ekrandan tamamen çıktığında yenile
+      const isDead = p.life >= p.maxLife || p.y < -p.size || p.y > height + p.size * 1.5;
+      if (isDead) {
+        if (particles.length > MAX_PARTICLES) {
+          particles.splice(i, 1);
+        } else {
+          particles[i] = createParticle(false);
+        }
+      }
+    }
+
+    window.requestAnimationFrame(render);
+  }
+
+  window.requestAnimationFrame(render);
 }
 
 function renderHeaderInfo() {

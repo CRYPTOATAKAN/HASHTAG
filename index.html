@@ -29,27 +29,32 @@
   <script src="https://unpkg.com/lucide@latest"></script>
 
   <!-- Custom Styles -->
-  <link rel="stylesheet" href="style.css?v=2.6" />
+  <link rel="stylesheet" href="style.css?v=2.7" />
 </head>
 <body class="antialiased selection:bg-amber-500 selection:text-black">
 
   <!-- Akıcı Nargile Dumanı & Orijinal Neon Tabela Ambiyans Katmanı -->
   <div class="lounge-ambient-container" aria-hidden="true">
-    <!-- Merkezdeki Orijinal Neon Tabela Logosu (Parallax & Neon Nefes Efekti) -->
-    <div class="ambient-neon-sign">
+    <!-- 1. Orijinal Neon Tabela ve Tuğla Duvar Atmosfer Fotoğrafı (hashtag-banner.jpg) -->
+    <div class="lounge-ambient-photo-wrap" id="ambient-photo-wrap">
       <img 
-        src="hashtag-logo.jpg?v=2.6" 
-        onerror="if(!this.src.includes('images/')) this.src='images/hashtag-logo.jpg?v=2.6';"
+        src="hashtag-banner.jpg?v=2.7" 
+        onerror="if(!this.src.includes('images/')) this.src='images/hashtag-banner.jpg?v=2.7';"
         alt="" 
-        class="w-full h-full object-cover rounded-full select-none" 
+        class="lounge-ambient-photo" 
       />
     </div>
 
-    <!-- Akıcı Nargile Dumanları (Sayfa Kaydırıldıkça Yeri Değişen Atmosfer) -->
-    <div class="smoke-puff smoke-puff-1"></div>
-    <div class="smoke-puff smoke-puff-2"></div>
-    <div class="smoke-puff smoke-puff-3"></div>
-    <div class="smoke-puff smoke-puff-4"></div>
+    <!-- 2. Sinematik Lüks Karartma / Vignette Filtresi -->
+    <div class="lounge-ambient-vignette"></div>
+
+    <!-- 3. Gerçekçi, Hacimli & Kaydırmaya Duyarlı Nargile Dumanı Simülasyon Motoru (Canvas) -->
+    <canvas id="hookah-smoke-canvas"></canvas>
+
+    <!-- 4. Derinlik Katan Katmanlı Hacimli Nargile Dumanı Bulutları (Volumetric Billows) -->
+    <div class="volumetric-smoke-cloud cloud-1"></div>
+    <div class="volumetric-smoke-cloud cloud-2"></div>
+    <div class="volumetric-smoke-cloud cloud-3"></div>
   </div>
 
   <div id="menu-app" class="relative z-10 min-h-screen flex flex-col pb-24">
@@ -282,7 +287,7 @@
   </div>
 
   <!-- Scriptler -->
-  <script src="default-data.js?v=2.6"></script>
-  <script src="app.js?v=2.6"></script>
+  <script src="default-data.js?v=2.7"></script>
+  <script src="app.js?v=2.7"></script>
 </body>
 </html>
