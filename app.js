@@ -937,15 +937,16 @@ function setupServiceCallModal() {
 
 async function executeServiceCall(serviceType, tableNum) {
   const now = Date.now();
-  if (now - lastCallTime < 20000) {
-    const remaining = Math.ceil((20000 - (now - lastCallTime)) / 1000);
+  if (now - lastCallTime < 7000) {
+    const remaining = Math.ceil((7000 - (now - lastCallTime)) / 1000);
     alert(`⏳ Talebiniz zaten personele iletildi. Lütfen ${remaining} saniye bekleyiniz.`);
     return;
   }
   lastCallTime = now;
 
+  let createdCall = null;
   try {
-    await fetch('/api/calls', {
+    const res = await fetch('/api/calls', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -953,11 +954,15 @@ async function executeServiceCall(serviceType, tableNum) {
         type: serviceType
       })
     });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.call) createdCall = data.call;
+    }
   } catch (err) {
     console.warn("Call dispatch error:", err);
   }
 
-  openCallSuccessModal(serviceType, tableNum);
+  openCallSuccessModal(serviceType, tableNum, createdCall ? createdCall.id : null);
 }
 
 function openTablePickerModal() {
@@ -999,36 +1004,44 @@ function selectTableFromPicker(tableNum) {
   }
 }
 
-function openCallSuccessModal(serviceType, tableNum) {
+let activeCallStatusInterval = null;
+
+function openCallSuccessModal(serviceType, tableNum, callId = null) {
   const modal = document.getElementById('call-success-modal');
   const titleEl = document.getElementById('call-success-title');
   const descEl = document.getElementById('call-success-desc');
   const iconWrap = document.getElementById('call-success-icon-wrap');
   const iconEl = document.getElementById('call-success-icon');
   const timerEl = document.getElementById('call-cooldown-timer');
+  const pillText = document.getElementById('call-status-pill-text');
+  const pillBox = document.getElementById('call-status-pill');
 
   if (!modal) return;
 
+  if (pillText) pillText.textContent = 'Talebiniz Alındı';
+  if (pillBox) pillBox.className = 'inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-[11px] font-bold text-amber-300 mb-3';
+
   if (serviceType === 'coal') {
     if (titleEl) titleEl.textContent = 'Köz Talebiniz Alındı!';
-    if (descEl) descEl.textContent = `Masa ${tableNum} için köz değişimi bildirimi personelimize iletildi. Közcü arkadaşımız yola çıktı!`;
+    if (descEl) descEl.innerHTML = `Masa ${tableNum} için köz talebiniz personelimize iletildi. Personelimiz yola çıkmak üzere.`;
     if (iconWrap) iconWrap.className = 'w-16 h-16 rounded-2xl bg-amber-500/20 border border-amber-500/40 mx-auto flex items-center justify-center text-amber-400 mb-3 shadow-lg shadow-amber-500/10';
     if (iconEl) iconEl.setAttribute('data-lucide', 'flame');
   } else if (serviceType === 'bill') {
     if (titleEl) titleEl.textContent = 'Hesap Talebiniz Alındı!';
-    if (descEl) descEl.textContent = `Masa ${tableNum} için hesap bildirimi kasaya iletildi. Personelimiz birazdan masanızda olacaktır.`;
+    if (descEl) descEl.innerHTML = `Masa ${tableNum} için hesap talebiniz kasaya iletildi. Personelimiz masanıza yönlendiriliyor.`;
     if (iconWrap) iconWrap.className = 'w-16 h-16 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 mx-auto flex items-center justify-center text-emerald-400 mb-3 shadow-lg shadow-emerald-500/10';
     if (iconEl) iconEl.setAttribute('data-lucide', 'credit-card');
   } else {
     if (titleEl) titleEl.textContent = 'Garson Çağrınız Alındı!';
-    if (descEl) descEl.textContent = `Masa ${tableNum} için servis çağrısı iletildi. Garsonumuz masanıza geliyor.`;
+    if (descEl) descEl.innerHTML = `Masa ${tableNum} için garson çağrısı iletildi. Personelimiz birazdan masanızda olacaktır.`;
     if (iconWrap) iconWrap.className = 'w-16 h-16 rounded-2xl bg-cyan-500/20 border border-cyan-500/40 mx-auto flex items-center justify-center text-cyan-400 mb-3 shadow-lg shadow-cyan-500/10';
     if (iconEl) iconEl.setAttribute('data-lucide', 'bell');
   }
 
   if (typeof lucide !== 'undefined') lucide.createIcons();
 
-  let cooldown = 20;
+  // 7 Saniyelik Hızlı Spam Sayacı
+  let cooldown = 7;
   if (timerEl) timerEl.textContent = cooldown;
   if (cooldownInterval) clearInterval(cooldownInterval);
   cooldownInterval = setInterval(() => {
@@ -1041,6 +1054,113 @@ function openCallSuccessModal(serviceType, tableNum) {
 
   modal.classList.remove('hidden');
   modal.classList.add('flex');
+
+  // Personel "Yoldayım" veya "Tamamlandı" işaretlemesini anlık takip et
+  if (callId) {
+    startCustomerCallStatusPolling(callId, tableNum);
+  }
+}
+
+function startCustomerCallStatusPolling(callId, tableNum) {
+  if (activeCallStatusInterval) clearInterval(activeCallStatusInterval);
+
+  let notifiedInProgress = false;
+
+  activeCallStatusInterval = setInterval(async () => {
+    try {
+      const res = await fetch(`/api/calls/status?callId=${encodeURIComponent(callId)}`, { cache: 'no-store' });
+      if (!res.ok) return;
+
+      const data = await res.json();
+      const status = data.callStatus;
+      const handler = data.handler || 'Personelimiz';
+
+      // 1. Personel "Yoldayım" butonuna bastığı an:
+      if (status === 'in_progress' && !notifiedInProgress) {
+        notifiedInProgress = true;
+        updateCustomerCallModalInProgress(handler);
+      }
+
+      // 2. Personel "Tamamlandı" butonuna bastığı an:
+      if (status === 'completed') {
+        clearInterval(activeCallStatusInterval);
+        activeCallStatusInterval = null;
+        updateCustomerCallModalCompleted();
+      }
+    } catch (e) {
+      console.warn("Poll status err:", e);
+    }
+  }, 1800);
+}
+
+function updateCustomerCallModalInProgress(handlerName) {
+  const modal = document.getElementById('call-success-modal');
+  const titleEl = document.getElementById('call-success-title');
+  const descEl = document.getElementById('call-success-desc');
+  const iconWrap = document.getElementById('call-success-icon-wrap');
+  const iconEl = document.getElementById('call-success-icon');
+  const pillText = document.getElementById('call-status-pill-text');
+  const pillBox = document.getElementById('call-status-pill');
+
+  if (pillText) pillText.textContent = `🏃 ${handlerName} Yola Çıktı`;
+  if (pillBox) pillBox.className = 'inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/20 border border-blue-500/40 text-[11px] font-bold text-blue-300 mb-3 animate-pulse';
+
+  if (titleEl) titleEl.textContent = 'Personelimiz Yola Çıktı!';
+  if (descEl) {
+    descEl.className = 'text-xs text-white mt-2 leading-relaxed p-3 rounded-2xl bg-blue-950/40 border border-blue-500/30';
+    descEl.innerHTML = `
+      <div class="text-amber-300 font-bold text-sm mb-1">Talebiniz Alındı!</div>
+      İlgili personelimiz <b class="text-amber-400 font-bold">${handlerName}</b> yaklaşık <b class="text-emerald-400">3 dakika içerisinde</b> masanıza ulaşacaktır.
+    `;
+  }
+
+  if (iconWrap) {
+    iconWrap.className = 'w-16 h-16 rounded-2xl bg-blue-500/20 border border-blue-500/40 mx-auto flex items-center justify-center text-blue-300 mb-3 shadow-lg shadow-blue-500/20 animate-bounce';
+  }
+  if (iconEl) iconEl.setAttribute('data-lucide', 'footprints');
+
+  if (typeof lucide !== 'undefined') lucide.createIcons();
+
+  // Telefonu hafifçe titret (Müşterinin dikkatini çekmek için)
+  if ('vibrate' in navigator) {
+    navigator.vibrate([150, 80, 150]);
+  }
+
+  // Eğer kullanıcı pencereyi kapatmışsa tekrar göster
+  if (modal) {
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+  }
+}
+
+function updateCustomerCallModalCompleted() {
+  const titleEl = document.getElementById('call-success-title');
+  const descEl = document.getElementById('call-success-desc');
+  const iconWrap = document.getElementById('call-success-icon-wrap');
+  const iconEl = document.getElementById('call-success-icon');
+  const pillText = document.getElementById('call-status-pill-text');
+  const pillBox = document.getElementById('call-status-pill');
+
+  if (pillText) pillText.textContent = '✅ Servis Tamamlandı';
+  if (pillBox) pillBox.className = 'inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-[11px] font-bold text-emerald-300 mb-3';
+
+  if (titleEl) titleEl.textContent = 'Talebiniz Yerine Getirildi!';
+  if (descEl) {
+    descEl.className = 'text-xs text-gray-200 mt-2 leading-relaxed p-3 rounded-2xl bg-emerald-950/30 border border-emerald-500/30';
+    descEl.innerHTML = `Personelimiz masanıza ulaştı ve talebinizi tamamladı. <br/><b class="text-amber-400 font-semibold mt-1 inline-block">Keyifli anlar ve afiyet olsun dileriz! 😊</b>`;
+  }
+
+  if (iconWrap) {
+    iconWrap.className = 'w-16 h-16 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 mx-auto flex items-center justify-center text-emerald-400 mb-3 shadow-lg shadow-emerald-500/20';
+  }
+  if (iconEl) iconEl.setAttribute('data-lucide', 'check-circle');
+
+  if (typeof lucide !== 'undefined') lucide.createIcons();
+
+  // 3 saniye sonra otomatik kapat
+  setTimeout(() => {
+    closeCallSuccessModal();
+  }, 3200);
 }
 
 function closeCallSuccessModal() {

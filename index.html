@@ -309,22 +309,33 @@
     </div>
   </div>
 
-  <!-- Çağrı Başarılı Bildirim Modalı / Toast -->
-  <div id="call-success-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-    <div class="w-full max-w-xs rounded-3xl bg-neutral-900 border border-white/15 p-6 shadow-2xl text-center">
-      <div id="call-success-icon-wrap" class="w-16 h-16 rounded-2xl bg-amber-500/20 border border-amber-500/40 mx-auto flex items-center justify-center text-amber-400 mb-3 shadow-lg shadow-amber-500/10">
+  <!-- Çağrı Durumu & Yoldayım Bildirim Modalı -->
+  <div id="call-success-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-black/85 backdrop-blur-md">
+    <div class="w-full max-w-xs rounded-3xl bg-neutral-900 border border-white/15 p-6 shadow-2xl text-center relative overflow-hidden">
+      
+      <!-- Üst Durum Rozeti -->
+      <div id="call-status-pill" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-[11px] font-bold text-amber-300 mb-3">
+        <span class="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
+        <span id="call-status-pill-text">Talebiniz Alındı</span>
+      </div>
+
+      <div id="call-success-icon-wrap" class="w-16 h-16 rounded-2xl bg-amber-500/20 border border-amber-500/40 mx-auto flex items-center justify-center text-amber-400 mb-3 shadow-lg shadow-amber-500/10 transition-all">
         <i id="call-success-icon" data-lucide="flame" class="w-8 h-8"></i>
       </div>
-      <h3 id="call-success-title" class="text-base font-bold text-white">Köz Talebiniz Alındı!</h3>
-      <p id="call-success-desc" class="text-xs text-gray-300 mt-1.5 leading-relaxed">Masa 4 için servis bildirimi personele iletildi. Personelimiz yola çıktı.</p>
-
-      <div class="mt-4 p-2 rounded-xl bg-white/5 border border-white/5 flex items-center justify-center gap-2 text-xs text-amber-300 font-mono">
-        <i data-lucide="timer" class="w-3.5 h-3.5"></i>
-        <span>Yeniden çağrı: <b id="call-cooldown-timer">20</b> sn</span>
+      
+      <h3 id="call-success-title" class="text-base font-bold text-white transition-all">Köz Talebiniz Alındı!</h3>
+      
+      <div id="call-success-desc" class="text-xs text-gray-300 mt-2 leading-relaxed p-2.5 rounded-2xl bg-white/5 border border-white/5 transition-all">
+        Talebiniz alındı! İlgili personelimiz 3 dakika içerisinde masanıza ulaşacaktır.
       </div>
 
-      <button onclick="closeCallSuccessModal()" class="w-full mt-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold transition-colors">
-        Anladım, Teşekkürler
+      <div id="call-cooldown-box" class="mt-3.5 p-2 rounded-xl bg-black border border-white/5 flex items-center justify-center gap-2 text-xs text-amber-300 font-mono">
+        <i data-lucide="timer" class="w-3.5 h-3.5 text-amber-400"></i>
+        <span>Yeniden çağrı: <b id="call-cooldown-timer">7</b> sn</span>
+      </div>
+
+      <button onclick="closeCallSuccessModal()" class="w-full mt-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold transition-colors shadow-lg shadow-amber-500/20">
+        Tamam
       </button>
     </div>
   </div>
