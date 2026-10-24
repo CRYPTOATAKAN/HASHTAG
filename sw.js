@@ -7,27 +7,37 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim());
 });
 
-// Push bildirim desteği (Web Push API)
+// Push bildirim desteği (Web Push API - Kilit Ekranı)
 self.addEventListener('push', (event) => {
-  let data = { title: 'HASHTAG Çağrı', body: 'Yeni masa çağrısı var!' };
+  let data = {
+    title: '🔥 HASHTAG Servis Çağrısı',
+    body: 'Yeni bir masa çağrısı geldi!',
+    icon: 'hashtag-logo.jpg',
+    tag: 'hashtag-call'
+  };
+
   if (event.data) {
     try {
-      data = event.data.json();
+      const payload = event.data.json();
+      data = Object.assign(data, payload);
     } catch (e) {
       data.body = event.data.text();
     }
   }
 
   const options = {
-    body: data.body || 'Masa çağrısı',
-    icon: 'hashtag-logo.jpg',
+    body: data.body,
+    icon: data.icon || 'hashtag-logo.jpg',
     badge: 'hashtag-logo.jpg',
-    vibrate: [200, 100, 200, 100, 300],
+    vibrate: [300, 150, 300, 150, 450],
+    tag: data.tag || 'hashtag-call',
+    renotify: true,
+    requireInteraction: true,
     data: { url: '/personel' }
   };
 
   event.waitUntil(
-    self.registration.showNotification(data.title || 'HASHTAG Personel', options)
+    self.registration.showNotification(data.title, options)
   );
 });
 

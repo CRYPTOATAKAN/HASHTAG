@@ -1,6 +1,8 @@
-// HASHTAG Lounge & Hookah - Personel & Garson Portalı JavaScript Motoru
+// HASHTAG Lounge & Hookah - Personel & Vardiya Portalı JavaScript Motoru
 
-let staffAuthPin = sessionStorage.getItem('hashtag_staff_pin') || null;
+let currentStaff = JSON.parse(sessionStorage.getItem('hashtag_current_staff') || 'null');
+let selectedStaffToLogin = null;
+let currentDevice = detectDevice();
 let currentTab = 'calls';
 let currentFilter = 'all';
 let currentStockCategory = 'all';
@@ -8,13 +10,140 @@ let stockSearchQuery = '';
 let activeCalls = [];
 let knownCallIds = new Set();
 let menuData = null;
+let staffList = [];
 let audioEnabled = true;
 let audioCtx = null;
 let pollInterval = null;
 
 // =========================================================================
-// 1. PIN GİRİŞİ & OTURUM YÖNETİMİ
+// 1. CİHAZ TESPİTİ (USER-AGENT ANALİZİ)
 // =========================================================================
+
+function detectDevice() {
+  const ua = navigator.userAgent || '';
+  if (/iPhone/i.test(ua)) {
+    return 'Apple iPhone (iOS)';
+  } else if (/iPad/i.test(ua)) {
+    return 'Apple iPad';
+  } else if (/Android/i.test(ua)) {
+    const match = ua.match(/Android[^;]+; ([^;]+)\)/);
+    if (match && match[1]) {
+      const model = match[1].replace(/Build\/.*/, '').trim();
+      return `Android (${model})`;
+    }
+    return 'Android Cihaz';
+  } else if (/Macintosh/i.test(ua)) {
+    return 'Mac / macOS';
+  } else if (/Windows/i.test(ua)) {
+    return 'Windows PC';
+  }
+  return 'Mobil / Web Cihaz';
+}
+
+// =========================================================================
+// 2. PERSONEL SEÇİMİ & PIN DOĞRULAMA (VARDİYA GİRİŞİ)
+// =========================================================================
+
+async function fetchStaffList() {
+  try {
+    const res = await fetch('/api/staff/list', { cache: 'no-store' });
+    if (res.ok) {
+      const data = await res.json();
+      staffList = data.staff || [];
+      renderStaffSelectionGrid();
+    }
+  } catch (e) {
+    console.warn("Fetch staff list error:", e);
+    // Fallback
+    staffList = [
+      { id: 'staff-1', name: 'Ahmet Yılmaz', role: 'Garson', avatar: 'waiter' },
+      { id: 'staff-2', name: 'Murat Demir', role: 'Közcü', avatar: 'hookah' },
+      { id: 'staff-3', name: 'Can Polat', role: 'Bar / Kasa', avatar: 'bar' }
+    ];
+    renderStaffSelectionGrid();
+  }
+}
+
+function renderStaffSelectionGrid() {
+  const container = document.getElementById('staff-members-grid');
+  if (!container) return;
+
+  const roleIcons = {
+    'Garson': 'user-check',
+    'Közcü': 'flame',
+    'Bar / Kasa': 'wine',
+    'Bar': 'wine',
+    'Kasa': 'credit-card'
+  };
+
+  container.innerHTML = staffList.map(s => `
+    <button 
+      onclick="selectStaffMember('${s.id}')"
+      class="w-full p-3 rounded-2xl bg-black border border-white/10 hover:border-amber-500/60 hover:bg-neutral-900 flex items-center justify-between text-left transition-all active:scale-98 group shadow-sm"
+    >
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-amber-500/10 group-hover:bg-amber-500/20 border border-amber-500/20 flex items-center justify-center text-amber-400 font-bold transition-colors">
+          <i data-lucide="${roleIcons[s.role] || 'user'}" class="w-5 h-5"></i>
+        </div>
+        <div>
+          <h4 class="text-sm font-bold text-white group-hover:text-amber-300 transition-colors">${s.name}</h4>
+          <p class="text-[11px] text-gray-400">${s.role}</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        ${s.isOnline ? `
+          <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 text-[10px] font-bold">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Vardiyada
+          </span>
+        ` : ''}
+        <i data-lucide="chevron-right" class="w-4 h-4 text-gray-500 group-hover:text-amber-400 transition-colors"></i>
+      </div>
+    </button>
+  `).join('');
+
+  if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+function selectStaffMember(staffId) {
+  const staff = staffList.find(s => s.id === staffId);
+  if (!staff) return;
+
+  selectedStaffToLogin = staff;
+  document.getElementById('step-select-staff').classList.add('hidden');
+  document.getElementById('step-enter-pin').classList.remove('hidden');
+
+  document.getElementById('selected-staff-name').textContent = staff.name;
+  document.getElementById('selected-staff-role').textContent = staff.role;
+
+  const input = document.getElementById('staff-pin-input');
+  if (input) {
+    input.value = '';
+    input.focus();
+  }
+}
+
+function selectAdminLogin() {
+  selectedStaffToLogin = { id: 'admin', name: 'Yönetici', role: 'Yönetici' };
+  document.getElementById('step-select-staff').classList.add('hidden');
+  document.getElementById('step-enter-pin').classList.remove('hidden');
+
+  document.getElementById('selected-staff-name').textContent = 'Yönetici Girişi';
+  document.getElementById('selected-staff-role').textContent = 'Tam Yetki';
+
+  const input = document.getElementById('staff-pin-input');
+  if (input) {
+    input.value = '';
+    input.focus();
+  }
+}
+
+function backToStaffSelection() {
+  selectedStaffToLogin = null;
+  document.getElementById('step-enter-pin').classList.add('hidden');
+  document.getElementById('step-select-staff').classList.remove('hidden');
+  const errorEl = document.getElementById('pin-error');
+  if (errorEl) errorEl.classList.add('hidden');
+}
 
 function keypadPress(digit) {
   const input = document.getElementById('staff-pin-input');
@@ -30,64 +159,205 @@ function keypadClear() {
   }
 }
 
-async function handlePinSubmit(e) {
+async function handleStaffPinSubmit(e) {
   if (e) e.preventDefault();
+  if (!selectedStaffToLogin) return;
+
   const input = document.getElementById('staff-pin-input');
   const errorEl = document.getElementById('pin-error');
   const pin = input ? input.value.trim() : '';
 
   if (!pin) return;
 
-  // Ses motorunu kullanıcı etkileşimiyle ilk kez uyandır (Web Audio Context Kilidi)
   unlockAudio();
 
-  // Menü verisinden veya varsayılan ayarlardan PIN doğrula
-  let isValid = false;
-  if (!menuData) await loadMenuData();
+  try {
+    const res = await fetch('/api/staff/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        staffId: selectedStaffToLogin.id,
+        pin: pin,
+        device: currentDevice
+      })
+    });
 
-  const settings = menuData ? menuData.settings : (window.DEFAULT_MENU_DATA ? window.DEFAULT_MENU_DATA.settings : {});
-  const staffPin = settings.staffPin || "5555";
-  const adminPin = settings.adminPin || "1234";
+    const data = await res.json();
+    if (res.ok && data.status === 'success') {
+      currentStaff = data.staff;
+      sessionStorage.setItem('hashtag_current_staff', JSON.stringify(currentStaff));
+      
+      document.getElementById('login-modal').classList.add('hidden');
+      document.getElementById('staff-app').classList.remove('hidden');
+      if (errorEl) errorEl.classList.add('hidden');
 
-  if (pin === staffPin || pin === adminPin) {
-    isValid = true;
-  }
-
-  if (isValid) {
-    staffAuthPin = pin;
-    sessionStorage.setItem('hashtag_staff_pin', pin);
-    document.getElementById('login-modal').classList.add('hidden');
-    document.getElementById('staff-app').classList.remove('hidden');
-    if (errorEl) errorEl.classList.add('hidden');
-    
-    // Lucide ikonlarını yenile
-    if (typeof lucide !== 'undefined') lucide.createIcons();
-
-    // Verileri başlat ve polling kur
-    initStaffDashboard();
-  } else {
-    if (errorEl) errorEl.classList.remove('hidden');
-    if (input) {
-      input.value = '';
-      input.focus();
+      updateHeaderStaffInfo();
+      initStaffDashboard();
+      
+      // Kilit Ekranı Web Push aboneliğini otomatik kontrol et/başlat
+      autoRegisterWebPush();
+    } else {
+      if (errorEl) {
+        errorEl.textContent = data.message || "Hatalı PIN Kodu!";
+        errorEl.classList.remove('hidden');
+      }
+      if (input) {
+        input.value = '';
+        input.focus();
+      }
+    }
+  } catch (err) {
+    console.error("Staff login error:", err);
+    if (errorEl) {
+      errorEl.textContent = "Giriş yapılamadı, lütfen sunucu bağlantınızı kontrol edin.";
+      errorEl.classList.remove('hidden');
     }
   }
 }
 
-function staffLogout() {
-  staffAuthPin = null;
-  sessionStorage.removeItem('hashtag_staff_pin');
+async function staffLogout() {
+  if (!confirm("Vardiyanızı bitirip çıkış yapmak istiyor musunuz?")) return;
+
+  try {
+    if (currentStaff) {
+      await fetch('/api/staff/logout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          staffId: currentStaff.id,
+          device: currentDevice
+        })
+      });
+    }
+  } catch (e) {
+    console.warn("Logout error:", e);
+  }
+
+  currentStaff = null;
+  sessionStorage.removeItem('hashtag_current_staff');
+  if (pollInterval) clearInterval(pollInterval);
+
   document.getElementById('staff-app').classList.add('hidden');
   document.getElementById('login-modal').classList.remove('hidden');
-  const input = document.getElementById('staff-pin-input');
-  if (input) {
-    input.value = '';
-    input.focus();
+  backToStaffSelection();
+  fetchStaffList();
+}
+
+function updateHeaderStaffInfo() {
+  if (!currentStaff) return;
+  const nameEl = document.getElementById('header-staff-name');
+  const roleEl = document.getElementById('header-staff-role');
+  const devEl = document.getElementById('header-device-text');
+
+  if (nameEl) nameEl.textContent = currentStaff.name;
+  if (roleEl) roleEl.innerHTML = `${currentStaff.role} • <span class="text-gray-500">${currentDevice}</span>`;
+  if (devEl) devEl.textContent = currentDevice;
+}
+
+// =========================================================================
+// 3. WEB PUSH (KİLİT EKRANI BİLDİRİM SİSTEMİ - APNs & FCM)
+// =========================================================================
+
+function urlB64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
+
+async function enableWebPushNotifications() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    alert("Cihazınız Web Push bildirimini desteklemiyor veya tarayıcı kısıtlaması var.\n\nİpucu: iPhone kullanıyorsanız Safari menüsünden 'Ana Ekrana Ekle' yapınız.");
+    return;
+  }
+
+  try {
+    const perm = await Notification.requestPermission();
+    if (perm !== 'granted') {
+      alert("Bildirim izni verilmedi. Lütfen telefon ayarlarından bildirimlere izin veriniz.");
+      return;
+    }
+
+    const reg = await navigator.serviceWorker.ready;
+    
+    // Sunucudan VAPID Public Key al
+    const vapidRes = await fetch('/api/push/vapid-public-key');
+    const vapidData = await vapidRes.json();
+    const publicKey = vapidData.publicKey;
+
+    if (!publicKey) {
+      alert("Push sunucu anahtarı alınamadı.");
+      return;
+    }
+
+    // PushManager'a abone ol
+    const subscription = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlB64ToUint8Array(publicKey)
+    });
+
+    // Aboneliği sunucumuza kaydet
+    await fetch('/api/push/subscribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        subscription: subscription,
+        staffId: currentStaff ? currentStaff.id : 'unknown',
+        staffName: currentStaff ? currentStaff.name : 'Personel',
+        device: currentDevice
+      })
+    });
+
+    updatePushBtnState(true);
+    alert("✅ Kilit ekranı bildirimleri başarıyla aktif edildi!\n\nTelefonunuz kilitliyken bile masa çağrıları ekrana sesli ve titreşimli olarak düşecektir.");
+  } catch (err) {
+    console.error("Web Push registration error:", err);
+    alert(`Bildirim kurulum hatası: ${err.message}`);
+  }
+}
+
+async function autoRegisterWebPush() {
+  if ('Notification' in window && Notification.permission === 'granted' && 'serviceWorker' in navigator) {
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      if (sub && currentStaff) {
+        await fetch('/api/push/subscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            subscription: sub,
+            staffId: currentStaff.id,
+            staffName: currentStaff.name,
+            device: currentDevice
+          })
+        });
+        updatePushBtnState(true);
+      }
+    } catch (e) {}
+  }
+}
+
+function updatePushBtnState(isSubscribed) {
+  const btn = document.getElementById('notify-perm-btn');
+  const label = document.getElementById('notify-perm-label');
+  if (!btn) return;
+
+  if (isSubscribed || (window.Notification && Notification.permission === 'granted')) {
+    btn.className = 'px-2.5 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-xs font-semibold text-emerald-400 flex items-center gap-1.5';
+    if (label) label.textContent = 'Kilit Bildirimi Aktif';
+  } else {
+    btn.className = 'px-2.5 py-1.5 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 text-xs font-medium text-blue-300 flex items-center gap-1.5';
+    if (label) label.textContent = 'Kilit Bildirimini Aç';
   }
 }
 
 // =========================================================================
-// 2. SESLİ UYARI & BİLDİRİM MOTORU (WEB AUDIO API & PUSH)
+// 4. SESLİ UYARI MOTORU (WEB AUDIO API SYNTHESIZER)
 // =========================================================================
 
 function unlockAudio() {
@@ -100,11 +370,10 @@ function unlockAudio() {
       audioCtx.resume();
     }
   } catch (err) {
-    console.warn("Audio Context unlock error:", err);
+    console.warn("Audio unlock err:", err);
   }
 }
 
-// Köz İste Zili: Çift tonlu sıcak nargile akoru (D5 -> A5)
 function playCoalChime() {
   if (!audioEnabled) return;
   unlockAudio();
@@ -112,12 +381,10 @@ function playCoalChime() {
 
   try {
     const now = audioCtx.currentTime;
-    
-    // Ton 1: D5 (587.33 Hz)
     const osc1 = audioCtx.createOscillator();
     const gain1 = audioCtx.createGain();
     osc1.type = 'sine';
-    osc1.frequency.setValueAtTime(587.33, now);
+    osc1.frequency.setValueAtTime(587.33, now); // D5
     gain1.gain.setValueAtTime(0, now);
     gain1.gain.linearRampToValueAtTime(0.4, now + 0.05);
     gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
@@ -126,11 +393,10 @@ function playCoalChime() {
     osc1.start(now);
     osc1.stop(now + 0.45);
 
-    // Ton 2: A5 (880.00 Hz)
     const osc2 = audioCtx.createOscillator();
     const gain2 = audioCtx.createGain();
     osc2.type = 'triangle';
-    osc2.frequency.setValueAtTime(880.00, now + 0.15);
+    osc2.frequency.setValueAtTime(880.00, now + 0.15); // A5
     gain2.gain.setValueAtTime(0, now + 0.15);
     gain2.gain.linearRampToValueAtTime(0.5, now + 0.20);
     gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.85);
@@ -138,12 +404,9 @@ function playCoalChime() {
     gain2.connect(audioCtx.destination);
     osc2.start(now + 0.15);
     osc2.stop(now + 0.85);
-  } catch (e) {
-    console.warn("Chime error:", e);
-  }
+  } catch (e) {}
 }
 
-// Garson Çağrısı Zili: Parlak servis çanı (E5 -> B5)
 function playWaiterChime() {
   if (!audioEnabled) return;
   unlockAudio();
@@ -151,12 +414,11 @@ function playWaiterChime() {
 
   try {
     const now = audioCtx.currentTime;
-
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
     osc.type = 'sine';
-    osc.frequency.setValueAtTime(659.25, now); // E5
-    osc.frequency.exponentialRampToValueAtTime(987.77, now + 0.12); // B5
+    osc.frequency.setValueAtTime(659.25, now);
+    osc.frequency.exponentialRampToValueAtTime(987.77, now + 0.12);
     gain.gain.setValueAtTime(0, now);
     gain.gain.linearRampToValueAtTime(0.5, now + 0.04);
     gain.gain.exponentialRampToValueAtTime(0.001, now + 0.9);
@@ -164,9 +426,7 @@ function playWaiterChime() {
     gain.connect(audioCtx.destination);
     osc.start(now);
     osc.stop(now + 0.9);
-  } catch (e) {
-    console.warn("Chime error:", e);
-  }
+  } catch (e) {}
 }
 
 function testOrToggleAudio() {
@@ -175,73 +435,19 @@ function testOrToggleAudio() {
   if ('vibrate' in navigator) navigator.vibrate([150, 80, 150]);
 }
 
-async function requestNotificationPermission() {
-  if (!('Notification' in window)) {
-    alert("Tarayıcınız bildirim özelliğini desteklemiyor.");
-    return;
-  }
-
-  const perm = await Notification.requestPermission();
-  updateNotifyBtnState();
-
-  if (perm === 'granted') {
-    new Notification("🔥 HASHTAG Personel Portalı", {
-      body: "Bildirimler başarıyla açıldı! Masa çağrıları kilit ekranınıza gelecek.",
-      icon: "hashtag-logo.jpg"
-    });
-  }
-}
-
-function updateNotifyBtnState() {
-  const btn = document.getElementById('notify-perm-btn');
-  if (!btn || !('Notification' in window)) return;
-
-  if (Notification.permission === 'granted') {
-    btn.innerHTML = `<i data-lucide="check" class="w-4 h-4 text-emerald-400"></i><span class="hidden sm:inline text-emerald-400">Bildirim Açık</span>`;
-    btn.classList.add('border-emerald-500/30', 'bg-emerald-500/10');
-  } else {
-    btn.innerHTML = `<i data-lucide="bell" class="w-4 h-4 text-blue-400"></i><span class="hidden sm:inline">Bildirimleri Aç</span>`;
-  }
-  if (typeof lucide !== 'undefined') lucide.createIcons();
-}
-
-function triggerCallNotification(call) {
-  // 1. Ses Çal
+function triggerInAppAlert(call) {
   if (call.type === 'coal') {
     playCoalChime();
   } else {
     playWaiterChime();
   }
-
-  // 2. Titreşim (Mobil Cihazlar İçin)
   if ('vibrate' in navigator) {
     navigator.vibrate([250, 100, 250, 100, 350]);
-  }
-
-  // 3. Sistem / Kilit Ekranı Bildirimi (PWA / Web Notification)
-  if ('Notification' in window && Notification.permission === 'granted') {
-    const title = call.type === 'coal' 
-      ? `🔥 ${call.table}: Köz Değişimi İstedi!`
-      : (call.type === 'bill' ? `💳 ${call.table}: Hesap İstedi!` : `🛎️ ${call.table}: Garson Çağırıyor!`);
-    
-    const body = call.note ? `Not: ${call.note}` : `${call.table} numaralı masa servis bekliyor.`;
-
-    try {
-      new Notification(title, {
-        body: body,
-        icon: 'hashtag-logo.jpg',
-        badge: 'hashtag-logo.jpg',
-        tag: call.id,
-        renotify: true
-      });
-    } catch (e) {
-      console.warn("Notification trigger error:", e);
-    }
   }
 }
 
 // =========================================================================
-// 3. ÇAĞRI VERİSİ & POLLING YÖNETİMİ
+// 5. ÇAĞRI VERİSİ & POLLING MOTORU
 // =========================================================================
 
 async function fetchCalls() {
@@ -251,21 +457,16 @@ async function fetchCalls() {
     const data = await res.json();
     return data.calls || [];
   } catch (e) {
-    // Fallback: Localstorage veya boş
-    const local = localStorage.getItem('hashtag_calls_mock');
-    return local ? JSON.parse(local) : [];
+    return [];
   }
 }
 
 async function updateCallsLoop() {
   const calls = await fetchCalls();
   
-  // Yeni gelen bekleyen çağrıları tespit et
-  let hasNewPending = false;
   calls.forEach(call => {
     if (call.status === 'pending' && !knownCallIds.has(call.id)) {
-      hasNewPending = true;
-      triggerCallNotification(call);
+      triggerInAppAlert(call);
     }
     knownCallIds.add(call.id);
   });
@@ -273,6 +474,14 @@ async function updateCallsLoop() {
   activeCalls = calls;
   renderCallsView();
   renderTablesGrid();
+}
+
+function getElapsedText(timestamp) {
+  if (!timestamp) return 'Şimdi';
+  const sec = Math.max(0, Math.floor(Date.now() / 1000 - timestamp));
+  if (sec < 60) return `${sec} sn önce`;
+  const min = Math.floor(sec / 60);
+  return `${min} dk önce`;
 }
 
 function renderCallsView() {
@@ -284,7 +493,6 @@ function renderCallsView() {
 
   if (!container) return;
 
-  // Filtreleme
   let filtered = activeCalls;
   if (currentFilter !== 'all') {
     filtered = filtered.filter(c => c.type === currentFilter);
@@ -308,25 +516,27 @@ function renderCallsView() {
     container.innerHTML = pendingCalls.map(call => renderCallCard(call)).join('');
   }
 
-  // Tamamlananlar bölümü
   if (completedCalls.length > 0) {
     if (completedSection) completedSection.classList.remove('hidden');
     if (completedContainer) {
-      completedContainer.innerHTML = completedCalls.slice(0, 5).map(c => renderCompletedCard(c)).join('');
+      completedContainer.innerHTML = completedCalls.slice(0, 5).map(c => `
+        <div class="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/5 text-xs text-gray-400">
+          <div class="flex items-center gap-2">
+            <i data-lucide="check-circle" class="w-4 h-4 text-emerald-400"></i>
+            <span class="font-bold text-gray-300">${c.table}</span>
+            <span>•</span>
+            <span>${c.typeName}</span>
+            ${c.handler ? `<span class="text-amber-400 font-medium">(${c.handler})</span>` : ''}
+          </div>
+          <span class="text-[11px] text-gray-500">${getElapsedText(c.createdTimestamp)}</span>
+        </div>
+      `).join('');
     }
   } else {
     if (completedSection) completedSection.classList.add('hidden');
   }
 
   if (typeof lucide !== 'undefined') lucide.createIcons();
-}
-
-function getElapsedText(timestamp) {
-  if (!timestamp) return 'Şimdi';
-  const sec = Math.max(0, Math.floor(Date.now() / 1000 - timestamp));
-  if (sec < 60) return `${sec} sn önce`;
-  const min = Math.floor(sec / 60);
-  return `${min} dk önce`;
 }
 
 function renderCallCard(call) {
@@ -345,7 +555,6 @@ function renderCallCard(call) {
     <div class="relative rounded-2xl bg-neutral-900/90 border border-white/10 p-4 shadow-xl transition-all ${!isInProgress ? pulseClass : 'border-blue-500/40 bg-blue-950/20'}">
       <div class="flex items-start justify-between gap-3">
         
-        <!-- Masa ve Tür Bilgisi -->
         <div class="flex items-center gap-3">
           <div class="w-14 h-14 rounded-2xl bg-black border border-white/15 flex flex-col items-center justify-center font-black text-amber-400 shadow-inner">
             <span class="text-[9px] text-gray-400 font-semibold uppercase tracking-wider">MASA</span>
@@ -377,7 +586,6 @@ function renderCallCard(call) {
           </div>
         </div>
 
-        <!-- Eylemler (Butonlar) -->
         <div class="flex items-center gap-2">
           ${!isInProgress ? `
             <button 
@@ -403,32 +611,20 @@ function renderCallCard(call) {
   `;
 }
 
-function renderCompletedCard(c) {
-  return `
-    <div class="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/5 text-xs text-gray-400">
-      <div class="flex items-center gap-2">
-        <i data-lucide="check-circle" class="w-4 h-4 text-emerald-400"></i>
-        <span class="font-bold text-gray-300">${c.table}</span>
-        <span>•</span>
-        <span>${c.typeName}</span>
-      </div>
-      <span class="text-[11px] text-gray-500">${getElapsedText(c.createdTimestamp)}</span>
-    </div>
-  `;
-}
-
 async function updateCallStatus(callId, newStatus) {
   try {
+    const handlerName = currentStaff ? currentStaff.name : 'Personel';
+    const handlerId = currentStaff ? currentStaff.id : '';
+
     const res = await fetch('/api/calls/status', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Staff-PIN': staffAuthPin || '5555'
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         callId,
         status: newStatus,
-        handler: 'Personel'
+        handler: handlerName,
+        handlerId: handlerId,
+        device: currentDevice
       })
     });
     if (res.ok) {
@@ -442,10 +638,7 @@ async function updateCallStatus(callId, newStatus) {
 async function clearCompletedCalls() {
   if (!confirm("Tamamlanan çağrı geçmişi temizlensin mi?")) return;
   try {
-    await fetch('/api/calls/clear', {
-      method: 'POST',
-      headers: { 'X-Staff-PIN': staffAuthPin || '5555' }
-    });
+    await fetch('/api/calls/clear', { method: 'POST' });
     await updateCallsLoop();
   } catch (e) {
     console.error("Clear calls error:", e);
@@ -468,7 +661,7 @@ function filterCalls(type) {
 }
 
 // =========================================================================
-// 4. KISITLI YETKİLİ ÜRÜN STOK YÖNETİMİ (TÜKENDİ / MEVCUT)
+// 6. KISITLI YETKİLİ ÜRÜN STOK YÖNETİMİ
 // =========================================================================
 
 async function loadMenuData() {
@@ -538,7 +731,6 @@ function renderStockItems() {
     return `
       <div class="flex items-center justify-between p-3.5 rounded-2xl bg-neutral-900/80 border border-white/10 transition-colors ${!isAvailable ? 'opacity-60 bg-red-950/10 border-red-500/20' : ''}">
         
-        <!-- Ürün Bilgisi (Salt Okunur - Fiyat ASLA Değiştirilemez) -->
         <div class="flex items-center gap-3 pr-2 flex-1 min-w-0">
           <div class="w-11 h-11 rounded-xl bg-black border border-white/10 overflow-hidden flex-shrink-0 flex items-center justify-center">
             ${item.image 
@@ -558,7 +750,6 @@ function renderStockItems() {
           </div>
         </div>
 
-        <!-- Stok Aç-Kapa Anahtarı -->
         <button 
           onclick="toggleItemStock('${item.id}', ${!isAvailable})" 
           class="px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all active:scale-95 flex-shrink-0 ${isAvailable ? 'bg-red-500/15 hover:bg-red-500/25 text-red-400 border border-red-500/30' : 'bg-emerald-500 hover:bg-emerald-400 text-black shadow-md shadow-emerald-500/20'}"
@@ -575,7 +766,6 @@ function renderStockItems() {
 }
 
 async function toggleItemStock(itemId, newAvailable) {
-  // Optimistic UI güncelleme
   if (menuData && menuData.items) {
     const item = menuData.items.find(i => i.id === itemId);
     if (item) item.isAvailable = newAvailable;
@@ -585,13 +775,13 @@ async function toggleItemStock(itemId, newAvailable) {
   try {
     const res = await fetch('/api/staff/toggle-stock', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Staff-PIN': staffAuthPin || '5555'
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         itemId,
-        isAvailable: newAvailable
+        isAvailable: newAvailable,
+        staffId: currentStaff ? currentStaff.id : '',
+        staffName: currentStaff ? currentStaff.name : 'Personel',
+        device: currentDevice
       })
     });
     if (!res.ok) {
@@ -605,7 +795,7 @@ async function toggleItemStock(itemId, newAvailable) {
 }
 
 // =========================================================================
-// 5. MASA HARİTASI (1-24 MASA GÖRÜNÜMÜ)
+// 7. MASA HARİTASI
 // =========================================================================
 
 function renderTablesGrid() {
@@ -659,7 +849,7 @@ function renderTablesGrid() {
 }
 
 // =========================================================================
-// 6. SEKME GEÇİŞLERİ & BAŞLATMA
+// 8. SEKME GEÇİŞLERİ & BAŞLATMA
 // =========================================================================
 
 function switchTab(tabId) {
@@ -692,14 +882,11 @@ function switchTab(tabId) {
 
 async function initStaffDashboard() {
   await loadMenuData();
-  updateNotifyBtnState();
   await updateCallsLoop();
 
-  // Her 2.5 saniyede bir yeni çağrı kontrolü
   if (pollInterval) clearInterval(pollInterval);
   pollInterval = setInterval(updateCallsLoop, 2500);
 
-  // Service Worker kaydı (PWA & Kilit ekranı bildirimleri için)
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(err => {
       console.warn("SW register error:", err);
@@ -707,18 +894,21 @@ async function initStaffDashboard() {
   }
 }
 
-// Sayfa yüklendiğinde otomatik kontrol
 document.addEventListener('DOMContentLoaded', async () => {
-  await loadMenuData();
+  const badgeEl = document.getElementById('detected-device-badge');
+  if (badgeEl) badgeEl.textContent = currentDevice;
 
-  if (staffAuthPin) {
+  await loadMenuData();
+  await fetchStaffList();
+
+  if (currentStaff) {
     document.getElementById('login-modal').classList.add('hidden');
     document.getElementById('staff-app').classList.remove('hidden');
+    updateHeaderStaffInfo();
     initStaffDashboard();
+    autoRegisterWebPush();
   } else {
     document.getElementById('login-modal').classList.remove('hidden');
-    const input = document.getElementById('staff-pin-input');
-    if (input) input.focus();
   }
 
   if (typeof lucide !== 'undefined') lucide.createIcons();

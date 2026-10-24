@@ -98,7 +98,7 @@ function logoutAdmin() {
 
 function switchTab(tab) {
   currentTab = tab;
-  const tabs = ['products', 'quick-price', 'categories', 'settings', 'qr-stands'];
+  const tabs = ['products', 'quick-price', 'categories', 'settings', 'qr-stands', 'staff'];
   tabs.forEach(t => {
     const btn = document.getElementById(`tab-btn-${t}`);
     const sec = document.getElementById(`tab-section-${t}`);
@@ -122,6 +122,11 @@ function switchTab(tab) {
   if (tab === 'categories') renderAdminCategories();
   if (tab === 'qr-stands') setupQrGenerator();
   if (tab === 'settings') fillSettingsForm();
+  if (tab === 'staff') {
+    loadStaffAdminData();
+    loadStaffLogsData();
+    loadStaffPerformanceData();
+  }
   if (window.lucide) lucide.createIcons();
 }
 
@@ -867,4 +872,311 @@ function importMenuBackup(event) {
     }
   };
   reader.readAsText(file);
+}
+
+/* ==========================================================================
+   PERSONEL, VARDİYA & AUDIT LOGLARI YÖNETİMİ
+   ========================================================================== */
+
+let adminStaffList = [];
+let adminLogsList = [];
+let currentLogFilter = 'all';
+
+async function loadStaffAdminData() {
+  const adminPin = getAdminPin();
+  try {
+    const res = await fetch('/api/staff/list', { cache: 'no-store' });
+    if (res.ok) {
+      const data = await res.json();
+      adminStaffList = data.staff || [];
+      renderAdminStaffTable();
+    }
+  } catch (e) {
+    console.error("Load staff admin error:", e);
+  }
+}
+
+async function loadStaffPerformanceData() {
+  const adminPin = getAdminPin();
+  try {
+    const res = await fetch('/api/staff/performance', {
+      headers: { 'X-Admin-PIN': adminPin },
+      cache: 'no-store'
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const perf = data.performance || [];
+      
+      // İstatistik sayaçlarını güncelle
+      const activeCount = perf.filter(p => p.isOnline).length;
+      const totalCalls = perf.reduce((acc, p) => acc + (p.completedCalls || 0), 0);
+      const star = perf.length > 0 && perf[0].completedCalls > 0 ? `${perf[0].name} (${perf[0].completedCalls} Çağrı)` : 'Henüz Yok';
+
+      const statActive = document.getElementById('stat-active-staff');
+      const statToday = document.getElementById('stat-today-calls');
+      const statStar = document.getElementById('stat-star-staff');
+
+      if (statActive) statActive.textContent = activeCount;
+      if (statToday) statToday.textContent = totalCalls;
+      if (statStar) statStar.textContent = star;
+
+      // Tabloyu zenginleştirilmiş verilerle doldur
+      adminStaffList = perf;
+      renderAdminStaffTable();
+    }
+  } catch (e) {
+    console.error("Load staff perf error:", e);
+  }
+}
+
+function renderAdminStaffTable() {
+  const tbody = document.getElementById('staff-table-body');
+  if (!tbody) return;
+
+  if (adminStaffList.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-gray-500">Kayıtlı personel bulunamadı.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = adminStaffList.map(s => {
+    const isOnline = !!s.isOnline;
+    return `
+      <tr class="hover:bg-white/5 transition-colors">
+        <td class="py-3 pr-3">
+          <div class="flex items-center gap-2.5">
+            <div class="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 font-bold text-xs">
+              ${s.name.charAt(0)}
+            </div>
+            <div>
+              <div class="font-bold text-white">${s.name}</div>
+              <div class="text-[10px] text-gray-500">ID: ${s.id}</div>
+            </div>
+          </div>
+        </td>
+        <td class="py-3 px-3">
+          <span class="px-2 py-0.5 rounded-lg bg-white/5 border border-white/5 text-[11px] font-medium text-gray-300">
+            ${s.role}
+          </span>
+        </td>
+        <td class="py-3 px-3 font-mono text-amber-400 font-bold">
+          <span class="bg-black/50 px-2 py-1 rounded-md border border-white/5">
+            ${s.pin ? s.pin : '••••'}
+          </span>
+        </td>
+        <td class="py-3 px-3">
+          ${isOnline ? `
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 text-[11px] font-semibold">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Vardiyada
+            </span>
+          ` : `
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/5 text-gray-500 text-[11px]">
+              <span class="w-1.5 h-1.5 rounded-full bg-gray-600"></span> Çevrimdışı
+            </span>
+          `}
+        </td>
+        <td class="py-3 px-3 font-bold text-amber-300">
+          ${s.completedCalls || 0} Çağrı
+        </td>
+        <td class="py-3 px-3 text-gray-300">
+          ${s.totalHours || 0} Saat
+        </td>
+        <td class="py-3 px-3 text-gray-400 text-[11px]">
+          ${s.lastDevice && s.lastDevice !== 'Bilinmiyor' ? s.lastDevice : '—'}
+        </td>
+        <td class="py-3 pl-3 text-right">
+          <div class="flex items-center justify-end gap-1.5">
+            <button onclick="editStaffMember('${s.id}')" class="p-1.5 rounded-lg bg-white/5 hover:bg-amber-500/20 text-gray-300 hover:text-amber-400 transition-colors" title="Düzenle">
+              <i data-lucide="edit-2" class="w-3.5 h-3.5"></i>
+            </button>
+            <button onclick="deleteStaffMember('${s.id}')" class="p-1.5 rounded-lg bg-white/5 hover:bg-red-500/20 text-gray-300 hover:text-red-400 transition-colors" title="Sil">
+              <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+            </button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  if (window.lucide) lucide.createIcons();
+}
+
+async function loadStaffLogsData() {
+  const adminPin = getAdminPin();
+  try {
+    const res = await fetch('/api/staff/logs', {
+      headers: { 'X-Admin-PIN': adminPin },
+      cache: 'no-store'
+    });
+    if (res.ok) {
+      const data = await res.json();
+      adminLogsList = data.logs || [];
+      renderLogsList();
+    }
+  } catch (e) {
+    console.error("Load logs error:", e);
+  }
+}
+
+function filterLogs(type) {
+  currentLogFilter = type;
+  ['all', 'login', 'call', 'stock'].forEach(t => {
+    const btn = document.getElementById(`log-filter-${t}`);
+    if (btn) {
+      if (t === type) {
+        btn.className = 'px-2.5 py-1 rounded-lg bg-amber-500 text-black text-[11px] font-bold';
+      } else {
+        btn.className = 'px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 text-[11px] font-medium border border-white/5';
+      }
+    }
+  });
+  renderLogsList();
+}
+
+function renderLogsList() {
+  const container = document.getElementById('logs-container');
+  if (!container) return;
+
+  let filtered = adminLogsList;
+  if (currentLogFilter === 'login') {
+    filtered = filtered.filter(l => l.action === 'login' || l.action === 'logout');
+  } else if (currentLogFilter === 'call') {
+    filtered = filtered.filter(l => l.action === 'call_taken' || l.action === 'call_completed');
+  } else if (currentLogFilter === 'stock') {
+    filtered = filtered.filter(l => l.action === 'stock_toggle');
+  }
+
+  if (filtered.length === 0) {
+    container.innerHTML = `<div class="py-8 text-center text-xs text-gray-500">Henüz kaydedilmiş işlem günlüğü yok.</div>`;
+    return;
+  }
+
+  const actionIcons = {
+    'login': '<i data-lucide="log-in" class="w-4 h-4 text-emerald-400"></i>',
+    'logout': '<i data-lucide="log-out" class="w-4 h-4 text-red-400"></i>',
+    'call_taken': '<i data-lucide="footprints" class="w-4 h-4 text-blue-400"></i>',
+    'call_completed': '<i data-lucide="check-circle" class="w-4 h-4 text-emerald-400"></i>',
+    'stock_toggle': '<i data-lucide="package" class="w-4 h-4 text-amber-400"></i>'
+  };
+
+  container.innerHTML = filtered.map(l => `
+    <div class="p-3 rounded-2xl bg-black border border-white/5 flex items-center justify-between text-xs hover:border-white/10 transition-colors">
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-xl bg-white/5 flex items-center justify-center flex-shrink-0">
+          ${actionIcons[l.action] || '<i data-lucide="activity" class="w-4 h-4 text-gray-400"></i>'}
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="font-bold text-white">${l.staffName}</span>
+            <span class="text-[10px] text-gray-400">(${l.role})</span>
+            <span class="text-gray-600">•</span>
+            <span class="text-amber-300 font-medium">${l.title}</span>
+          </div>
+          <div class="text-[11px] text-gray-500 mt-0.5 flex items-center gap-2">
+            <span>📱 ${l.device}</span>
+            ${l.details ? `<span>• ${l.details}</span>` : ''}
+          </div>
+        </div>
+      </div>
+      <div class="text-[11px] text-gray-500 font-mono flex-shrink-0 text-right">
+        ${l.timeStr || ''}
+      </div>
+    </div>
+  `).join('');
+
+  if (window.lucide) lucide.createIcons();
+}
+
+function openStaffModal(staffId = null) {
+  const modal = document.getElementById('edit-staff-modal');
+  const title = document.getElementById('modal-staff-title');
+  const formId = document.getElementById('form-staff-id');
+  const formName = document.getElementById('form-staff-name');
+  const formRole = document.getElementById('form-staff-role');
+  const formPin = document.getElementById('form-staff-pin');
+
+  if (!modal) return;
+
+  if (staffId) {
+    const s = adminStaffList.find(x => x.id === staffId);
+    if (s) {
+      title.textContent = 'Personeli Düzenle';
+      formId.value = s.id;
+      formName.value = s.name;
+      formRole.value = s.role;
+      formPin.value = s.pin || '1111';
+    }
+  } else {
+    title.textContent = 'Yeni Personel Ekle';
+    formId.value = '';
+    formName.value = '';
+    formRole.value = 'Garson';
+    formPin.value = Math.floor(1000 + Math.random() * 9000).toString();
+  }
+
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
+}
+
+function closeStaffModal() {
+  const modal = document.getElementById('edit-staff-modal');
+  if (modal) {
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+  }
+}
+
+function editStaffMember(staffId) {
+  openStaffModal(staffId);
+}
+
+async function handleSaveStaff(e) {
+  e.preventDefault();
+  const adminPin = getAdminPin();
+  const id = document.getElementById('form-staff-id').value;
+  const name = document.getElementById('form-staff-name').value.trim();
+  const role = document.getElementById('form-staff-role').value;
+  const pin = document.getElementById('form-staff-pin').value.trim();
+
+  if (!name || !pin) return;
+
+  try {
+    const res = await fetch('/api/admin/staff/save', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Admin-PIN': adminPin
+      },
+      body: JSON.stringify({ id, name, role, pin })
+    });
+    if (res.ok) {
+      closeStaffModal();
+      showToast('✅ Personel başarıyla kaydedildi!', 'success');
+      await loadStaffPerformanceData();
+    } else {
+      alert("Personel kaydedilemedi.");
+    }
+  } catch (err) {
+    console.error("Save staff error:", err);
+  }
+}
+
+async function deleteStaffMember(staffId) {
+  if (!confirm("Bu personeli silmek istediğinize emin misiniz?")) return;
+  const adminPin = getAdminPin();
+  try {
+    const res = await fetch('/api/admin/staff/delete', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Admin-PIN': adminPin
+      },
+      body: JSON.stringify({ id: staffId })
+    });
+    if (res.ok) {
+      showToast('Personel silindi.', 'info');
+      await loadStaffPerformanceData();
+    }
+  } catch (err) {
+    console.error("Delete staff error:", err);
+  }
 }
