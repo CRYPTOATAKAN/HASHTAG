@@ -1,19 +1,6 @@
 {
   "feedbacks": [
     {
-      "id": "fb-1792851234-4637",
-      "table": "Masa 19",
-      "rating": 3,
-      "tags": [
-        "Köz Geç Geldi",
-        "Yavaş Servis"
-      ],
-      "comment": "Köz takviyesi 25 dakika gecikti, biraz bekledik.",
-      "callId": "",
-      "timestamp": 1792851234,
-      "timeStr": "24.10.2026 17:13:54"
-    },
-    {
       "id": "fb-init-1",
       "table": "Masa 8",
       "rating": 5,
@@ -23,8 +10,8 @@
       ],
       "comment": "Nargilenin dumanı ve köz servisi harikaydı, teşekkürler!",
       "callId": "",
-      "timestamp": 1792849434,
-      "timeStr": "24.10.2026 16:43:54"
+      "timestamp": 1792852998,
+      "timeStr": "24.10.2026 17:43:18"
     },
     {
       "id": "fb-init-2",
@@ -36,8 +23,8 @@
       ],
       "comment": "Personel çok ilgiliydi, ortam çok nezih.",
       "callId": "",
-      "timestamp": 1792845834,
-      "timeStr": "24.10.2026 15:43:54"
+      "timestamp": 1792849398,
+      "timeStr": "24.10.2026 16:43:18"
     },
     {
       "id": "fb-init-3",
@@ -49,8 +36,8 @@
       ],
       "comment": "Köz değişimi biraz gecikti, masayla daha sık ilgilenilebilir.",
       "callId": "",
-      "timestamp": 1792838634,
-      "timeStr": "24.10.2026 13:43:54"
+      "timestamp": 1792842198,
+      "timeStr": "24.10.2026 14:43:18"
     },
     {
       "id": "fb-init-4",
@@ -62,8 +49,8 @@
       ],
       "comment": "Kahveler ve tütün aroması çok başarılı.",
       "callId": "",
-      "timestamp": 1792764834,
-      "timeStr": "23.10.2026 17:13:54"
+      "timestamp": 1792768398,
+      "timeStr": "23.10.2026 18:13:18"
     },
     {
       "id": "fb-init-5",
@@ -75,8 +62,8 @@
       ],
       "comment": "Müzik sesi fazlaydı, garson çağırma butonuna geç yanıt verildi.",
       "callId": "",
-      "timestamp": 1792678434,
-      "timeStr": "22.10.2026 17:13:54"
+      "timestamp": 1792681998,
+      "timeStr": "22.10.2026 18:13:18"
     },
     {
       "id": "fb-init-6",
@@ -88,8 +75,8 @@
       ],
       "comment": "Harika bir lounge mekanı, sürekli geliyoruz.",
       "callId": "",
-      "timestamp": 1792592034,
-      "timeStr": "21.10.2026 17:13:54"
+      "timestamp": 1792595598,
+      "timeStr": "21.10.2026 18:13:18"
     },
     {
       "id": "fb-init-7",
@@ -101,8 +88,8 @@
       ],
       "comment": "Sunumlar çok özenliydi.",
       "callId": "",
-      "timestamp": 1792505634,
-      "timeStr": "20.10.2026 17:13:54"
+      "timestamp": 1792509198,
+      "timeStr": "20.10.2026 18:13:18"
     },
     {
       "id": "fb-init-8",
@@ -114,8 +101,8 @@
       ],
       "comment": "Personel güler yüzlü, servis on numara.",
       "callId": "",
-      "timestamp": 1792246434,
-      "timeStr": "17.10.2026 17:13:54"
+      "timestamp": 1792249998,
+      "timeStr": "17.10.2026 18:13:18"
     },
     {
       "id": "fb-init-9",
@@ -126,8 +113,8 @@
       ],
       "comment": "Atmosfer çok şık ve nezih.",
       "callId": "",
-      "timestamp": 1791814434,
-      "timeStr": "12.10.2026 17:13:54"
+      "timestamp": 1791817998,
+      "timeStr": "12.10.2026 18:13:18"
     },
     {
       "id": "fb-init-10",
@@ -138,8 +125,8 @@
       ],
       "comment": "Yoğun saatlerde köz takviyesi biraz aksıyor.",
       "callId": "",
-      "timestamp": 1791123234,
-      "timeStr": "04.10.2026 17:13:54"
+      "timestamp": 1791126798,
+      "timeStr": "04.10.2026 18:13:18"
     },
     {
       "id": "fb-init-11",
@@ -151,8 +138,8 @@
       ],
       "comment": "Özel karışım nargile enfesti.",
       "callId": "",
-      "timestamp": 1790691234,
-      "timeStr": "29.09.2026 17:13:54"
+      "timestamp": 1790694798,
+      "timeStr": "29.09.2026 18:13:18"
     },
     {
       "id": "fb-init-12",
@@ -164,8 +151,8 @@
       ],
       "comment": "HASHTAG kalitesi tartışılmaz, favori mekanımız.",
       "callId": "",
-      "timestamp": 1789395234,
-      "timeStr": "14.09.2026 17:13:54"
+      "timestamp": 1789398798,
+      "timeStr": "14.09.2026 18:13:18"
     },
     {
       "id": "fb-init-13",
@@ -176,8 +163,8 @@
       ],
       "comment": "Hızlı servis ve kusursuz temizlik.",
       "callId": "",
-      "timestamp": 1786803234,
-      "timeStr": "15.08.2026 17:13:54"
+      "timestamp": 1786806798,
+      "timeStr": "15.08.2026 18:13:18"
     },
     {
       "id": "fb-init-14",
@@ -188,8 +175,9 @@
       ],
       "comment": "Genel olarak gayet memnun kaldık.",
       "callId": "",
-      "timestamp": 1783851234,
-      "timeStr": "12.07.2026 13:13:54"
+      "timestamp": 1783854798,
+      "timeStr": "12.07.2026 14:13:18"
     }
-  ]
+  ],
+  "initialized": true
 }

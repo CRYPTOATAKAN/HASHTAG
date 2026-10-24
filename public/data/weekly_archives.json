@@ -1,0 +1,119 @@
+{
+  "activeWeekKey": "2026-W43",
+  "activeWeekInfo": {
+    "weekKey": "2026-W43",
+    "weekNum": 43,
+    "year": 2026,
+    "dateRange": "19.10.2026 - 25.10.2026",
+    "label": "43. Hafta (19.10.2026 - 25.10.2026)"
+  },
+  "lastResetAt": "Pazartesi 00:00 Otomatik",
+  "archives": [
+    {
+      "id": "rep-2026-W42-auto",
+      "weekKey": "2026-W42",
+      "weekLabel": "42. Hafta Raporu",
+      "dateRange": "12.10.2026 - 18.10.2026",
+      "archivedAt": "18.10.2026 23:59",
+      "timestamp": 1792336398,
+      "reason": "Otomatik Haftalık Devir",
+      "totalFeedbacks": 28,
+      "avgRating": 4.7,
+      "satisfactionPct": 89,
+      "lowRatingCount": 3,
+      "starCounts": {
+        "5": 21,
+        "4": 4,
+        "3": 2,
+        "2": 1,
+        "1": 0
+      },
+      "totalCalls": 94,
+      "callBreakdown": {
+        "coal": 48,
+        "waiter": 31,
+        "bill": 15
+      },
+      "totalLogs": 142,
+      "topStaff": "Ahmet Yılmaz (42 Çağrı)",
+      "lowRatingItems": [
+        {
+          "table": "Masa 6",
+          "rating": 3,
+          "tags": [
+            "⏳ Köz Gecikti"
+          ],
+          "comment": "Cuma akşamı yoğun saatte köz değişimi 20 dakika sürdü.",
+          "timeStr": "12.10.2026 21:40"
+        },
+        {
+          "table": "Masa 12",
+          "rating": 2,
+          "tags": [
+            "🔊 Yüksek Müzik",
+            "🐢 Yavaş Servis"
+          ],
+          "comment": "Hoparlör altı masada müzik sesi sohbeti zorlaştırdı.",
+          "timeStr": "12.10.2026 22:15"
+        },
+        {
+          "table": "Masa 19",
+          "rating": 3,
+          "tags": [
+            "🐢 Yavaş Servis"
+          ],
+          "comment": "Hesap isterken biraz bekledik ama personel kibardı.",
+          "timeStr": "18.10.2026 20:10"
+        }
+      ]
+    },
+    {
+      "id": "rep-2026-W41-auto",
+      "weekKey": "2026-W41",
+      "weekLabel": "41. Hafta Raporu",
+      "dateRange": "05.10.2026 - 11.10.2026",
+      "archivedAt": "11.10.2026 23:59",
+      "timestamp": 1791731598,
+      "reason": "Otomatik Haftalık Devir",
+      "totalFeedbacks": 34,
+      "avgRating": 4.8,
+      "satisfactionPct": 94,
+      "lowRatingCount": 2,
+      "starCounts": {
+        "5": 27,
+        "4": 5,
+        "3": 2,
+        "2": 0,
+        "1": 0
+      },
+      "totalCalls": 112,
+      "callBreakdown": {
+        "coal": 56,
+        "waiter": 38,
+        "bill": 18
+      },
+      "totalLogs": 168,
+      "topStaff": "Murat Demir (51 Çağrı)",
+      "lowRatingItems": [
+        {
+          "table": "Masa 4",
+          "rating": 3,
+          "tags": [
+            "⏳ Köz Gecikti"
+          ],
+          "comment": "İkinci köz değişimi biraz gecikti.",
+          "timeStr": "05.10.2026 21:05"
+        },
+        {
+          "table": "Masa 10",
+          "rating": 3,
+          "tags": [
+            "🐢 Yavaş Servis"
+          ],
+          "comment": "Kahve servisi biraz geç geldi ancak lezzetliydi.",
+          "timeStr": "11.10.2026 19:30"
+        }
+      ]
+    }
+  ]
+}

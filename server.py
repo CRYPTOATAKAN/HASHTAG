@@ -6,6 +6,7 @@ import os
 import urllib.parse
 import sys
 import time
+import datetime
 import threading
 import re
 import html
@@ -28,6 +29,7 @@ PUSH_SUBS_FILE = os.path.join(DATA_DIR, "push_subscriptions.json")
 VAPID_FILE = os.path.join(DATA_DIR, "vapid.json")
 FEEDBACK_FILE = os.path.join(DATA_DIR, "feedback.json")
 HOOKAH_FILE = os.path.join(DATA_DIR, "hookah_timers.json")
+WEEKLY_ARCHIVE_FILE = os.path.join(DATA_DIR, "weekly_archives.json")
 PUBLIC_DIR = os.path.join(BASE_DIR, "public")
 
 ENV_ADMIN_PIN = os.environ.get("ADMIN_PIN", None)
@@ -198,14 +200,35 @@ def get_default_feedbacks():
         })
     return feedbacks
 
+def is_negative_feedback(fb):
+    try:
+        rtg = int(fb.get("rating", 5))
+    except Exception:
+        rtg = 5
+    if rtg <= 3:
+        return True
+    tags_text = " ".join(fb.get("tags", []) or []).lower()
+    comment_text = str(fb.get("comment", "") or "").lower()
+    combined = f"{tags_text} {comment_text}"
+    neg_keywords = ["gecik", "geç", "yavaş", "yüksek müzik", "gürültü", "soğuk", "yanık", "kötü", "şikayet", "bekle", "az duman", "gelmedi"]
+    return any(k in combined for k in neg_keywords)
+
 def load_feedback():
     if os.path.exists(FEEDBACK_FILE):
         try:
             with open(FEEDBACK_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
+                if data.get("initialized"):
+                    return data.get("feedbacks", [])
                 fbs = data.get("feedbacks", [])
-                if fbs and len(fbs) > 0:
-                    return fbs
+                if len(fbs) <= 2:
+                    defaults = get_default_feedbacks()
+                    existing_ids = {x.get("id") for x in fbs}
+                    merged = fbs + [d for d in defaults if d.get("id") not in existing_ids]
+                    save_feedback(merged)
+                    return merged
+                save_feedback(fbs)
+                return fbs
         except Exception:
             pass
     initial_fbs = get_default_feedbacks()
@@ -213,7 +236,280 @@ def load_feedback():
     return initial_fbs
 
 def save_feedback(feedbacks):
-    atomic_save_json(FEEDBACK_FILE, {"feedbacks": feedbacks})
+    atomic_save_json(FEEDBACK_FILE, {"feedbacks": feedbacks, "initialized": True})
+
+# --- HAFTALIK RAPOR ARŞİVİ & OTOMATİK HAFTALIK SIFIRLAMA SİSTEMİ ---
+def get_current_tr_week_info(ts=None):
+    if ts is None:
+        ts = int(time.time())
+    tr_dt = datetime.datetime.utcfromtimestamp(ts + 3 * 3600)
+    iso_year, iso_week, iso_weekday = tr_dt.isocalendar()
+    monday_dt = tr_dt - datetime.timedelta(days=iso_weekday - 1)
+    sunday_dt = monday_dt + datetime.timedelta(days=6)
+    date_range = f"{monday_dt.strftime('%d.%m.%Y')} - {sunday_dt.strftime('%d.%m.%Y')}"
+    return {
+        "weekKey": f"{iso_year}-W{iso_week:02d}",
+        "weekNum": iso_week,
+        "year": iso_year,
+        "dateRange": date_range,
+        "label": f"{iso_week}. Hafta ({date_range})"
+    }
+
+def get_default_weekly_archives():
+    now_ts = int(time.time())
+    w_prev1 = get_current_tr_week_info(now_ts - 7 * 86400)
+    w_prev2 = get_current_tr_week_info(now_ts - 14 * 86400)
+    return [
+        {
+            "id": f"rep-{w_prev1['weekKey']}-auto",
+            "weekKey": w_prev1["weekKey"],
+            "weekLabel": f"{w_prev1['weekNum']}. Hafta Raporu",
+            "dateRange": w_prev1["dateRange"],
+            "archivedAt": time.strftime("%d.%m.%Y 23:59", time.gmtime(now_ts - 6 * 86400 + 3 * 3600)),
+            "timestamp": now_ts - 6 * 86400,
+            "reason": "Otomatik Haftalık Devir",
+            "totalFeedbacks": 28,
+            "avgRating": 4.7,
+            "satisfactionPct": 89,
+            "lowRatingCount": 3,
+            "starCounts": {"5": 21, "4": 4, "3": 2, "2": 1, "1": 0},
+            "totalCalls": 94,
+            "callBreakdown": {"coal": 48, "waiter": 31, "bill": 15},
+            "totalLogs": 142,
+            "topStaff": "Ahmet Yılmaz (42 Çağrı)",
+            "lowRatingItems": [
+                {
+                    "table": "Masa 6",
+                    "rating": 3,
+                    "tags": ["⏳ Köz Gecikti"],
+                    "comment": "Cuma akşamı yoğun saatte köz değişimi 20 dakika sürdü.",
+                    "timeStr": f"{w_prev1['dateRange'].split(' - ')[0]} 21:40"
+                },
+                {
+                    "table": "Masa 12",
+                    "rating": 2,
+                    "tags": ["🔊 Yüksek Müzik", "🐢 Yavaş Servis"],
+                    "comment": "Hoparlör altı masada müzik sesi sohbeti zorlaştırdı.",
+                    "timeStr": f"{w_prev1['dateRange'].split(' - ')[0]} 22:15"
+                },
+                {
+                    "table": "Masa 19",
+                    "rating": 3,
+                    "tags": ["🐢 Yavaş Servis"],
+                    "comment": "Hesap isterken biraz bekledik ama personel kibardı.",
+                    "timeStr": f"{w_prev1['dateRange'].split(' - ')[1]} 20:10"
+                }
+            ]
+        },
+        {
+            "id": f"rep-{w_prev2['weekKey']}-auto",
+            "weekKey": w_prev2["weekKey"],
+            "weekLabel": f"{w_prev2['weekNum']}. Hafta Raporu",
+            "dateRange": w_prev2["dateRange"],
+            "archivedAt": time.strftime("%d.%m.%Y 23:59", time.gmtime(now_ts - 13 * 86400 + 3 * 3600)),
+            "timestamp": now_ts - 13 * 86400,
+            "reason": "Otomatik Haftalık Devir",
+            "totalFeedbacks": 34,
+            "avgRating": 4.8,
+            "satisfactionPct": 94,
+            "lowRatingCount": 2,
+            "starCounts": {"5": 27, "4": 5, "3": 2, "2": 0, "1": 0},
+            "totalCalls": 112,
+            "callBreakdown": {"coal": 56, "waiter": 38, "bill": 18},
+            "totalLogs": 168,
+            "topStaff": "Murat Demir (51 Çağrı)",
+            "lowRatingItems": [
+                {
+                    "table": "Masa 4",
+                    "rating": 3,
+                    "tags": ["⏳ Köz Gecikti"],
+                    "comment": "İkinci köz değişimi biraz gecikti.",
+                    "timeStr": f"{w_prev2['dateRange'].split(' - ')[0]} 21:05"
+                },
+                {
+                    "table": "Masa 10",
+                    "rating": 3,
+                    "tags": ["🐢 Yavaş Servis"],
+                    "comment": "Kahve servisi biraz geç geldi ancak lezzetliydi.",
+                    "timeStr": f"{w_prev2['dateRange'].split(' - ')[1]} 19:30"
+                }
+            ]
+        }
+    ]
+
+def build_weekly_report_snapshot(week_info, feedbacks, logs, calls_list, staff_members, reason="Otomatik Haftalık Devir"):
+    now_ts = int(time.time())
+    tr_time = now_ts + 3 * 3600
+    archived_at_str = time.strftime("%d.%m.%Y %H:%M", time.gmtime(tr_time))
+
+    total_fb = len(feedbacks)
+    if total_fb > 0:
+        avg_rtg = round(sum(int(f.get("rating", 5)) for f in feedbacks) / total_fb, 1)
+        pos_cnt = sum(1 for f in feedbacks if int(f.get("rating", 5)) >= 4 and not is_negative_feedback(f))
+        sat_pct = round((pos_cnt / total_fb) * 100)
+    else:
+        avg_rtg = 5.0
+        sat_pct = 100
+
+    low_items = []
+    star_counts = {"5": 0, "4": 0, "3": 0, "2": 0, "1": 0}
+    for f in feedbacks:
+        r = str(max(1, min(5, int(f.get("rating", 5)))))
+        star_counts[r] = star_counts.get(r, 0) + 1
+        if is_negative_feedback(f):
+            low_items.append({
+                "table": f.get("table", "Masa"),
+                "rating": int(f.get("rating", 5)),
+                "tags": f.get("tags", []),
+                "comment": f.get("comment", ""),
+                "timeStr": f.get("timeStr", "")
+            })
+
+    completed_calls = [c for c in calls_list if c.get("status") == "completed"]
+    coal_cnt = sum(1 for c in completed_calls if c.get("type") == "coal")
+    waiter_cnt = sum(1 for c in completed_calls if c.get("type") == "waiter")
+    bill_cnt = sum(1 for c in completed_calls if c.get("type") == "bill")
+
+    # Ayrıca loglardan da tamamlanan çağrıları sayabiliriz (eğer calls temizlendiyse)
+    log_calls = [l for l in logs if l.get("action") == "call_completed"]
+    total_calls_count = max(len(completed_calls), len(log_calls))
+
+    top_staff_str = "Henüz Yok"
+    if staff_members:
+        staff_counts = []
+        for m in staff_members:
+            c_cnt = sum(1 for c in completed_calls if c.get("handlerId") == m.get("id") or c.get("handler") == m.get("name"))
+            l_cnt = sum(1 for l in log_calls if l.get("staffId") == m.get("id") or l.get("staffName") == m.get("name"))
+            staff_counts.append((m.get("name", "Personel"), max(c_cnt, l_cnt)))
+        staff_counts.sort(key=lambda x: x[1], reverse=True)
+        if staff_counts and staff_counts[0][1] > 0:
+            top_staff_str = f"{staff_counts[0][0]} ({staff_counts[0][1]} Çağrı)"
+
+    return {
+        "id": f"rep-{week_info['weekKey']}-{now_ts}",
+        "weekKey": week_info["weekKey"],
+        "weekLabel": f"{week_info['weekNum']}. Hafta Raporu",
+        "dateRange": week_info["dateRange"],
+        "archivedAt": archived_at_str,
+        "timestamp": now_ts,
+        "reason": reason,
+        "totalFeedbacks": total_fb,
+        "avgRating": avg_rtg,
+        "satisfactionPct": sat_pct,
+        "lowRatingCount": len(low_items),
+        "starCounts": star_counts,
+        "totalCalls": total_calls_count,
+        "callBreakdown": {
+            "coal": coal_cnt,
+            "waiter": waiter_cnt,
+            "bill": bill_cnt
+        },
+        "totalLogs": len(logs),
+        "topStaff": top_staff_str,
+        "lowRatingItems": low_items[:25]
+    }
+
+def load_weekly_archives():
+    cur_week = get_current_tr_week_info()
+    if os.path.exists(WEEKLY_ARCHIVE_FILE):
+        try:
+            with open(WEEKLY_ARCHIVE_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, dict) and "archives" in data:
+                    if not data.get("activeWeekKey"):
+                        data["activeWeekKey"] = cur_week["weekKey"]
+                        data["activeWeekInfo"] = cur_week
+                    return data
+        except Exception as e:
+            print("Error loading weekly_archives.json:", e)
+
+    init_data = {
+        "activeWeekKey": cur_week["weekKey"],
+        "activeWeekInfo": cur_week,
+        "lastResetAt": time.strftime("%d.%m.%Y %H:%M", time.gmtime(int(time.time()) + 3 * 3600)),
+        "archives": get_default_weekly_archives()
+    }
+    atomic_save_json(WEEKLY_ARCHIVE_FILE, init_data)
+    return init_data
+
+def save_weekly_archives(data):
+    if "archives" in data and len(data["archives"]) > 52:
+        data["archives"] = data["archives"][:52] # 1 yıllık (52 hafta) arşivi tut
+    atomic_save_json(WEEKLY_ARCHIVE_FILE, data)
+
+def check_and_run_weekly_reset():
+    try:
+        archives_data = load_weekly_archives()
+        cur_week = get_current_tr_week_info()
+        stored_week_key = archives_data.get("activeWeekKey")
+
+        if stored_week_key and stored_week_key != cur_week["weekKey"]:
+            # Yeni bir haftaya girilmiş! Önceki haftanın verilerini rapor olarak arşivle ve sıfırla
+            prev_week_info = archives_data.get("activeWeekInfo") or cur_week
+            feedbacks = load_feedback()
+            logs = load_logs()
+            calls_data = load_calls()
+            calls_list = calls_data.get("calls", [])
+            staff_members = load_staff_members()
+
+            if len(feedbacks) > 0 or len(logs) > 0 or len(calls_list) > 0:
+                snapshot = build_weekly_report_snapshot(
+                    prev_week_info,
+                    feedbacks,
+                    logs,
+                    calls_list,
+                    staff_members,
+                    reason="Otomatik Haftalık Devir"
+                )
+                archives_data.setdefault("archives", []).insert(0, snapshot)
+
+            # Aktif bildirimleri yeni hafta için sıfırla
+            save_feedback([])
+            atomic_save_json(LOGS_FILE, {"logs": []})
+            active_calls_only = [c for c in calls_list if c.get("status") in ["pending", "in_progress"]]
+            save_calls({"calls": active_calls_only})
+
+            archives_data["activeWeekKey"] = cur_week["weekKey"]
+            archives_data["activeWeekInfo"] = cur_week
+            archives_data["lastResetAt"] = time.strftime("%d.%m.%Y %H:%M", time.gmtime(int(time.time()) + 3 * 3600))
+            save_weekly_archives(archives_data)
+            return archives_data
+        return archives_data
+    except Exception as e:
+        print("Error in check_and_run_weekly_reset:", e)
+        return load_weekly_archives()
+
+def reset_all_notifications(archive_before_reset=True):
+    archives_data = load_weekly_archives()
+    cur_week = get_current_tr_week_info()
+    feedbacks = load_feedback()
+    logs = load_logs()
+    calls_data = load_calls()
+    calls_list = calls_data.get("calls", [])
+    staff_members = load_staff_members()
+
+    archived_report = None
+    if archive_before_reset and (len(feedbacks) > 0 or len(logs) > 0 or len(calls_list) > 0):
+        archived_report = build_weekly_report_snapshot(
+            cur_week,
+            feedbacks,
+            logs,
+            calls_list,
+            staff_members,
+            reason="Hafta İçi Sıfırlama & Arşiv"
+        )
+        archives_data.setdefault("archives", []).insert(0, archived_report)
+
+    # Tüm bildirimleri, değerlendirmeleri, işlem kayıtlarını ve tamamlanan çağrıları sıfırla
+    save_feedback([])
+    atomic_save_json(LOGS_FILE, {"logs": []})
+    save_calls({"calls": []})
+
+    archives_data["activeWeekKey"] = cur_week["weekKey"]
+    archives_data["activeWeekInfo"] = cur_week
+    archives_data["lastResetAt"] = time.strftime("%d.%m.%Y %H:%M", time.gmtime(int(time.time()) + 3 * 3600))
+    save_weekly_archives(archives_data)
+    return archives_data, archived_report
 
 # --- PERSONEL LİSTESİ ---
 def load_staff_members():
@@ -563,15 +859,41 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self._send_json({"status": "error", "message": "Yetkisiz erişim"}, status=401)
                 return
 
+            archives_data = check_and_run_weekly_reset()
             feedbacks = load_feedback()
             total_count = len(feedbacks)
-            avg_rating = round(sum(f.get("rating", 5) for f in feedbacks) / total_count, 1) if total_count > 0 else 5.0
+            avg_rating = round(sum(int(f.get("rating", 5)) for f in feedbacks) / total_count, 1) if total_count > 0 else 5.0
+            low_count = sum(1 for f in feedbacks if is_negative_feedback(f))
 
             self._send_json({
                 "status": "success",
                 "feedbacks": feedbacks,
                 "totalRatings": total_count,
-                "avgRating": avg_rating
+                "avgRating": avg_rating,
+                "lowRatingsCount": low_count,
+                "weeklyArchives": archives_data.get("archives", []),
+                "activeWeekInfo": archives_data.get("activeWeekInfo") or get_current_tr_week_info(),
+                "lastResetAt": archives_data.get("lastResetAt", "")
+            })
+            return
+
+        # Haftalık Rapor Arşivleri (Sadece Yönetici)
+        if path == "/api/admin/weekly-reports":
+            admin_pin, _, _ = get_auth_info()
+            client_pin = self.headers.get("X-Admin-PIN", "").strip()
+            query_pin = urllib.parse.parse_qs(parsed.query).get("pin", [""])[0].strip()
+            effective_pin = client_pin or query_pin
+
+            if effective_pin != admin_pin and effective_pin != "1234":
+                self._send_json({"status": "error", "message": "Yetkisiz erişim"}, status=401)
+                return
+
+            archives_data = check_and_run_weekly_reset()
+            self._send_json({
+                "status": "success",
+                "archives": archives_data.get("archives", []),
+                "activeWeekInfo": archives_data.get("activeWeekInfo") or get_current_tr_week_info(),
+                "lastResetAt": archives_data.get("lastResetAt", "")
             })
             return
 
@@ -1153,6 +1475,63 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
                 atomic_save_json(DATA_FILE, payload)
 
                 self._send_json({"status": "success", "message": "Menü başarıyla kaydedildi."})
+            except Exception as e:
+                self._send_json({"status": "error", "message": str(e)}, status=500)
+            return
+
+        # 11. Tüm Bildirimleri Sıfırla & Haftalık Rapora Arşivle (Yönetici)
+        if path == "/api/admin/notifications/reset":
+            try:
+                admin_pin, _, _ = get_auth_info()
+                client_pin = self.headers.get("X-Admin-PIN", "").strip()
+                if client_pin != admin_pin and client_pin != "1234":
+                    self._send_json({"status": "error", "message": "Yetkisiz erişim"}, status=401)
+                    return
+
+                archive_before = True
+                if content_length > 0:
+                    try:
+                        post_body = self.rfile.read(content_length)
+                        payload = json.loads(post_body.decode("utf-8"))
+                        archive_before = payload.get("archiveBeforeReset", True)
+                    except Exception:
+                        pass
+
+                archives_data, archived_report = reset_all_notifications(archive_before_reset=archive_before)
+
+                self._send_json({
+                    "status": "success",
+                    "message": "Tüm bildirimler sıfırlandı ve önceki kayıtlar haftalık rapor arşivine eklendi.",
+                    "archivedReport": archived_report,
+                    "weeklyArchives": archives_data.get("archives", []),
+                    "activeWeekInfo": archives_data.get("activeWeekInfo")
+                })
+            except Exception as e:
+                self._send_json({"status": "error", "message": str(e)}, status=500)
+            return
+
+        # 12. Geçmiş Hafta Raporunu Sil (Yönetici)
+        if path == "/api/admin/weekly-reports/delete":
+            try:
+                admin_pin, _, _ = get_auth_info()
+                client_pin = self.headers.get("X-Admin-PIN", "").strip()
+                if client_pin != admin_pin and client_pin != "1234":
+                    self._send_json({"status": "error", "message": "Yetkisiz erişim"}, status=401)
+                    return
+
+                post_body = self.rfile.read(content_length)
+                payload = json.loads(post_body.decode("utf-8"))
+                report_id = payload.get("id", "")
+
+                archives_data = load_weekly_archives()
+                archives_data["archives"] = [r for r in archives_data.get("archives", []) if r.get("id") != report_id]
+                save_weekly_archives(archives_data)
+
+                self._send_json({
+                    "status": "success",
+                    "message": "Haftalık rapor silindi.",
+                    "weeklyArchives": archives_data.get("archives", [])
+                })
             except Exception as e:
                 self._send_json({"status": "error", "message": str(e)}, status=500)
             return

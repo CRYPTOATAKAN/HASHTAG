@@ -1221,11 +1221,29 @@ function renderLogsList() {
 }
 
 /* ==========================================================================
-   MÜŞTERİ GERİ BİLDİRİM & GELİŞMİŞ PERİYOT ANALİTİĞİ
+   MÜŞTERİ GERİ BİLDİRİM, HAFTALIK RAPOR ARŞİVİ & AKILLI GELİŞİM ANALİTİĞİ
    ========================================================================== */
 
 let currentFeedbackTimeFilter = 'daily'; // 'daily', 'weekly', 'monthly', 'yearly', 'all'
 let currentFeedbackRatingFilter = 'all'; // 'all', 'critical', 'positive'
+let adminWeeklyArchives = [];
+let activeWeekInfo = null;
+let expandedWeeklyReportIds = new Set();
+
+function isActionRequiredFeedback(fb) {
+  if (!fb) return false;
+  const rating = Number(fb.rating !== undefined ? fb.rating : 5);
+  if (rating <= 3) return true;
+
+  const tagsStr = Array.isArray(fb.tags) ? fb.tags.join(' ').toLowerCase() : '';
+  const commentStr = String(fb.comment || '').toLowerCase();
+  const combined = `${tagsStr} ${commentStr}`;
+  const negativeKeywords = [
+    'gecik', 'geç', 'yavaş', 'yüksek müzik', 'gürültü', 'soğuk',
+    'yanık', 'kötü', 'şikayet', 'bekle', 'az duman', 'gelmedi', 'pahalı'
+  ];
+  return negativeKeywords.some(kw => combined.includes(kw));
+}
 
 async function loadFeedbackList(silent = false) {
   try {
@@ -1238,10 +1256,40 @@ async function loadFeedbackList(silent = false) {
     if (res.ok) {
       const data = await res.json();
       adminFeedbackList = data.feedbacks || [];
+      if (Array.isArray(data.weeklyArchives)) {
+        adminWeeklyArchives = data.weeklyArchives;
+      }
+      if (data.activeWeekInfo) {
+        activeWeekInfo = data.activeWeekInfo;
+        const wkLabelEl = document.getElementById('active-week-label');
+        if (wkLabelEl && activeWeekInfo.weekNum) {
+          wkLabelEl.textContent = `Aktif: ${activeWeekInfo.weekNum}. Hafta (${activeWeekInfo.dateRange}) • Pazartesi 00:00 Otomatik Sıfırlanır`;
+        }
+      }
       renderFeedbackDashboard();
+      renderWeeklyArchivesList();
     }
   } catch (e) {
     if (!silent) console.error("Load feedback error:", e);
+  }
+}
+
+function focusLowRatingsSection() {
+  const periodFeedbacks = getFeedbacksForCurrentTimeFilter();
+  const lowInPeriod = periodFeedbacks.filter(f => isActionRequiredFeedback(f));
+  const lowInAll = (adminFeedbackList || []).filter(f => isActionRequiredFeedback(f));
+
+  // Eğer günlükte düşük puan yoksa ama tüm zamanlarda varsa, kullanıcıya hemen göstermek için 'all' periyoduna geç
+  if (lowInPeriod.length === 0 && lowInAll.length > 0) {
+    setFeedbackTimeFilter('all');
+  }
+  setFeedbackRatingFilter('critical');
+
+  const section = document.getElementById('fb-smart-recommendations-section');
+  if (section) {
+    section.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    section.classList.add('ring-2', 'ring-amber-400');
+    setTimeout(() => section.classList.remove('ring-2', 'ring-amber-400'), 1800);
   }
 }
 
@@ -1323,38 +1371,59 @@ function updateFeedbackKPIs(feedbacks) {
   const kpiNps = document.getElementById('fb-kpi-nps');
   const kpiCritical = document.getElementById('fb-kpi-critical');
   const kpiCriticalSub = document.getElementById('fb-kpi-critical-sub');
+  const kpiCriticalCard = document.getElementById('fb-kpi-critical-card');
 
   const count = feedbacks.length;
+  const allLowCount = (adminFeedbackList || []).filter(f => isActionRequiredFeedback(f)).length;
+
   if (count === 0) {
     if (kpiAvg) kpiAvg.textContent = '-';
-    if (kpiStars) kpiStars.textContent = 'Henüz değerlendirme yok';
+    if (kpiStars) kpiStars.textContent = 'Bu periyotta değerlendirme yok';
     if (kpiTotal) kpiTotal.textContent = '0';
-    if (kpiPeriodLabel) kpiPeriodLabel.textContent = 'Bu periyotta kayıt yok';
-    if (kpiNps) kpiNps.textContent = '%0';
+    if (kpiPeriodLabel) kpiPeriodLabel.textContent = 'Kayıt bekleniyor';
+    if (kpiNps) kpiNps.textContent = '%100';
     if (kpiCritical) kpiCritical.textContent = '0';
-    if (kpiCriticalSub) kpiCriticalSub.textContent = 'Aksiyon gerekmiyor';
+    if (kpiCriticalSub) {
+      kpiCriticalSub.textContent = allLowCount > 0
+        ? `Tüm zamanlarda ${allLowCount} kayıt var (Tıkla)`
+        : '✅ Aksiyon gerektiren masa yok';
+    }
+    if (kpiCriticalCard) {
+      kpiCriticalCard.className = 'p-4 rounded-2xl bg-black/60 border border-white/5 hover:border-amber-500/40 flex flex-col justify-between cursor-pointer transition-all group';
+    }
     return;
   }
 
-  const sum = feedbacks.reduce((acc, f) => acc + (f.rating || 5), 0);
+  const sum = feedbacks.reduce((acc, f) => acc + Number(f.rating || 5), 0);
   const avg = (sum / count).toFixed(1);
   const starsStr = '⭐'.repeat(Math.max(1, Math.min(5, Math.round(avg))));
 
-  const positiveCount = feedbacks.filter(f => (f.rating || 5) >= 4).length;
+  const criticalItems = feedbacks.filter(f => isActionRequiredFeedback(f));
+  const criticalCount = criticalItems.length;
+  const positiveCount = feedbacks.filter(f => Number(f.rating || 5) >= 4 && !isActionRequiredFeedback(f)).length;
   const npsPct = Math.round((positiveCount / count) * 100);
-
-  const criticalCount = feedbacks.filter(f => (f.rating || 5) <= 3).length;
 
   if (kpiAvg) kpiAvg.textContent = avg;
   if (kpiStars) kpiStars.textContent = `${starsStr} (${avg}/5)`;
   if (kpiTotal) kpiTotal.textContent = count;
-  if (kpiPeriodLabel) kpiPeriodLabel.textContent = `${count} müşteri puanı`;
+  if (kpiPeriodLabel) kpiPeriodLabel.textContent = `${count} müşteri değerlendirmesi`;
   if (kpiNps) kpiNps.textContent = `%${npsPct}`;
   if (kpiCritical) kpiCritical.textContent = criticalCount;
+
   if (kpiCriticalSub) {
-    kpiCriticalSub.textContent = criticalCount > 0 
-      ? `⚠️ ${criticalCount} masada aksiyon gerek` 
-      : '✅ Tüm masalar mutlu';
+    if (criticalCount > 0) {
+      kpiCriticalSub.innerHTML = `<span class="text-amber-300 font-semibold">⚠️ ${criticalCount} masada inceleme & çözüm önerisi</span>`;
+    } else if (allLowCount > 0 && currentFeedbackTimeFilter !== 'all') {
+      kpiCriticalSub.innerHTML = `<span class="text-emerald-400">✅ Bu periyotta 0</span> <span class="text-gray-500">(Toplam: ${allLowCount})</span>`;
+    } else {
+      kpiCriticalSub.innerHTML = `<span class="text-emerald-400">✅ Tüm masalar mutlu</span>`;
+    }
+  }
+
+  if (kpiCriticalCard) {
+    kpiCriticalCard.className = criticalCount > 0
+      ? 'p-4 rounded-2xl bg-amber-950/20 border border-amber-500/40 hover:border-amber-400 flex flex-col justify-between cursor-pointer transition-all group shadow-lg shadow-amber-500/5'
+      : 'p-4 rounded-2xl bg-black/60 border border-white/5 hover:border-amber-500/40 flex flex-col justify-between cursor-pointer transition-all group';
   }
 }
 
@@ -1523,131 +1592,179 @@ function renderFeedbackTrendChart(feedbacks) {
 
 function generateSmartRecommendations(feedbacks) {
   const container = document.getElementById('fb-smart-recommendations-container');
+  const alertsBox = document.getElementById('fb-low-rating-alerts-box');
   const badge = document.getElementById('fb-action-status-badge');
   if (!container) return;
 
-  const lowRatings = feedbacks.filter(f => (f.rating || 5) <= 3);
+  const lowRatings = feedbacks.filter(f => isActionRequiredFeedback(f));
+  const allLowRatings = (adminFeedbackList || []).filter(f => isActionRequiredFeedback(f));
 
-  if (lowRatings.length === 0) {
-    if (badge) {
-      badge.textContent = 'Mükemmel Memnuniyet';
-      badge.className = 'px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
+  // 1. Düşük Puanlı / Şikayetli Masalar Özeti (Üst Kutu)
+  if (alertsBox) {
+    if (lowRatings.length === 0) {
+      if (badge) {
+        badge.textContent = 'Mükemmel Memnuniyet • Rehber Aktif';
+        badge.className = 'px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
+      }
+      alertsBox.innerHTML = `
+        <div class="p-3.5 rounded-xl bg-emerald-950/20 border border-emerald-500/30 flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div class="flex items-start gap-3">
+            <span class="text-xl">🌟</span>
+            <div>
+              <h5 class="font-bold text-emerald-300 text-xs sm:text-sm">Seçili Periyotta Düşük Puan veya Şikayet Bulunmuyor</h5>
+              <p class="text-gray-300 mt-0.5 text-[11px] leading-relaxed">
+                Masalardan gelen geri bildirimler pozitif seviyede. Aşağıdaki <b>4 temel operasyonel gelişim ve kalite protokolünü</b> uygulayarak memnuniyeti %100'de tutabilirsiniz.
+              </p>
+            </div>
+          </div>
+          ${allLowRatings.length > 0 && currentFeedbackTimeFilter !== 'all' ? `
+            <button type="button" onclick="setFeedbackTimeFilter('all'); setFeedbackRatingFilter('critical');" class="px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 text-[11px] font-bold whitespace-nowrap transition-all">
+              Tüm Zamanlardaki ${allLowRatings.length} Kaydı Gör →
+            </button>
+          ` : ''}
+        </div>
+      `;
+    } else {
+      if (badge) {
+        badge.textContent = `⚠️ ${lowRatings.length} Masada Gelişim Fırsatı Tespit Edildi`;
+        badge.className = 'px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-500/25 text-amber-200 border border-amber-500/40 animate-pulse';
+      }
+      alertsBox.innerHTML = `
+        <div class="p-3.5 rounded-xl bg-amber-950/25 border border-amber-500/35 space-y-2">
+          <div class="flex items-center justify-between text-xs">
+            <span class="font-bold text-amber-300 flex items-center gap-1.5">
+              <span>🚨</span>
+              <span>İnceleme Gerektiren Masa Geri Bildirimleri (${lowRatings.length} Adet)</span>
+            </span>
+            <button type="button" onclick="setFeedbackRatingFilter('critical'); document.getElementById('fb-records-list-section').scrollIntoView({behavior:'smooth'});" class="text-[11px] text-amber-400 hover:underline font-semibold">
+              Listede Filtrele →
+            </button>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            ${lowRatings.slice(0, 4).map(fb => `
+              <div class="p-2.5 rounded-xl bg-black/70 border border-amber-500/25 flex items-start justify-between gap-2 text-[11px]">
+                <div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="font-bold text-white">${escapeHtml(fb.table || 'Masa')}</span>
+                    <span class="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold text-[10px]">${Number(fb.rating || 5)} ★</span>
+                  </div>
+                  ${fb.tags && fb.tags.length > 0 ? `<div class="text-amber-200/90 text-[10px] mt-1 font-medium">${fb.tags.map(t => escapeHtml(t)).join(' • ')}</div>` : ''}
+                  ${fb.comment ? `<div class="text-gray-300 italic text-[10px] mt-0.5">"${escapeHtml(fb.comment)}"</div>` : ''}
+                </div>
+                <span class="text-[9px] text-gray-500 font-mono whitespace-nowrap">${escapeHtml((fb.timeStr || '').split(' ')[0] || '')}</span>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
     }
-    container.innerHTML = `
-      <div class="col-span-full p-4 rounded-xl bg-emerald-950/20 border border-emerald-500/30 flex items-start gap-3 text-xs">
-        <span class="text-2xl">🌟</span>
-        <div>
-          <h5 class="font-bold text-emerald-300 text-sm">Tebrikler! Bu Periyotta Düşük Puan Bulunmuyor</h5>
-          <p class="text-gray-300 mt-1 leading-relaxed">
-            Seçili periyotta masalardan gelen tüm puanlar 4 ve 5 yıldız seviyesinde. Yüksek hizmet standardını sürdürmek için servis ve nargile ekibinize gün sonu teşekkür brifingi yapabilir, sadık masalara küçük ikram jestlerini sürdürebilirsiniz.
-          </p>
-        </div>
-      </div>
-    `;
-    return;
   }
 
-  if (badge) {
-    badge.textContent = `${lowRatings.length} Gelişim Fırsatı Tespit Edildi`;
-    badge.className = 'px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30';
-  }
+  // 2. Çözüm Odaklı Aksiyon Kartları (Her Zaman 4 Ana Başlıkta Rehber Olarak Gösterilir, Şikayet Varsa Vurgulanır)
+  const sourceForAnalysis = lowRatings.length > 0 ? lowRatings : allLowRatings;
+  const allText = sourceForAnalysis.map(f => (f.tags || []).join(' ') + ' ' + (f.comment || '')).join(' ').toLowerCase();
 
-  const allText = lowRatings.map(f => (f.tags || []).join(' ') + ' ' + (f.comment || '')).join(' ').toLowerCase();
+  const coalCount = lowRatings.filter(f => {
+    const t = ((f.tags || []).join(' ') + ' ' + (f.comment || '')).toLowerCase();
+    return t.includes('köz') || t.includes('nargile') || t.includes('duman') || t.includes('kömür') || t.includes('yanık');
+  }).length;
 
-  const hasCoalIssue = allText.includes('köz') || allText.includes('nargile') || allText.includes('duman') || allText.includes('kömür');
-  const hasSpeedIssue = allText.includes('yavaş') || allText.includes('servis') || allText.includes('gecik') || allText.includes('garson') || allText.includes('bekle');
-  const hasMusicIssue = allText.includes('müzik') || allText.includes('ses') || allText.includes('gürültü');
-  const hasPriceIssue = allText.includes('fiyat') || allText.includes('pahalı') || allText.includes('hesap');
+  const speedCount = lowRatings.filter(f => {
+    const t = ((f.tags || []).join(' ') + ' ' + (f.comment || '')).toLowerCase();
+    return t.includes('yavaş') || t.includes('servis') || t.includes('gecik') || t.includes('geç') || t.includes('garson') || t.includes('bekle');
+  }).length;
 
-  const cards = [];
+  const musicCount = lowRatings.filter(f => {
+    const t = ((f.tags || []).join(' ') + ' ' + (f.comment || '')).toLowerCase();
+    return t.includes('müzik') || t.includes('ses') || t.includes('gürültü');
+  }).length;
 
-  // 1. Köz & Nargile İyileştirmesi
-  if (hasCoalIssue) {
-    cards.push(`
-      <div class="p-3.5 rounded-xl bg-black/70 border border-amber-500/30 text-xs space-y-1.5 hover:border-amber-400 transition-colors">
-        <div class="flex items-center gap-2 text-amber-400 font-bold">
-          <span>🔥</span>
-          <span>Köz & Nargile İyileştirmesi</span>
+  const hasCoalIssue = coalCount > 0 || allText.includes('köz');
+  const hasSpeedIssue = speedCount > 0 || allText.includes('yavaş') || allText.includes('servis');
+  const hasMusicIssue = musicCount > 0 || allText.includes('müzik');
+
+  const cards = [
+    // Kart 1: Köz & Nargile Kalite Yönetimi
+    `
+      <div class="p-3.5 rounded-xl bg-black/75 border ${coalCount > 0 ? 'border-amber-500/50 ring-1 ring-amber-500/20' : 'border-amber-500/25'} text-xs space-y-1.5 hover:border-amber-400 transition-all">
+        <div class="flex items-center justify-between gap-2">
+          <div class="flex items-center gap-2 text-amber-400 font-bold">
+            <span>🔥</span>
+            <span>Köz & Nargile Kalite Yönetimi</span>
+          </div>
+          <span class="px-2 py-0.5 rounded-full text-[9px] font-bold ${coalCount > 0 ? 'bg-amber-500 text-black' : 'bg-amber-500/15 text-amber-300 border border-amber-500/30'}">
+            ${coalCount > 0 ? `🚨 ${coalCount} Masada Tespit Edildi` : (hasCoalIssue ? '⚠️ Geçmiş Kayıtlarda Mevcut' : '✅ Kalite Standardı')}
+          </span>
         </div>
         <p class="text-[11px] text-gray-300 leading-relaxed">
-          <b class="text-amber-200">Geri Bildirim Tespiti:</b> Müşteriler köz tazeleme gecikmesinden veya duman kıvamından bahsetti.
+          <b class="text-amber-200">Teşhis:</b> Nargile masalarında en sık düşük puan nedeni 18 dakikayı aşan köz değişimi ve lüle ısı dengesizliğidir.
         </p>
-        <div class="p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-200 leading-normal">
-          💡 <b>Aksiyon:</b> Masa haritasındaki 15 dakikalık köz sayaçlarını aktif takip edin. Masalara köz yenileme aralığı 18 dakikayı aşmamalı; közcü personele düzenli devriye görevi verin.
+        <div class="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-200 leading-normal">
+          💡 <b>Çözüm Adımı:</b> Personel panelindeki <b>15 dakikalık köz sayaçlarını</b> aktif takip ettirin. Müşteri köz butonuna basmadan önce közcü personelin masaya devriye atması memnuniyeti doğrudan 5 yıldıza çıkarır.
         </div>
       </div>
-    `);
-  }
-
-  // 2. Servis Hızı & Garson Koordinasyonu
-  if (hasSpeedIssue || cards.length === 0) {
-    cards.push(`
-      <div class="p-3.5 rounded-xl bg-black/70 border border-blue-500/30 text-xs space-y-1.5 hover:border-blue-400 transition-colors">
-        <div class="flex items-center gap-2 text-blue-400 font-bold">
-          <span>⚡</span>
-          <span>Servis Hızı & Garson Koordinasyonu</span>
+    `,
+    // Kart 2: Servis Hızı & Garson Koordinasyonu
+    `
+      <div class="p-3.5 rounded-xl bg-black/75 border ${speedCount > 0 ? 'border-blue-500/50 ring-1 ring-blue-500/20' : 'border-blue-500/25'} text-xs space-y-1.5 hover:border-blue-400 transition-all">
+        <div class="flex items-center justify-between gap-2">
+          <div class="flex items-center gap-2 text-blue-400 font-bold">
+            <span>⚡</span>
+            <span>Servis Hızı & Garson Koordinasyonu</span>
+          </div>
+          <span class="px-2 py-0.5 rounded-full text-[9px] font-bold ${speedCount > 0 ? 'bg-blue-500 text-black' : 'bg-blue-500/15 text-blue-300 border border-blue-500/30'}">
+            ${speedCount > 0 ? `🚨 ${speedCount} Masada Tespit Edildi` : (hasSpeedIssue ? '⚠️ Geçmiş Kayıtlarda Mevcut' : '✅ Kalite Standardı')}
+          </span>
         </div>
         <p class="text-[11px] text-gray-300 leading-relaxed">
-          <b class="text-blue-200">Geri Bildirim Tespiti:</b> Garson çağırma butonuna basıldığında masaya ulaşma süresi eleştirilmiş.
+          <b class="text-blue-200">Teşhis:</b> Garson çağırma veya hesap talebine 90 saniyeden geç yanıt verilmesi puan kırılmasına yol açar.
         </p>
-        <div class="p-2 rounded-lg bg-blue-500/10 border border-blue-500/20 text-[11px] text-blue-200 leading-normal">
-          💡 <b>Aksiyon:</b> Yoğun saatlerde (20:00 - 23:00) salonu Bölüm A ve B olarak iki garsona zimmetleyin. Personel panelindeki çağrı butonlarının 60 saniyede 'Yanıtlandı' durumuna geçmesini kural haline getirin.
+        <div class="p-2.5 rounded-lg bg-blue-500/10 border border-blue-500/20 text-[11px] text-blue-200 leading-normal">
+          💡 <b>Çözüm Adımı:</b> Yoğun saatlerde (20:00 - 23:30) salonu <b>Bölüm A ve Bölüm B</b> olarak iki garsona zimmetleyin. Çağrı düştüğü anda 30 saniye içinde <b>"Yoldayım"</b> butonuna basılmasını kural haline getirin.
         </div>
       </div>
-    `);
-  }
-
-  // 3. Akustik & Müzik Seviyesi Ayarı
-  if (hasMusicIssue) {
-    cards.push(`
-      <div class="p-3.5 rounded-xl bg-black/70 border border-purple-500/30 text-xs space-y-1.5 hover:border-purple-400 transition-colors">
-        <div class="flex items-center gap-2 text-purple-400 font-bold">
-          <span>🔊</span>
-          <span>Akustik & Müzik Seviyesi Ayarı</span>
+    `,
+    // Kart 3: Akustik, Müzik & Atmosfer Dengesi
+    `
+      <div class="p-3.5 rounded-xl bg-black/75 border ${musicCount > 0 ? 'border-purple-500/50 ring-1 ring-purple-500/20' : 'border-purple-500/25'} text-xs space-y-1.5 hover:border-purple-400 transition-all">
+        <div class="flex items-center justify-between gap-2">
+          <div class="flex items-center gap-2 text-purple-400 font-bold">
+            <span>🔊</span>
+            <span>Akustik, Müzik & Atmosfer Dengesi</span>
+          </div>
+          <span class="px-2 py-0.5 rounded-full text-[9px] font-bold ${musicCount > 0 ? 'bg-purple-500 text-black' : 'bg-purple-500/15 text-purple-300 border border-purple-500/30'}">
+            ${musicCount > 0 ? `🚨 ${musicCount} Masada Tespit Edildi` : (hasMusicIssue ? '⚠️ Geçmiş Kayıtlarda Mevcut' : '✅ Kalite Standardı')}
+          </span>
         </div>
         <p class="text-[11px] text-gray-300 leading-relaxed">
-          <b class="text-purple-200">Geri Bildirim Tespiti:</b> Müzik sesinin yüksekliği müşterilerin sohbet etmesini zorlaştırmış.
+          <b class="text-purple-200">Teşhis:</b> Hoparlör altı masalarda yüksek ses seviyesi müşterilerin sohbet konforunu düşürebilir.
         </p>
-        <div class="p-2 rounded-lg bg-purple-500/10 border border-purple-500/20 text-[11px] text-purple-200 leading-normal">
-          💡 <b>Aksiyon:</b> Akşam 22:00 öncesinde müzik sesini 65-70 dB lounge/chillout temposunda tutun. Hoparlör altı masaların bağımsız ses ayarını kısın.
+        <div class="p-2.5 rounded-lg bg-purple-500/10 border border-purple-500/20 text-[11px] text-purple-200 leading-normal">
+          💡 <b>Çözüm Adımı:</b> Saat 21:30 öncesinde müziği 65-70 dB <b>Deep House / Chill Lounge</b> seviyesinde tutun; 21:30 sonrasında prime-time ritmine kademeli geçiş yapın.
         </div>
       </div>
-    `);
-  }
-
-  // 4. Fiyat & Algılanan Değer İyileştirmesi
-  if (hasPriceIssue) {
-    cards.push(`
-      <div class="p-3.5 rounded-xl bg-black/70 border border-emerald-500/30 text-xs space-y-1.5 hover:border-emerald-400 transition-colors">
-        <div class="flex items-center gap-2 text-emerald-400 font-bold">
-          <span>🏷️</span>
-          <span>Fiyat & Algılanan Değer İyileştirmesi</span>
+    `,
+    // Kart 4: Anlık Masa Kurtarma & Müşteri Telafi Protokolü
+    `
+      <div class="p-3.5 rounded-xl bg-black/75 border ${lowRatings.length > 0 ? 'border-rose-500/50 ring-1 ring-rose-500/20' : 'border-rose-500/25'} text-xs space-y-1.5 hover:border-rose-400 transition-all">
+        <div class="flex items-center justify-between gap-2">
+          <div class="flex items-center gap-2 text-rose-400 font-bold">
+            <span>🤝</span>
+            <span>Anlık Masa Kurtarma (Telafi Adımı)</span>
+          </div>
+          <span class="px-2 py-0.5 rounded-full text-[9px] font-bold ${lowRatings.length > 0 ? 'bg-rose-500 text-white' : 'bg-rose-500/15 text-rose-300 border border-rose-500/30'}">
+            ${lowRatings.length > 0 ? '🚨 Şimdi Uygulanmalı' : '🛡️ Koruyucu Protokol'}
+          </span>
         </div>
         <p class="text-[11px] text-gray-300 leading-relaxed">
-          <b class="text-emerald-200">Geri Bildirim Tespiti:</b> Fiyat veya porsiyon beklentisi karşılanamamış.
+          <b class="text-rose-200">Operasyonel Taktik:</b> Menü üzerinden 1-3 yıldız veya şikayet ileten masaya mekanımızdan ayrılmadan önce dokunun.
         </p>
-        <div class="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[11px] text-emerald-200 leading-normal">
-          💡 <b>Aksiyon:</b> Nargile servisi yanında mini ikram (nane şekeri/şişe su/fındık) sunarak algılanan lounge değerini artırın.
+        <div class="p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/20 text-[11px] text-rose-200 leading-normal">
+          💡 <b>Çözüm Adımı:</b> Şef garsonun masaya uğrayıp <i>"Geri bildiriminizi gördük, hemen telafi etmek isteriz"</i> diyerek yeni lüle veya çay/kahve ikramı sunması, müşteriyi Google Maps'te 5 yıldızlı elçiye dönüştürür.
         </div>
       </div>
-    `);
-  }
-
-  // 5. Her zaman: Masa Kurtarma & Anlık Telafi Aksiyonu
-  cards.push(`
-    <div class="p-3.5 rounded-xl bg-black/70 border border-rose-500/30 text-xs space-y-1.5 hover:border-rose-400 transition-colors">
-      <div class="flex items-center gap-2 text-rose-400 font-bold">
-        <span>🤝</span>
-        <span>Anlık Masa Kurtarma (Müşteri Telafi Adımı)</span>
-      </div>
-      <p class="text-[11px] text-gray-300 leading-relaxed">
-        <b class="text-rose-200">Operasyonel Taktik:</b> Düşük puan veren masayı personel panelinde tespit edin.
-      </p>
-      <div class="p-2 rounded-lg bg-rose-500/10 border border-rose-500/20 text-[11px] text-rose-200 leading-normal">
-        💡 <b>Aksiyon:</b> Şef garsonun derhal masaya nezaketle uğrayıp 'Memnun kalmadığınız noktayı telafi etmek isteriz' diyerek çay/kahve ikramı yapması olumsuz yorumun dış platformlara yansımasını önler.
-      </div>
-    </div>
-  `);
+    `
+  ];
 
   container.innerHTML = cards.join('');
 }
@@ -1661,36 +1778,49 @@ function renderFeedbackListOnly() {
   let filtered = periodFeedbacks;
 
   if (currentFeedbackRatingFilter === 'critical') {
-    filtered = filtered.filter(f => (f.rating || 5) <= 3);
+    filtered = filtered.filter(f => isActionRequiredFeedback(f));
   } else if (currentFeedbackRatingFilter === 'positive') {
-    filtered = filtered.filter(f => (f.rating || 5) >= 4);
+    filtered = filtered.filter(f => Number(f.rating || 5) >= 4 && !isActionRequiredFeedback(f));
   }
 
   if (countEl) countEl.textContent = `(${filtered.length})`;
 
   if (filtered.length === 0) {
-    container.innerHTML = `<div class="py-8 text-center text-xs text-gray-500">Seçili periyot ve filtrede geri bildirim kaydı bulunmuyor.</div>`;
+    const allCrit = (adminFeedbackList || []).filter(f => isActionRequiredFeedback(f));
+    if (currentFeedbackRatingFilter === 'critical' && allCrit.length > 0 && currentFeedbackTimeFilter !== 'all') {
+      container.innerHTML = `
+        <div class="py-8 text-center text-xs text-gray-400 space-y-2">
+          <div>Seçili periyotta düşük puanlı kayıt bulunmuyor; ancak geçmiş periyotlarda <b>${allCrit.length} adet</b> kayıt mevcut.</div>
+          <button type="button" onclick="setFeedbackTimeFilter('all')" class="px-3.5 py-1.5 rounded-xl bg-amber-500 text-black font-bold text-xs hover:bg-amber-400 transition-all">
+            Tüm Zamanlardaki Düşük Puanları Göster (${allCrit.length})
+          </button>
+        </div>
+      `;
+    } else {
+      container.innerHTML = `<div class="py-8 text-center text-xs text-gray-500">Seçili periyot ve filtrede geri bildirim kaydı bulunmuyor.</div>`;
+    }
     return;
   }
 
   container.innerHTML = filtered.map(fb => {
-    const isCritical = (fb.rating || 5) <= 3;
+    const isCritical = isActionRequiredFeedback(fb);
+    const rtg = Number(fb.rating || 5);
     return `
       <div class="p-3.5 rounded-2xl bg-black/60 border ${
-        isCritical ? 'border-amber-500/40 bg-amber-950/10' : 'border-white/5'
+        isCritical ? 'border-amber-500/40 bg-amber-950/15' : 'border-white/5'
       } flex items-start justify-between text-xs hover:border-white/20 transition-all">
         <div class="flex items-start gap-3">
           <div class="w-9 h-9 rounded-xl ${
             isCritical ? 'bg-amber-500/20 border-amber-500/40 text-amber-300' : 'bg-white/5 border-white/10 text-amber-400'
           } border flex flex-col items-center justify-center flex-shrink-0 font-bold">
-            <span class="text-[12px] leading-none">${fb.rating}</span>
+            <span class="text-[12px] leading-none">${rtg}</span>
             <span class="text-[8px] leading-none mt-0.5">★</span>
           </div>
           <div>
-            <div class="flex items-center gap-2">
+            <div class="flex flex-wrap items-center gap-2">
               <span class="font-bold text-white text-sm">${escapeHtml(fb.table)}</span>
-              <span class="text-amber-400 font-medium">${'⭐'.repeat(fb.rating)}</span>
-              ${isCritical ? '<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">⚠️ İnceleme Gerekiyor</span>' : ''}
+              <span class="text-amber-400 font-medium">${'⭐'.repeat(Math.max(1, Math.min(5, rtg)))}</span>
+              ${isCritical ? '<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">⚠️ Geliştirme / İnceleme</span>' : ''}
             </div>
             ${fb.tags && fb.tags.length > 0 ? `
               <div class="flex flex-wrap gap-1 mt-1.5">
@@ -1702,6 +1832,229 @@ function renderFeedbackListOnly() {
         </div>
         <div class="text-[10px] text-gray-500 font-mono text-right flex-shrink-0 pl-2">
           ${escapeHtml(fb.timeStr || '')}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  if (window.lucide) lucide.createIcons();
+}
+
+/* ==========================================================================
+   TÜM BİLDİRİMLERİ SIFIRLAMA & HAFTALIK RAPOR ARŞİVİ YÖNETİMİ
+   ========================================================================== */
+
+async function resetAllNotificationsPrompt() {
+  const confirmed = confirm(
+    "⚠️ TÜM BİLDİRİMLERİ SIFIRLA & ARŞİVLE\n\n" +
+    "Mevcut haftanın tüm bildirimlerini (müşteri değerlendirmeleri, personel işlem günlükleri ve tamamlanan çağrı kayıtları) sıfırlamak istediğinize emin misiniz?\n\n" +
+    "ℹ️ Sıfırlamadan önce mevcut verileriniz kaybolmaz; otomatik olarak aşağıda bulunan 'Geçmiş Haftaların Raporları' alanına özet rapor olarak kaydedilir."
+  );
+  if (!confirmed) return;
+
+  const pin = getAdminPin();
+  const apiBase = getApiBaseUrl();
+  try {
+    const res = await fetch(apiBase + '/api/admin/notifications/reset', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Admin-PIN': pin
+      },
+      body: JSON.stringify({ archiveBeforeReset: true })
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      adminFeedbackList = [];
+      adminLogsList = [];
+      if (Array.isArray(data.weeklyArchives)) {
+        adminWeeklyArchives = data.weeklyArchives;
+      }
+      renderLogsList();
+      renderFeedbackDashboard();
+      renderWeeklyArchivesList();
+      await loadStaffPerformanceData(true);
+      showToast('✅ Tüm bildirimler sıfırlandı ve önceki veriler Haftalık Rapor Arşivine kaydedildi!', 'success');
+    } else {
+      const errData = await res.json().catch(() => ({}));
+      alert("Sıfırlama başarısız: " + (errData.message || "Yetkisiz işlem"));
+    }
+  } catch (e) {
+    console.error("Reset notifications error:", e);
+    alert("Sunucuya bağlanılamadı: " + e.message);
+  }
+}
+
+function toggleWeeklyReportDetail(reportId) {
+  if (expandedWeeklyReportIds.has(reportId)) {
+    expandedWeeklyReportIds.delete(reportId);
+  } else {
+    expandedWeeklyReportIds.add(reportId);
+  }
+  renderWeeklyArchivesList();
+}
+
+async function deleteWeeklyReport(reportId, e) {
+  if (e) e.stopPropagation();
+  if (!confirm("Bu geçmiş hafta raporunu arşivden silmek istediğinize emin misiniz?")) return;
+
+  const pin = getAdminPin();
+  const apiBase = getApiBaseUrl();
+  try {
+    const res = await fetch(apiBase + '/api/admin/weekly-reports/delete', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Admin-PIN': pin
+      },
+      body: JSON.stringify({ id: reportId })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data.weeklyArchives)) {
+        adminWeeklyArchives = data.weeklyArchives;
+      }
+      renderWeeklyArchivesList();
+      showToast('🗑️ Haftalık rapor arşivden kaldırıldı.', 'info');
+    }
+  } catch (err) {
+    console.error("Delete weekly report err:", err);
+  }
+}
+
+function renderWeeklyArchivesList() {
+  const container = document.getElementById('weekly-reports-container');
+  const countBadge = document.getElementById('weekly-archives-count-badge');
+  if (!container) return;
+
+  const archives = adminWeeklyArchives || [];
+  if (countBadge) {
+    countBadge.textContent = `${archives.length} Rapor`;
+  }
+
+  if (archives.length === 0) {
+    container.innerHTML = `
+      <div class="col-span-full p-6 rounded-2xl bg-black/40 border border-white/5 text-center text-xs text-gray-500">
+        Henüz arşivlenmiş geçmiş hafta raporu bulunmuyor. Yeni bir haftaya girildiğinde veya "Tüm Bildirimleri Sıfırla" butonuna basıldığında raporlar burada listelenir.
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = archives.map(rep => {
+    const isExpanded = expandedWeeklyReportIds.has(rep.id);
+    const stars = rep.starCounts || { "5": 0, "4": 0, "3": 0, "2": 0, "1": 0 };
+    const calls = rep.callBreakdown || { coal: 0, waiter: 0, bill: 0 };
+    const lowItems = rep.lowRatingItems || [];
+    const isAuto = (rep.reason || '').includes('Otomatik');
+
+    return `
+      <div class="p-4 rounded-2xl bg-black/65 border border-white/10 hover:border-blue-500/35 transition-all flex flex-col justify-between space-y-3">
+        <div>
+          <!-- Üst Başlık -->
+          <div class="flex items-start justify-between gap-2">
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="text-sm font-bold text-white">${escapeHtml(rep.weekLabel || 'Haftalık Rapor')}</span>
+                <span class="px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                  isAuto
+                    ? 'bg-blue-500/15 text-blue-300 border border-blue-500/30'
+                    : 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
+                }">
+                  ${escapeHtml(rep.reason || 'Haftalık Arşiv')}
+                </span>
+              </div>
+              <div class="text-[11px] text-gray-400 font-mono mt-0.5">
+                📅 ${escapeHtml(rep.dateRange || '')} • Kayıt: ${escapeHtml(rep.archivedAt || '')}
+              </div>
+            </div>
+
+            <button type="button" onclick="deleteWeeklyReport('${escapeHtml(rep.id)}', event)" class="p-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-all" title="Bu raporu sil">
+              <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+            </button>
+          </div>
+
+          <!-- 4'lü Mini Özet Metrikleri -->
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3">
+            <div class="p-2.5 rounded-xl bg-neutral-900/90 border border-white/5">
+              <div class="text-[10px] text-gray-400">Ort. Puan</div>
+              <div class="text-sm font-black text-amber-400 font-mono mt-0.5">${rep.avgRating || '5.0'} ★</div>
+            </div>
+            <div class="p-2.5 rounded-xl bg-neutral-900/90 border border-white/5">
+              <div class="text-[10px] text-gray-400">Geri Bildirim</div>
+              <div class="text-sm font-black text-white font-mono mt-0.5">${rep.totalFeedbacks || 0} <span class="text-[10px] text-emerald-400 font-normal">(%${rep.satisfactionPct !== undefined ? rep.satisfactionPct : 100})</span></div>
+            </div>
+            <div class="p-2.5 rounded-xl bg-neutral-900/90 border border-white/5">
+              <div class="text-[10px] text-gray-400">Düşük / Şikayet</div>
+              <div class="text-sm font-black ${rep.lowRatingCount > 0 ? 'text-amber-400' : 'text-emerald-400'} font-mono mt-0.5">${rep.lowRatingCount || 0} Masa</div>
+            </div>
+            <div class="p-2.5 rounded-xl bg-neutral-900/90 border border-white/5">
+              <div class="text-[10px] text-gray-400">Servis Çağrısı</div>
+              <div class="text-sm font-black text-blue-400 font-mono mt-0.5">${rep.totalCalls || 0} Adet</div>
+            </div>
+          </div>
+
+          <!-- Haftanın Yıldızı & Detay Butonu -->
+          <div class="flex items-center justify-between pt-2.5 mt-2 border-t border-white/5 text-[11px]">
+            <div class="text-gray-400 truncate">
+              🏆 Haftanın Yıldızı: <b class="text-amber-300">${escapeHtml(rep.topStaff || 'Belirtilmedi')}</b>
+            </div>
+            <button type="button" onclick="toggleWeeklyReportDetail('${escapeHtml(rep.id)}')" class="text-blue-400 hover:text-blue-300 font-bold flex items-center gap-1 whitespace-nowrap ml-2">
+              <span>${isExpanded ? 'Detayı Gizle' : 'Detaylı Raporu Gör'}</span>
+              <i data-lucide="${isExpanded ? 'chevron-up' : 'chevron-down'}" class="w-3.5 h-3.5"></i>
+            </button>
+          </div>
+
+          <!-- Açılır Detaylı Rapor Alanı -->
+          ${isExpanded ? `
+            <div class="mt-3 pt-3 border-t border-white/10 space-y-3 text-xs">
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <!-- Yıldız Dağılımı Özeti -->
+                <div class="p-2.5 rounded-xl bg-black/60 border border-white/5 space-y-1">
+                  <div class="text-[10px] font-bold text-gray-400 uppercase">Puan Dağılımı</div>
+                  <div class="flex items-center justify-between text-[11px] text-gray-300 pt-1">
+                    <span>5★: <b>${stars['5'] || 0}</b></span>
+                    <span>4★: <b>${stars['4'] || 0}</b></span>
+                    <span>3★: <b class="text-amber-300">${stars['3'] || 0}</b></span>
+                    <span>2★: <b class="text-orange-400">${stars['2'] || 0}</b></span>
+                    <span>1★: <b class="text-red-400">${stars['1'] || 0}</b></span>
+                  </div>
+                </div>
+
+                <!-- Çağrı Türü Dağılımı -->
+                <div class="p-2.5 rounded-xl bg-black/60 border border-white/5 space-y-1">
+                  <div class="text-[10px] font-bold text-gray-400 uppercase">Servis & İşlem Özeti</div>
+                  <div class="flex items-center justify-between text-[11px] text-gray-300 pt-1">
+                    <span>🔥 Köz: <b>${calls.coal || 0}</b></span>
+                    <span>🔔 Garson: <b>${calls.waiter || 0}</b></span>
+                    <span>💳 Hesap: <b>${calls.bill || 0}</b></span>
+                    <span>📋 Log: <b>${rep.totalLogs || 0}</b></span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- O Haftadaki Düşük Puanlı Masalar -->
+              <div class="space-y-1.5">
+                <div class="text-[10px] font-bold text-gray-400 uppercase">O Haftanın Geliştirme / Düşük Puan Kayıtları (${lowItems.length})</div>
+                ${lowItems.length === 0 ? `
+                  <div class="p-2 rounded-lg bg-emerald-950/20 border border-emerald-500/20 text-[11px] text-emerald-300">
+                    ✅ Bu haftada düşük puanlı masa veya şikayet kaydı bulunmuyor.
+                  </div>
+                ` : lowItems.map(item => `
+                  <div class="p-2 rounded-lg bg-amber-950/20 border border-amber-500/25 flex items-start justify-between gap-2 text-[11px]">
+                    <div>
+                      <span class="font-bold text-white">${escapeHtml(item.table || 'Masa')}</span>
+                      <span class="text-amber-400 font-bold ml-1">(${item.rating}★)</span>
+                      ${item.tags && item.tags.length > 0 ? `<span class="text-amber-200 ml-1.5">[${item.tags.map(t => escapeHtml(t)).join(', ')}]</span>` : ''}
+                      ${item.comment ? `<div class="text-gray-300 italic mt-0.5">"${escapeHtml(item.comment)}"</div>` : ''}
+                    </div>
+                    <span class="text-[9px] text-gray-500 font-mono whitespace-nowrap">${escapeHtml(item.timeStr || '')}</span>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          ` : ''}
         </div>
       </div>
     `;

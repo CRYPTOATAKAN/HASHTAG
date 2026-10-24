@@ -1583,7 +1583,7 @@ function updateCustomerCallModalCompleted() {
         </div>
         
         <div class="flex flex-wrap items-center justify-center gap-1.5 mb-3">
-          ${['🔥 Köz Kıvamında', '⚡ Hızlı Servis', '😊 Güler Yüz', '✨ Temiz'].map(tag => `
+          ${['🔥 Köz Kıvamında', '⚡ Hızlı Servis', '😊 Güler Yüz', '✨ Temiz', '⏳ Köz Gecikti', '🐢 Yavaş Servis', '🔊 Yüksek Müzik'].map(tag => `
             <button type="button" onclick="toggleFeedbackTag('${tag}', this)" class="px-2.5 py-1 rounded-full text-[10px] font-semibold bg-white/5 border border-white/10 text-gray-400 hover:text-white transition-all">
               ${tag}
             </button>
@@ -1627,6 +1627,9 @@ function toggleFeedbackTag(tag, btn) {
     currentFeedbackTags.add(tag);
     btn.classList.remove('bg-white/5', 'text-gray-400', 'border-white/10');
     btn.classList.add('bg-amber-500/20', 'text-amber-300', 'border-amber-500/40');
+    if ((tag.includes('Gecikti') || tag.includes('Yavaş') || tag.includes('Yüksek')) && currentRating > 3) {
+      setFeedbackRating(3);
+    }
   }
 }
 
@@ -1728,6 +1731,9 @@ function toggleStandaloneFeedbackTag(tag, btn) {
     standaloneFeedbackTags.add(tag);
     btn.classList.remove('bg-white/5', 'text-gray-400', 'border-white/10');
     btn.classList.add('bg-amber-500/20', 'text-amber-300', 'border-amber-500/40');
+    if ((tag.includes('Gecikti') || tag.includes('Yavaş') || tag.includes('Yüksek')) && standaloneRating > 3) {
+      setStandaloneFeedbackRating(3);
+    }
   }
 }
 
