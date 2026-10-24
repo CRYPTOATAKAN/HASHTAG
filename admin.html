@@ -91,7 +91,7 @@
       </script>
 
       <div class="mt-4">
-        <a href="/" class="text-xs text-gray-400 hover:text-white transition-colors">← Müşteri Menüsüne Dön</a>
+        <a href="index.html" class="text-xs text-gray-400 hover:text-white transition-colors">← Müşteri Menüsüne Dön</a>
       </div>
     </div>
   </div>
@@ -105,8 +105,9 @@
         <div class="flex items-center gap-3">
           <div class="w-10 h-10 rounded-xl overflow-hidden border border-amber-500/30 shadow-md bg-black flex-shrink-0 flex items-center justify-center">
             <img 
+              id="admin-header-logo-img"
               src="hashtag-logo.jpg?v=2.3" 
-              onerror="if(!this.src.includes('images/')) this.src='images/hashtag-logo.jpg?v=2.3';"
+              onerror="if(!this.src.includes('hashtag-logo.jpg')) { this.src='hashtag-logo.jpg?v=2.3'; } else if(!this.src.includes('images/')) { this.src='images/hashtag-logo.jpg?v=2.3'; }"
               alt="HASHTAG" 
               class="w-full h-full object-cover" 
             />
@@ -121,7 +122,7 @@
         </div>
 
         <div class="flex items-center gap-2">
-          <a href="/" target="_blank" class="px-3.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-gray-200 text-xs font-semibold flex items-center gap-1.5 border border-white/10 transition-colors">
+          <a href="index.html" target="_blank" class="px-3.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-gray-200 text-xs font-semibold flex items-center gap-1.5 border border-white/10 transition-colors">
             <i data-lucide="external-link" class="w-3.5 h-3.5"></i> Müşteri Menüsünü Aç
           </a>
           <button onclick="logoutAdmin()" class="p-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 transition-colors" title="Çıkış Yap">
@@ -142,10 +143,13 @@
           <button id="tab-btn-categories" onclick="switchTab('categories')" class="px-4 py-2 rounded-xl text-xs font-medium transition-all flex items-center gap-2 text-gray-400 hover:bg-white/5">
             <i data-lucide="layers" class="w-4 h-4 text-amber-400"></i> Kategori Yönetimi
           </button>
-          <button id="tab-btn-qr-stands" onclick="switchTab('qr-stands')" class="px-4 py-2 rounded-xl text-xs font-medium transition-all flex items-center gap-2 text-gray-400 hover:bg-white/5">
+          <button id="tab-btn-qr-stands" onclick="switchTab('qr-stands')" class="px-4 py-2 rounded-xl text-xs font-medium transition-all flex items-center gap-2 text-gray-400 hover:bg-white/5 whitespace-nowrap">
             <i data-lucide="qr-code" class="w-4 h-4 text-amber-400"></i> Sabit QR Masa Standları
           </button>
-          <button id="tab-btn-settings" onclick="switchTab('settings')" class="px-4 py-2 rounded-xl text-xs font-medium transition-all flex items-center gap-2 text-gray-400 hover:bg-white/5">
+          <button id="tab-btn-brand-media" type="button" onclick="openBrandMediaSection()" class="px-4 py-2 rounded-xl text-xs font-semibold transition-all flex items-center gap-2 text-amber-200 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/25 whitespace-nowrap">
+            <i data-lucide="image" class="w-4 h-4 text-amber-400"></i> Profil & Kapak Görselleri
+          </button>
+          <button id="tab-btn-settings" onclick="switchTab('settings')" class="px-4 py-2 rounded-xl text-xs font-medium transition-all flex items-center gap-2 text-gray-400 hover:bg-white/5 whitespace-nowrap">
             <i data-lucide="sliders" class="w-4 h-4"></i> Kafe & Wi-Fi Ayarları
           </button>
           <button id="tab-btn-staff" onclick="switchTab('staff')" class="px-4 py-2 rounded-xl text-xs font-medium transition-all flex items-center gap-2 text-gray-400 hover:bg-white/5">
@@ -284,10 +288,326 @@
         </div>
       </section>
 
-      <!-- SEKME 4: KAFE AYARLARI -->
+      <!-- SEKME 4: KAFE AYARLARI & MARKA MEDYA YÖNETİCİSİ -->
       <section id="tab-section-settings" class="hidden">
-        <form onsubmit="handleSaveSettings(event)" class="rounded-2xl bg-neutral-900 border border-white/10 p-6 space-y-6 max-w-2xl">
-          <h2 class="text-lg font-bold text-white">Kafe & Sistem Ayarları</h2>
+        <form onsubmit="handleSaveSettings(event)" class="rounded-2xl bg-neutral-900 border border-white/10 p-6 space-y-6 max-w-3xl">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 class="text-lg font-bold text-white">Kafe, Profil & Anasayfa Görsel Ayarları</h2>
+              <p class="text-xs text-gray-400 mt-0.5">Sol üst logo, sayfa altı profil fotoğrafı, anasayfa kapak fotoğrafları ve Wi-Fi ayarlarını buradan yönetin.</p>
+            </div>
+            <a href="index.html" target="_blank" class="px-3 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 text-[11px] font-bold flex items-center gap-1.5 transition-all">
+              <i data-lucide="eye" class="w-3.5 h-3.5"></i>
+              <span>Canlı Menüyü Gör</span>
+            </a>
+          </div>
+
+          <!-- =========================================================================
+               EKLENTİ: PROFİL FOTOĞRAFLARI (SOL ÜST & EN ALT) + ANASAYFA KAPAK MEDYA YÖNETİCİSİ
+               ========================================================================= -->
+          <div id="brand-media-manager-section" class="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-neutral-950 via-black to-neutral-950 border border-amber-500/30 shadow-xl space-y-5 transition-all">
+            <div class="flex flex-wrap items-start justify-between gap-3 border-b border-white/10 pb-3.5">
+              <div>
+                <div class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 text-[10px] font-bold uppercase tracking-wider mb-1.5">
+                  <i data-lucide="sparkles" class="w-3 h-3 text-amber-400"></i>
+                  <span>Görsel & Marka Eklentisi</span>
+                </div>
+                <h3 class="text-sm sm:text-base font-bold text-white">Profil Fotoğrafları (Sol Üst & Sayfa Altı) ve Anasayfa Kapak Görselleri</h3>
+                <p class="text-xs text-gray-400 mt-0.5">Telefon galerisinden (iPhone HEIC dahil), kameradan veya bilgisayardan seçtiğiniz fotoğraflar anında optimize edilip kaydedilir.</p>
+              </div>
+            </div>
+
+            <!-- KART 1: SOL ÜST & SAYFA EN ALTI PROFİL FOTOĞRAFI (KAFE LOGOSU) -->
+            <div id="brand-logo-dropzone" class="p-4 rounded-2xl bg-neutral-900/75 border border-dashed border-white/15 hover:border-amber-500/45 transition-all space-y-3.5 relative">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <label class="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
+                    <span class="w-6 h-6 rounded-lg bg-amber-500/20 border border-amber-500/30 text-amber-300 flex items-center justify-center text-xs font-black">1</span>
+                    <span>Sol Üst & Sayfa En Altı Profil Fotoğrafı (Kafe Logosu)</span>
+                  </label>
+                  <p class="text-[11px] text-gray-400 mt-0.5">Müşteri menüsündeki sol üst başlıkta, sayfanın en altındaki profil alanında, QR masa standlarında ve personel girişinde görünür.</p>
+                </div>
+                <span id="brand-logo-status" class="text-[10px] px-2.5 py-1 rounded-full bg-white/5 text-amber-300 border border-white/10 font-mono">
+                  Varsayılan Profil Aktif
+                </span>
+              </div>
+
+              <input type="hidden" id="set-brand-logo-image" value="" />
+              <input type="hidden" id="set-brand-logo-fit" value="cover" />
+
+              <!-- Canlı Çift Önizleme: Sol Üst Başlık + Sayfa En Altı (Footer) -->
+              <div class="relative grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 rounded-2xl bg-black/90 border border-white/10 overflow-hidden">
+                <!-- Yükleme Bekleme Katmanı -->
+                <div id="brand-logo-loading" class="hidden absolute inset-0 z-30 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-center text-center p-2">
+                  <i data-lucide="loader-2" class="w-6 h-6 text-amber-400 animate-spin mb-1"></i>
+                  <span id="brand-logo-loading-text" class="text-[11px] text-amber-200 font-semibold">Profil fotoğrafı optimize ediliyor...</span>
+                </div>
+
+                <!-- Sol Üst Başlık Önizlemesi -->
+                <div class="p-3 rounded-xl bg-neutral-950 border border-white/10 flex items-center gap-3">
+                  <div class="w-12 h-12 rounded-2xl overflow-hidden border border-amber-500/40 bg-black flex-shrink-0 flex items-center justify-center shadow-lg">
+                    <img id="brand-logo-preview-header" src="hashtag-logo.jpg?v=2.5" alt="Sol Üst Profil Önizleme" class="w-full h-full object-cover" />
+                  </div>
+                  <div class="min-w-0">
+                    <div class="text-[10px] text-amber-400 font-bold uppercase tracking-wider">Sol Üst Başlık Görünümü</div>
+                    <div id="brand-logo-preview-cafe-name" class="text-sm font-black text-white truncate mt-0.5">HASHTAG</div>
+                    <div class="text-[10px] text-gray-400 truncate">Lounge & Hookah Experience</div>
+                  </div>
+                </div>
+
+                <!-- Sayfa En Altı (Footer) Önizlemesi -->
+                <div class="p-3 rounded-xl bg-neutral-950 border border-white/10 flex flex-col items-center justify-center text-center">
+                  <div class="text-[10px] text-amber-400 font-bold uppercase tracking-wider mb-1.5">Sayfa En Altı (Footer) Görünümü</div>
+                  <div class="w-11 h-11 rounded-xl overflow-hidden border border-amber-500/30 bg-black flex items-center justify-center shadow-md mb-1">
+                    <img id="brand-logo-preview-footer" src="hashtag-logo.jpg?v=2.5" alt="Sayfa Altı Profil Önizleme" class="w-full h-full object-cover" />
+                  </div>
+                  <div id="brand-logo-preview-footer-name" class="text-[11px] font-bold text-white tracking-wider">HASHTAG LOUNGE & HOOKAH</div>
+                </div>
+              </div>
+
+              <!-- Medya Seçim & Düzenleme Butonları -->
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <label class="py-2.5 px-3.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all shadow-md shadow-amber-500/15 active:scale-95">
+                  <i data-lucide="image" class="w-4 h-4"></i>
+                  <span>Profil Fotoğrafı Seç (Galeri / PC)</span>
+                  <input type="file" id="brand-logo-file-input" accept="image/*,.heic,.heif,.avif,.webp,.png,.jpg,.jpeg,.gif,.bmp,.tiff,.tif,.svg" onchange="handleBrandMediaUpload('logo', event)" class="hidden" />
+                </label>
+
+                <label class="py-2.5 px-3.5 rounded-xl bg-white/10 hover:bg-white/15 text-white border border-white/15 text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-95">
+                  <i data-lucide="camera" class="w-4 h-4 text-amber-400"></i>
+                  <span>Kamerayla Çek</span>
+                  <input type="file" id="brand-logo-camera-input" accept="image/*" capture="environment" onchange="handleBrandMediaUpload('logo', event)" class="hidden" />
+                </label>
+              </div>
+
+              <!-- Profil Kadraj, Döndür & Sıfırla -->
+              <div class="pt-2 border-t border-white/10 flex flex-wrap items-center justify-between gap-2">
+                <div class="flex items-center gap-1.5">
+                  <span class="text-[11px] font-semibold text-gray-300 mr-1">Logo Kadrajı:</span>
+                  <button type="button" id="logo-fit-btn-cover" onclick="setBrandMediaSlotFit('logo', 'cover')" class="py-1.5 px-2.5 rounded-xl text-[10px] font-bold bg-amber-500 text-black transition-all">
+                    🖼️ Tam Doldur
+                  </button>
+                  <button type="button" id="logo-fit-btn-contain" onclick="setBrandMediaSlotFit('logo', 'contain')" class="py-1.5 px-2.5 rounded-xl text-[10px] font-medium bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10 transition-all">
+                    ✨ Kesmeden Sığdır
+                  </button>
+                </div>
+
+                <div class="flex items-center gap-1.5">
+                  <button type="button" onclick="rotateBrandMediaSlot('logo')" class="px-2.5 py-1.5 rounded-xl bg-white/5 hover:bg-amber-500 hover:text-black text-amber-300 border border-white/10 text-[10px] font-bold flex items-center gap-1 transition-all">
+                    <i data-lucide="rotate-cw" class="w-3 h-3"></i>
+                    <span>90° Döndür</span>
+                  </button>
+                  <button type="button" id="btn-clear-brand-logo" onclick="clearBrandMediaSlot('logo')" class="hidden px-2.5 py-1.5 rounded-xl bg-red-500/15 hover:bg-red-500 text-red-300 hover:text-white border border-red-500/30 text-[10px] font-bold flex items-center gap-1 transition-all">
+                    <i data-lucide="rotate-ccw" class="w-3 h-3"></i>
+                    <span>Varsayılana Dön</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- KART 2: ANASAYFA 1. SLAYT (ANA KAPAK) & ÜST ARKA PLAN ATMOSFER FOTOĞRAFI -->
+            <div id="brand-hero-dropzone" class="p-4 rounded-2xl bg-neutral-900/75 border border-dashed border-white/15 hover:border-amber-500/45 transition-all space-y-3.5">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <label class="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
+                    <span class="w-6 h-6 rounded-lg bg-amber-500/20 border border-amber-500/30 text-amber-300 flex items-center justify-center text-xs font-black">2</span>
+                    <span>Anasayfa 1. Slayt (Ana Kapak) & Arka Plan Atmosfer Görseli</span>
+                  </label>
+                  <p class="text-[11px] text-gray-400 mt-0.5">Müşteri anasayfasındaki ilk büyük slayt fotoğrafını ve sayfa üstündeki neon/atmosfer yansımasını değiştirir.</p>
+                </div>
+                <span id="brand-hero-status" class="text-[10px] px-2.5 py-1 rounded-full bg-white/5 text-amber-300 border border-white/10 font-mono">
+                  Varsayılan Kapak Aktif
+                </span>
+              </div>
+
+              <input type="hidden" id="set-brand-hero-image" value="" />
+              <input type="hidden" id="set-brand-hero-fit" value="cover" />
+
+              <!-- Canlı 1. Slayt Önizleme Kartı -->
+              <div class="relative w-full h-40 sm:h-44 rounded-2xl overflow-hidden border border-white/10 bg-black shadow-inner">
+                <img id="brand-hero-blur-bg" src="hashtag-banner.jpg?v=3.0" alt="" class="hidden absolute inset-0 w-full h-full object-cover scale-125 blur-xl brightness-50 pointer-events-none" />
+                <img id="brand-hero-preview" src="hashtag-banner.jpg?v=3.0" alt="Ana Kapak Önizleme" class="relative z-10 w-full h-full object-cover object-center transition-all duration-300" />
+                <div class="absolute inset-0 z-10 pointer-events-none bg-gradient-to-t from-black/85 via-black/30 to-black/25"></div>
+
+                <!-- Yükleme Bekleme Katmanı -->
+                <div id="brand-hero-loading" class="hidden absolute inset-0 z-30 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-center text-center p-2">
+                  <i data-lucide="loader-2" class="w-6 h-6 text-amber-400 animate-spin mb-1"></i>
+                  <span id="brand-hero-loading-text" class="text-[11px] text-amber-200 font-semibold">Kapak fotoğrafı optimize ediliyor...</span>
+                </div>
+
+                <!-- Sağ Üst Döndür & Sıfırla -->
+                <div class="absolute top-2.5 right-2.5 z-20 flex items-center gap-1.5">
+                  <button type="button" onclick="rotateBrandMediaSlot('hero')" class="px-2.5 py-1 rounded-lg bg-black/75 hover:bg-amber-500 hover:text-black text-amber-300 border border-white/15 text-[10px] font-bold backdrop-blur-md flex items-center gap-1 transition-all">
+                    <i data-lucide="rotate-cw" class="w-3 h-3"></i>
+                    <span>90° Döndür</span>
+                  </button>
+                  <button type="button" id="btn-clear-brand-hero" onclick="clearBrandMediaSlot('hero')" class="hidden px-2.5 py-1 rounded-lg bg-black/75 hover:bg-red-500 text-white border border-white/15 text-[10px] font-bold backdrop-blur-md flex items-center gap-1 transition-all">
+                    <i data-lucide="rotate-ccw" class="w-3 h-3"></i>
+                    <span>Varsayılana Dön</span>
+                  </button>
+                </div>
+
+                <!-- Sol Alt Canlı Metin Önizlemesi -->
+                <div class="absolute bottom-2.5 left-3.5 right-3.5 z-20 pointer-events-none">
+                  <span id="brand-hero-preview-badge" class="inline-block px-2 py-0.5 rounded-full bg-amber-500/25 text-amber-300 border border-amber-500/30 text-[9px] font-bold uppercase tracking-wider mb-1">PREMİUM ATMOSFER</span>
+                  <div id="brand-hero-preview-title" class="text-sm sm:text-base font-black text-white truncate">HASHTAG LOUNGE & HOOKAH</div>
+                  <div class="flex items-center justify-between gap-2">
+                    <span id="brand-hero-preview-desc" class="text-[10px] text-gray-300 truncate">💨 Özel Nargile Karışımları • 🍹 Mocktail & Kahve</span>
+                    <span id="brand-hero-caption" class="text-[9px] text-amber-300/90 font-mono whitespace-nowrap hidden sm:inline">Varsayılan görsel</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Medya Seçim Butonları -->
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <label class="py-2.5 px-3.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all shadow-md shadow-amber-500/15 active:scale-95">
+                  <i data-lucide="image" class="w-4 h-4"></i>
+                  <span>Ana Kapak Fotoğrafı Seç (Galeri / PC)</span>
+                  <input type="file" id="brand-hero-file-input" accept="image/*,.heic,.heif,.avif,.webp,.png,.jpg,.jpeg,.gif,.bmp,.tiff,.tif,.svg" onchange="handleBrandMediaUpload('hero', event)" class="hidden" />
+                </label>
+
+                <label class="py-2.5 px-3.5 rounded-xl bg-white/10 hover:bg-white/15 text-white border border-white/15 text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-95">
+                  <i data-lucide="camera" class="w-4 h-4 text-amber-400"></i>
+                  <span>Kamerayla Fotoğraf Çek</span>
+                  <input type="file" id="brand-hero-camera-input" accept="image/*" capture="environment" onchange="handleBrandMediaUpload('hero', event)" class="hidden" />
+                </label>
+              </div>
+
+              <!-- Kadraj Seçimi -->
+              <div class="pt-2 border-t border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <span class="text-[11px] font-semibold text-gray-300">Kapak Kadraj Uyumu:</span>
+                <div class="grid grid-cols-3 gap-1.5 flex-1 sm:max-w-xs">
+                  <button type="button" id="hero-fit-btn-cover" onclick="setBrandMediaSlotFit('hero', 'cover')" class="py-1.5 px-2 rounded-xl text-[10px] font-bold bg-amber-500 text-black transition-all">
+                    🖼️ Tam Doldur
+                  </button>
+                  <button type="button" id="hero-fit-btn-top" onclick="setBrandMediaSlotFit('hero', 'top')" class="py-1.5 px-2 rounded-xl text-[10px] font-medium bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10 transition-all">
+                    ⬆️ Üst Odak
+                  </button>
+                  <button type="button" id="hero-fit-btn-contain" onclick="setBrandMediaSlotFit('hero', 'contain')" class="py-1.5 px-2 rounded-xl text-[10px] font-medium bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10 transition-all">
+                    ✨ Kesmeden Sığdır
+                  </button>
+                </div>
+              </div>
+
+              <!-- 1. Slayt Üzerindeki Başlık & Alt Yazı Düzenleme -->
+              <div class="pt-3 border-t border-white/10 space-y-2.5">
+                <div class="text-[11px] font-bold text-gray-300">1. Slayt Üzerindeki Yazılar (İsteğe Bağlı Düzenlenebilir):</div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div>
+                    <label class="block text-[10px] font-semibold text-gray-400 mb-1">Üst Rozet Yazısı</label>
+                    <input type="text" id="set-hero-banner-badge" oninput="syncHeroPreviewTexts()" placeholder="PREMİUM ATMOSFER" class="w-full px-3 py-2 rounded-xl bg-black border border-white/10 text-xs text-white focus:outline-none focus:border-amber-500" />
+                  </div>
+                  <div>
+                    <label class="block text-[10px] font-semibold text-gray-400 mb-1">Ana Kapak Başlığı</label>
+                    <input type="text" id="set-hero-banner-title" oninput="syncHeroPreviewTexts()" placeholder="HASHTAG LOUNGE & HOOKAH" class="w-full px-3 py-2 rounded-xl bg-black border border-white/10 text-xs text-white focus:outline-none focus:border-amber-500" />
+                  </div>
+                </div>
+                <div class="flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-end">
+                  <div class="flex-1">
+                    <label class="block text-[10px] font-semibold text-gray-400 mb-1">Alt Açıklama Metni</label>
+                    <input type="text" id="set-hero-banner-desc" oninput="syncHeroPreviewTexts()" placeholder="💨 Özel Nargile Karışımları • 🍹 Mocktail & Kahve" class="w-full px-3 py-2 rounded-xl bg-black border border-white/10 text-xs text-white focus:outline-none focus:border-amber-500" />
+                  </div>
+                  <button type="button" onclick="saveBrandMediaTextsOnly()" class="px-4 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-black border border-amber-500/30 text-xs font-bold whitespace-nowrap transition-all flex items-center justify-center gap-1.5">
+                    <i data-lucide="check" class="w-3.5 h-3.5"></i>
+                    <span>Yazıları Kaydet</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- KART 3: ANASAYFA 3. SLAYT (CANLI MOOD / EKSTRA ATMOSFER SLAYTI) -->
+            <div class="p-4 rounded-2xl bg-neutral-900/75 border border-white/10 space-y-3">
+              <div class="flex items-center justify-between gap-3">
+                <div>
+                  <div class="flex flex-wrap items-center gap-2">
+                    <span class="w-6 h-6 rounded-lg bg-amber-500/20 border border-amber-500/30 text-amber-300 flex items-center justify-center text-xs font-black">3</span>
+                    <span class="text-xs sm:text-sm font-bold text-white">Anasayfa 3. Slayt (Günün Saatine Göre Atmosfer Görseli)</span>
+                    <span id="mood-slide-status-pill" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold">
+                      <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Aktif
+                    </span>
+                  </div>
+                  <p class="text-[11px] text-gray-400 mt-0.5">3. slayta kendi mekan fotoğrafınızı yükleyebilir veya bu slaytı tamamen kapatabilirsiniz.</p>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer flex-shrink-0" title="3. Slaytı Göster / Gizle">
+                  <input type="checkbox" id="set-mood-slide-enabled" onchange="handleMoodSlideToggleChange(this.checked)" class="sr-only peer" checked />
+                  <div class="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+                </label>
+              </div>
+
+              <div id="mood-slide-disabled-notice" class="hidden p-3 rounded-xl bg-black/80 border border-white/10 flex items-center justify-between gap-3 text-xs text-gray-400">
+                <span>3. slayt şu anda <b class="text-white">gizlendi</b>. Anasayfada yalnızca aktif slaytlarınız döner.</span>
+                <button type="button" onclick="enableMoodSlideQuickly()" class="px-3 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 text-[11px] font-bold whitespace-nowrap">Tekrar Aç</button>
+              </div>
+
+              <div id="mood-slide-config-body" class="space-y-3">
+                <div id="brand-mood-dropzone" class="p-3 rounded-xl bg-black/75 border border-dashed border-white/15 hover:border-amber-500/40 transition-all space-y-3">
+                  <div class="flex items-center justify-between gap-2">
+                    <span class="text-[11px] font-semibold text-gray-300">3. Slayt Özel Fotoğrafı:</span>
+                    <span id="brand-mood-status" class="text-[10px] px-2 py-0.5 rounded-full bg-white/5 text-amber-300 border border-white/10 font-mono">Saat Bazlı Otomatik Görsel</span>
+                  </div>
+
+                  <input type="hidden" id="set-brand-mood-image" value="" />
+                  <input type="hidden" id="set-brand-mood-fit" value="cover" />
+
+                  <div class="relative w-full h-32 sm:h-36 rounded-xl overflow-hidden border border-white/10 bg-neutral-900">
+                    <img id="brand-mood-blur-bg" src="https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=1200&q=80" alt="" class="hidden absolute inset-0 w-full h-full object-cover scale-125 blur-xl brightness-50 pointer-events-none" />
+                    <img id="brand-mood-preview" src="https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=1200&q=80" alt="3. Slayt Önizleme" class="relative z-10 w-full h-full object-cover object-center transition-all duration-300" />
+                    <div class="absolute inset-0 z-10 pointer-events-none bg-gradient-to-t from-black/70 via-transparent to-black/20"></div>
+
+                    <div id="brand-mood-loading" class="hidden absolute inset-0 z-30 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-center text-center p-2">
+                      <i data-lucide="loader-2" class="w-5 h-5 text-amber-400 animate-spin mb-1"></i>
+                      <span id="brand-mood-loading-text" class="text-[11px] text-amber-200 font-semibold">Optimize ediliyor...</span>
+                    </div>
+
+                    <div class="absolute top-2 right-2 z-20 flex items-center gap-1.5">
+                      <button type="button" onclick="rotateBrandMediaSlot('mood')" class="px-2 py-1 rounded-lg bg-black/75 hover:bg-amber-500 hover:text-black text-amber-300 border border-white/15 text-[10px] font-bold backdrop-blur-md flex items-center gap-1 transition-all">
+                        <i data-lucide="rotate-cw" class="w-3 h-3"></i>
+                        <span>90°</span>
+                      </button>
+                      <button type="button" id="btn-clear-brand-mood" onclick="clearBrandMediaSlot('mood')" class="hidden px-2 py-1 rounded-lg bg-black/75 hover:bg-red-500 text-white border border-white/15 text-[10px] font-bold backdrop-blur-md flex items-center gap-1 transition-all">
+                        <i data-lucide="rotate-ccw" class="w-3 h-3"></i>
+                        <span>Otomatiğe Dön</span>
+                      </button>
+                    </div>
+
+                    <div class="absolute bottom-2 left-3 z-20 text-[10px] text-gray-200 font-medium">
+                      <span id="brand-mood-caption">Günün saatine göre otomatik atmosfer görseli aktif</span>
+                    </div>
+                  </div>
+
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <label class="py-2 px-3 rounded-xl bg-amber-500/90 hover:bg-amber-400 text-black text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-95">
+                      <i data-lucide="image" class="w-3.5 h-3.5"></i>
+                      <span>3. Slayt Fotoğrafı Seç</span>
+                      <input type="file" id="brand-mood-file-input" accept="image/*,.heic,.heif,.avif,.webp,.png,.jpg,.jpeg,.gif,.bmp,.tiff,.tif,.svg" onchange="handleBrandMediaUpload('mood', event)" class="hidden" />
+                    </label>
+                    <label class="py-2 px-3 rounded-xl bg-white/10 hover:bg-white/15 text-white border border-white/15 text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-95">
+                      <i data-lucide="camera" class="w-3.5 h-3.5 text-amber-400"></i>
+                      <span>Kamerayla Çek</span>
+                      <input type="file" id="brand-mood-camera-input" accept="image/*" capture="environment" onchange="handleBrandMediaUpload('mood', event)" class="hidden" />
+                    </label>
+                  </div>
+
+                  <div class="pt-2 border-t border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <span class="text-[11px] font-semibold text-gray-300">3. Slayt Kadrajı:</span>
+                    <div class="grid grid-cols-3 gap-1.5 flex-1 sm:max-w-xs">
+                      <button type="button" id="mood-fit-btn-cover" onclick="setBrandMediaSlotFit('mood', 'cover')" class="py-1.5 px-2 rounded-xl text-[10px] font-bold bg-amber-500 text-black transition-all">🖼️ Tam Doldur</button>
+                      <button type="button" id="mood-fit-btn-top" onclick="setBrandMediaSlotFit('mood', 'top')" class="py-1.5 px-2 rounded-xl text-[10px] font-medium bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10 transition-all">⬆️ Üst Odak</button>
+                      <button type="button" id="mood-fit-btn-contain" onclick="setBrandMediaSlotFit('mood', 'contain')" class="py-1.5 px-2 rounded-xl text-[10px] font-medium bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10 transition-all">✨ Kesmeden Sığdır</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 2. Slayt (Günün Duyurusu) Hızlı Geçiş Bilgisi -->
+            <div class="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 flex flex-wrap items-center justify-between gap-2 text-xs">
+              <span class="text-amber-200/90">💡 <b>Anasayfa 2. Slayt (Günün/Haftanın Duyurusu)</b> görselini de aşağıdaki duyuru alanından değiştirebilirsiniz.</span>
+              <button type="button" onclick="document.getElementById('announcement-image-dropzone')?.scrollIntoView({behavior:'smooth', block:'center'})" class="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500 hover:text-black text-amber-300 font-bold text-[11px] transition-all whitespace-nowrap">
+                2. Slayt Görseline Git ↓
+              </button>
+            </div>
+          </div>
 
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
@@ -320,8 +640,11 @@
                 <input type="text" id="set-wifi-pass" class="w-full px-3 py-2 rounded-xl bg-black border border-white/10 text-sm text-white focus:outline-none focus:border-amber-500 font-mono" />
               </div>
               <div>
-                <label class="block text-xs font-semibold text-gray-300 mb-1.5">Instagram Kullanıcı Adı</label>
-                <input type="text" id="set-instagram" placeholder="hashtagcafe07" class="w-full px-3 py-2 rounded-xl bg-black border border-white/10 text-sm text-white focus:outline-none focus:border-amber-500" />
+                <div class="flex items-center justify-between mb-1.5">
+                  <label class="block text-xs font-semibold text-gray-300">Instagram Kullanıcı Adı</label>
+                  <a id="instagram-live-preview-link" href="https://www.instagram.com/hashtagcafe07" target="_blank" rel="noopener noreferrer" class="text-[10px] text-pink-400 hover:text-pink-300 font-mono underline">instagram.com/hashtagcafe07</a>
+                </div>
+                <input type="text" id="set-instagram" oninput="updateInstagramPreviewLink(this.value)" placeholder="hashtagcafe07" class="w-full px-3 py-2 rounded-xl bg-black border border-white/10 text-sm text-white focus:outline-none focus:border-amber-500" />
               </div>
               <div>
                 <label class="block text-xs font-semibold text-gray-300 mb-1.5">Google Haritalar Yorum Linki</label>
@@ -336,21 +659,35 @@
 
           <!-- Haftanın / Günün Duyurusu & Canlı Banner Yönetimi -->
           <div class="pt-4 border-t border-white/10">
-            <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center justify-between gap-3 mb-3">
               <div>
-                <h3 class="text-sm font-semibold text-white flex items-center gap-2">
+                <h3 class="text-sm font-semibold text-white flex flex-wrap items-center gap-2">
                   <i data-lucide="megaphone" class="w-4 h-4 text-amber-400"></i>
-                  Haftanın / Günün Duyurusu & Banner Yönetimi
+                  <span>Haftanın / Günün Duyurusu & Banner Yönetimi</span>
+                  <span id="announcement-status-pill" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Menüde Yayında
+                  </span>
                 </h3>
                 <p class="text-xs text-gray-400 mt-0.5">Müşteri menüsündeki canlı hero carousel'inde 2. slayt olarak gösterilir.</p>
               </div>
               <label class="relative inline-flex items-center cursor-pointer flex-shrink-0" title="Duyuruyu Menüde Göster / Gizle">
-                <input type="checkbox" id="set-announcement-enabled" class="sr-only peer" checked />
+                <input type="checkbox" id="set-announcement-enabled" onchange="handleAnnouncementToggleChange(this.checked)" class="sr-only peer" checked />
                 <div class="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
               </label>
             </div>
 
-            <div class="space-y-3 p-4 rounded-2xl bg-black border border-white/10">
+            <!-- Kapalı Durum Bilgi Kutusu -->
+            <div id="announcement-disabled-notice" class="hidden p-4 rounded-2xl bg-neutral-950/80 border border-white/10 flex items-center justify-between gap-3">
+              <div class="flex items-center gap-2.5 text-xs text-gray-400">
+                <i data-lucide="eye-off" class="w-4 h-4 text-gray-500 flex-shrink-0"></i>
+                <span>Duyuru slaytı şu anda <b class="text-gray-200">kapalı</b> ve müşteri menüsünde gizlendi. Tekrar yayınlamak için sağ üstteki anahtarı açabilirsiniz.</span>
+              </div>
+              <button type="button" onclick="enableAnnouncementQuickly()" class="px-3 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 text-[11px] font-bold whitespace-nowrap transition-all">
+                Tekrar Aç
+              </button>
+            </div>
+
+            <div id="announcement-config-body" class="space-y-3 p-4 rounded-2xl bg-black border border-white/10 transition-all">
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label class="block text-xs font-semibold text-gray-300 mb-1.5">Duyuru / Rozet Başlığı</label>
@@ -365,9 +702,91 @@
                 <label class="block text-xs font-semibold text-gray-300 mb-1.5">Duyuru / Açıklama Metni</label>
                 <input type="text" id="set-announcement-desc" placeholder="Örn: Özel buzlu marpuç ve taze nane esintisiyle hazırlanan günün karışımı." class="w-full px-3 py-2 rounded-xl bg-neutral-900 border border-white/10 text-sm text-white focus:outline-none focus:border-amber-500" />
               </div>
-              <div>
-                <label class="block text-xs font-semibold text-gray-300 mb-1.5">Özel Görsel Linki (Opsiyonel - Boşsa şık lounge görseli gösterilir)</label>
-                <input type="text" id="set-announcement-image" placeholder="https://images.unsplash.com/... veya dosya yolu" class="w-full px-3 py-2 rounded-xl bg-neutral-900 border border-white/10 text-xs text-white focus:outline-none focus:border-amber-500 font-mono" />
+              <!-- DOĞRUDAN TELEFON & BİLGİSAYAR MEDYASINDAN BANNER GÖRSELİ YÜKLEME ALANI (LİNKSİZ) -->
+              <div id="announcement-image-dropzone" class="p-3.5 rounded-2xl bg-neutral-950/90 border border-dashed border-white/15 hover:border-amber-500/40 transition-all space-y-3">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <label class="text-xs font-bold text-white flex items-center gap-1.5">
+                    <i data-lucide="image-plus" class="w-4 h-4 text-amber-400"></i>
+                    <span>Duyuru / Banner Görseli (Telefon veya Bilgisayar Medyası)</span>
+                  </label>
+                  <span id="announcement-upload-status" class="text-[10px] px-2 py-0.5 rounded-full bg-white/5 text-amber-300 border border-white/10 font-mono">
+                    Varsayılan Görsel Aktif
+                  </span>
+                </div>
+
+                <!-- Gizli Veri Alanları (Link kutusu yerine otomatik medya yolu tutar) -->
+                <input type="hidden" id="set-announcement-image" value="" />
+                <input type="hidden" id="set-announcement-image-fit" value="cover" />
+
+                <!-- Canlı Hero Banner Önizlemesi -->
+                <div id="announcement-image-preview-wrap" class="relative w-full h-36 sm:h-40 rounded-2xl overflow-hidden border border-white/10 bg-neutral-900 shadow-inner">
+                  <img id="announcement-image-blur-bg" src="https://images.unsplash.com/photo-1527661591475-527312dd65f5?auto=format&fit=crop&w=1200&q=80" alt="" class="hidden absolute inset-0 w-full h-full object-cover scale-125 blur-xl brightness-50 pointer-events-none" />
+                  <img id="announcement-image-preview" src="https://images.unsplash.com/photo-1527661591475-527312dd65f5?auto=format&fit=crop&w=1200&q=80" alt="Banner Önizleme" class="relative z-10 w-full h-full object-cover object-center transition-all duration-300" />
+                  <div class="absolute inset-0 z-10 pointer-events-none bg-gradient-to-t from-black/70 via-transparent to-black/20"></div>
+
+                  <!-- Yükleme Bekleme Katmanı -->
+                  <div id="announcement-image-loading" class="hidden absolute inset-0 z-30 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center text-center p-2">
+                    <i data-lucide="loader-2" class="w-6 h-6 text-amber-400 animate-spin mb-1"></i>
+                    <span id="announcement-image-loading-text" class="text-[11px] text-amber-200 font-semibold">Medya optimize ediliyor...</span>
+                  </div>
+
+                  <!-- Üst Aksiyon Butonları (Döndür & Kaldır) -->
+                  <div class="absolute top-2.5 right-2.5 z-20 flex items-center gap-1.5">
+                    <button type="button" onclick="rotateAnnouncementImage()" class="px-2.5 py-1 rounded-lg bg-black/75 hover:bg-amber-500 hover:text-black text-amber-300 border border-white/15 text-[10px] font-bold backdrop-blur-md flex items-center gap-1 transition-all" title="Görseli 90 derece döndür">
+                      <i data-lucide="rotate-cw" class="w-3 h-3"></i>
+                      <span>90° Döndür</span>
+                    </button>
+                    <button type="button" id="btn-clear-announcement-img" onclick="clearAnnouncementImage()" class="hidden px-2.5 py-1 rounded-lg bg-black/75 hover:bg-red-500 text-white border border-white/15 text-[10px] font-bold backdrop-blur-md flex items-center gap-1 transition-all">
+                      <i data-lucide="trash-2" class="w-3 h-3"></i>
+                      <span>Kaldır</span>
+                    </button>
+                  </div>
+
+                  <div class="absolute bottom-2.5 left-3 z-20 text-[10px] text-gray-200 font-medium flex items-center gap-1.5">
+                    <span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                    <span id="announcement-preview-caption">Varsayılan şık lounge görseli gösteriliyor</span>
+                  </div>
+                </div>
+
+                <!-- Doğrudan Medya & Kamera Seçim Butonları -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <label class="py-2.5 px-3.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all shadow-md shadow-amber-500/15 active:scale-95">
+                    <i data-lucide="image" class="w-4 h-4"></i>
+                    <span>Galeriden / Bilgisayardan Seç</span>
+                    <input type="file" id="announcement-image-file-input" accept="image/*,.heic,.heif,.avif,.webp,.png,.jpg,.jpeg,.gif,.bmp,.tiff,.tif,.svg" onchange="handleAnnouncementImageUpload(event)" class="hidden" />
+                  </label>
+
+                  <label class="py-2.5 px-3.5 rounded-xl bg-white/10 hover:bg-white/15 text-white border border-white/15 text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-95">
+                    <i data-lucide="camera" class="w-4 h-4 text-amber-400"></i>
+                    <span>Kamerayla Fotoğraf Çek</span>
+                    <input type="file" id="announcement-camera-file-input" accept="image/*" capture="environment" onchange="handleAnnouncementImageUpload(event)" class="hidden" />
+                  </label>
+                </div>
+
+                <!-- Banner Kadraj & Boyut Uyumu -->
+                <div class="pt-2 border-t border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <span class="text-[11px] font-semibold text-gray-300">Banner Kadraj Uyumu:</span>
+                  <div class="grid grid-cols-3 gap-1.5 flex-1 sm:max-w-xs">
+                    <button type="button" id="ann-fit-btn-cover" onclick="setAnnouncementImageFit('cover')" class="py-1.5 px-2 rounded-xl text-[10px] font-bold bg-amber-500 text-black transition-all">
+                      🖼️ Tam Doldur
+                    </button>
+                    <button type="button" id="ann-fit-btn-top" onclick="setAnnouncementImageFit('top')" class="py-1.5 px-2 rounded-xl text-[10px] font-medium bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10 transition-all">
+                      ⬆️ Üst Odak
+                    </button>
+                    <button type="button" id="ann-fit-btn-contain" onclick="setAnnouncementImageFit('contain')" class="py-1.5 px-2 rounded-xl text-[10px] font-medium bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10 transition-all">
+                      ✨ Kesmeden Sığdır
+                    </button>
+                  </div>
+                </div>
+                <p class="text-[10px] text-gray-500">Telefon galerisinden (iPhone HEIC dahil), kameradan veya bilgisayardan sürükleyip bırakarak her boyutta fotoğraf yükleyebilirsiniz.</p>
+              </div>
+
+              <!-- Duyuru Hızlı Kaydet & Yayınla Butonu -->
+              <div class="pt-1 flex justify-end">
+                <button type="button" onclick="saveAnnouncementSectionOnly()" class="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-md shadow-amber-500/20 active:scale-95">
+                  <i data-lucide="check-circle-2" class="w-4 h-4"></i>
+                  <span>Duyuruyu & Banner'ı Güncelle</span>
+                </button>
               </div>
             </div>
           </div>
@@ -391,7 +810,7 @@
                 <div class="text-xs text-gray-400">Menünün altında müşterilere tek tıkla köz veya garson çağırma butonunu göster.</div>
               </div>
               <label class="relative inline-flex items-center cursor-pointer flex-shrink-0">
-                <input type="checkbox" id="set-enable-calls" class="sr-only peer" />
+                <input type="checkbox" id="set-enable-calls" onchange="handleQuickSettingsToggleChange('Köz & Garson çağrı butonları')" class="sr-only peer" />
                 <div class="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
               </label>
             </div>
@@ -422,7 +841,7 @@
                   <div class="text-[11px] text-gray-400">Garsonlar biten ürünleri "Tükendi" veya "Mevcut" yapabilir.</div>
                 </div>
                 <div class="relative inline-flex items-center cursor-pointer flex-shrink-0">
-                  <input type="checkbox" id="set-staff-allow-stock" class="sr-only peer" />
+                  <input type="checkbox" id="set-staff-allow-stock" onchange="handleQuickSettingsToggleChange('Personel stok değiştirme yetkisi')" class="sr-only peer" />
                   <div class="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
                 </div>
               </label>
@@ -433,7 +852,7 @@
                   <div class="text-[11px] text-gray-500">Güvenlik için kapalı kalması önerilir. Sadece yönetici fiyat değiştirebilir.</div>
                 </div>
                 <div class="relative inline-flex items-center cursor-pointer flex-shrink-0">
-                  <input type="checkbox" id="set-staff-allow-price" class="sr-only peer" />
+                  <input type="checkbox" id="set-staff-allow-price" onchange="handleQuickSettingsToggleChange('Personel fiyat değiştirme yetkisi')" class="sr-only peer" />
                   <div class="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
                 </div>
               </label>
@@ -832,15 +1251,91 @@
           </div>
         </div>
 
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="block text-xs font-semibold text-gray-300 mb-1">Rozet / Etiket</label>
-            <input type="text" id="form-item-badge" placeholder="Popüler, İmza Karışım, Yeni" class="w-full px-3 py-2 rounded-xl bg-black border border-white/10 text-sm text-white focus:outline-none focus:border-amber-500" />
+        <div>
+          <label class="block text-xs font-semibold text-gray-300 mb-1">Rozet / Etiket</label>
+          <input type="text" id="form-item-badge" placeholder="Popüler, İmza Karışım, Yeni" class="w-full px-3 py-2 rounded-xl bg-black border border-white/10 text-sm text-white focus:outline-none focus:border-amber-500" />
+          <div class="mt-1.5 flex flex-wrap gap-1.5">
+            <button type="button" onclick="document.getElementById('form-item-badge').value='Popüler'" class="text-[10px] px-2 py-0.5 rounded-md bg-white/5 hover:bg-amber-500/20 text-gray-300 hover:text-amber-300 border border-white/5">🔥 Popüler</button>
+            <button type="button" onclick="document.getElementById('form-item-badge').value='İmza Karışım'" class="text-[10px] px-2 py-0.5 rounded-md bg-white/5 hover:bg-amber-500/20 text-gray-300 hover:text-amber-300 border border-white/5">⭐ İmza Karışım</button>
+            <button type="button" onclick="document.getElementById('form-item-badge').value='Yeni'" class="text-[10px] px-2 py-0.5 rounded-md bg-white/5 hover:bg-emerald-500/20 text-gray-300 hover:text-emerald-300 border border-white/5">✨ Yeni</button>
+            <button type="button" onclick="document.getElementById('form-item-badge').value='Şefin Seçimi'" class="text-[10px] px-2 py-0.5 rounded-md bg-white/5 hover:bg-purple-500/20 text-gray-300 hover:text-purple-300 border border-white/5">👑 Şefin Seçimi</button>
           </div>
-          <div>
-            <label class="block text-xs font-semibold text-gray-300 mb-1">Görsel URL</label>
-            <input type="url" id="form-item-image" placeholder="https://..." class="w-full px-3 py-2 rounded-xl bg-black border border-white/10 text-sm text-white focus:outline-none focus:border-amber-500" />
-            <div class="mt-1 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+        </div>
+
+        <!-- EVRENSEL FOTOĞRAF YÜKLEME & AKILLI BOYUTLANDIRMA ALANI (TELEFON & BİLGİSAYAR) -->
+        <div id="item-image-dropzone" class="p-3.5 rounded-2xl bg-black/70 border border-dashed border-white/15 hover:border-amber-500/40 transition-all space-y-3">
+          <div class="flex items-center justify-between gap-2">
+            <label class="text-xs font-bold text-white flex items-center gap-1.5">
+              <i data-lucide="image-plus" class="w-4 h-4 text-amber-400"></i>
+              <span>Ürün Fotoğrafı (Telefon & Bilgisayar)</span>
+            </label>
+            <span id="item-image-meta-badge" class="text-[10px] px-2 py-0.5 rounded-full bg-white/5 text-gray-400 border border-white/10 font-mono">
+              Tüm Boyut & Formatlar
+            </span>
+          </div>
+
+          <div class="flex flex-col sm:flex-row items-center gap-3.5">
+            <!-- Canlı Menü Kartı Önizleme Kutusu -->
+            <div class="relative w-28 h-28 flex-shrink-0 rounded-2xl overflow-hidden bg-neutral-900 border border-white/15 shadow-lg">
+              <img id="item-image-blur-bg" src="https://images.unsplash.com/photo-1527661591475-527312dd65f5?auto=format&fit=crop&w=300&q=80" alt="" class="hidden absolute inset-0 w-full h-full object-cover scale-125 blur-md brightness-50 pointer-events-none" />
+              <img id="item-image-preview" src="https://images.unsplash.com/photo-1527661591475-527312dd65f5?auto=format&fit=crop&w=300&q=80" alt="Önizleme" class="relative z-10 w-full h-full object-cover object-center transition-all duration-300" />
+              <div id="item-image-loading" class="hidden absolute inset-0 z-20 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center text-center p-1">
+                <i data-lucide="loader-2" class="w-5 h-5 text-amber-400 animate-spin mb-1"></i>
+                <span id="item-image-loading-text" class="text-[9px] text-amber-200 font-semibold leading-tight">Optimize ediliyor...</span>
+              </div>
+            </div>
+
+            <!-- Yükleme Butonları (Galeri / Dosya / Kamera / Sürükle-Bırak) -->
+            <div class="flex-1 w-full space-y-2">
+              <div class="grid grid-cols-2 gap-2">
+                <label class="py-2.5 px-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-all shadow-md shadow-amber-500/15 active:scale-95">
+                  <i data-lucide="upload" class="w-4 h-4"></i>
+                  <span>Fotoğraf Seç</span>
+                  <input type="file" id="item-image-file-input" accept="image/*,.heic,.heif,.avif,.webp,.png,.jpg,.jpeg,.gif,.bmp,.tiff,.tif,.svg" onchange="handleProductImageFileSelect(event)" class="hidden" />
+                </label>
+
+                <label class="py-2.5 px-3 rounded-xl bg-white/10 hover:bg-white/15 text-white border border-white/15 text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-95">
+                  <i data-lucide="camera" class="w-4 h-4 text-amber-400"></i>
+                  <span>Kamerayla Çek</span>
+                  <input type="file" id="item-camera-file-input" accept="image/*" capture="environment" onchange="handleProductImageFileSelect(event)" class="hidden" />
+                </label>
+              </div>
+
+              <div class="flex items-center justify-between gap-2 text-[10px] text-gray-400">
+                <span>JPG, PNG, HEIC (iPhone), WEBP, GIF, SVG • 50MB'a kadar</span>
+                <button type="button" onclick="rotateProductImage()" class="px-2 py-1 rounded-lg bg-white/5 hover:bg-white/15 text-amber-300 border border-white/10 font-semibold flex items-center gap-1 whitespace-nowrap transition-all" title="Fotoğrafı 90 derece döndür">
+                  <i data-lucide="rotate-cw" class="w-3 h-3"></i>
+                  <span>90° Döndür</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Her En-Boy Oranına Uygun Kadraj Modu -->
+          <div class="pt-2 border-t border-white/10">
+            <div class="flex items-center justify-between mb-1.5">
+              <span class="text-[11px] font-semibold text-gray-300">Görsel Boyut & Kadraj Uyumu:</span>
+              <span class="text-[10px] text-gray-500">Dikey/yatay fotoğraflar için</span>
+            </div>
+            <input type="hidden" id="form-item-image-fit" value="cover" />
+            <div class="grid grid-cols-3 gap-1.5">
+              <button type="button" id="fit-btn-cover" onclick="setItemImageFit('cover')" class="py-1.5 px-2 rounded-xl text-[10px] font-bold bg-amber-500 text-black transition-all">
+                🖼️ Tam Doldur
+              </button>
+              <button type="button" id="fit-btn-top" onclick="setItemImageFit('top')" class="py-1.5 px-2 rounded-xl text-[10px] font-medium bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10 transition-all">
+                ⬆️ Üst Odak
+              </button>
+              <button type="button" id="fit-btn-contain" onclick="setItemImageFit('contain')" class="py-1.5 px-2 rounded-xl text-[10px] font-medium bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10 transition-all">
+                ✨ Kesmeden Sığdır
+              </button>
+            </div>
+          </div>
+
+          <!-- Gizli Görsel Yolu & Hızlı Hazır Görsel Şablonları (Link kutusu olmadan doğrudan seçim) -->
+          <input type="hidden" id="form-item-image" value="" />
+          <div class="pt-2 border-t border-white/10">
+            <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+              <span class="text-[10px] text-gray-500 whitespace-nowrap">Hazır Görseller:</span>
               <button type="button" onclick="setPresetImage('hookah')" class="text-[10px] whitespace-nowrap px-2 py-0.5 rounded bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white border border-white/5">💨 Nargile</button>
               <button type="button" onclick="setPresetImage('fruit')" class="text-[10px] whitespace-nowrap px-2 py-0.5 rounded bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white border border-white/5">🍊 Meyve Çanak</button>
               <button type="button" onclick="setPresetImage('mocktail')" class="text-[10px] whitespace-nowrap px-2 py-0.5 rounded bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white border border-white/5">🍹 Mocktail</button>
@@ -850,7 +1345,7 @@
           </div>
         </div>
 
-        <div class="flex items-center gap-2 pt-2">
+        <div class="flex items-center gap-2 pt-1">
           <input type="checkbox" id="form-item-stock" class="w-4 h-4 rounded text-amber-500 focus:ring-0 bg-black border-white/20" />
           <label for="form-item-stock" class="text-xs font-medium text-gray-300 cursor-pointer">Ürün stokta mevcut (Tükendi değil)</label>
         </div>
@@ -859,7 +1354,7 @@
           <button type="button" onclick="closeItemEditModal()" class="flex-1 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300 text-sm font-medium transition-colors">
             İptal
           </button>
-          <button type="submit" class="flex-1 py-2.5 rounded-xl bg-amber-500 text-black font-bold text-sm hover:bg-amber-400 transition-colors shadow-lg shadow-amber-500/20">
+          <button type="submit" id="btn-save-item" class="flex-1 py-2.5 rounded-xl bg-amber-500 text-black font-bold text-sm hover:bg-amber-400 transition-colors shadow-lg shadow-amber-500/20">
             Kaydet
           </button>
         </div>
@@ -956,8 +1451,8 @@
   </div>
 
   <!-- Scriptler -->
-  <script src="default-data.js?v=3.1"></script>
-  <script src="app.js?v=3.1"></script>
-  <script src="admin.js?v=3.1"></script>
+  <script src="default-data.js?v=3.8"></script>
+  <script src="app.js?v=3.8"></script>
+  <script src="admin.js?v=3.8"></script>
 </body>
 </html>

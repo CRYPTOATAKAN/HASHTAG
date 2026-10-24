@@ -12,6 +12,9 @@ let currentRating = 5;
 let currentFeedbackTags = new Set();
 let standaloneRating = 5;
 let standaloneFeedbackTags = new Set();
+let lastKnownMenuVersion = null;
+let lastHeroSignature = '';
+let customerMenuSyncTimer = null;
 
 function escapeHtml(text) {
   if (text === null || text === undefined) return '';
@@ -36,6 +39,22 @@ function getApiBaseUrl() {
   }
   // Eğer masaüstündeki HTML dosyasından açıldıysa canlı Northflank adresine bağlan
   return 'https://p01--hashtag--xqx4khzq6gkf.code.run';
+}
+
+// Yüklenen (/uploads/...) veya Harici Görseller İçin Evrensel URL Çözücü
+function resolveImageUrl(url, fallback = 'https://images.unsplash.com/photo-1527661591475-527312dd65f5?auto=format&fit=crop&w=600&q=80') {
+  if (!url || typeof url !== 'string' || !url.trim()) {
+    return fallback;
+  }
+  const clean = url.trim();
+  if (clean.startsWith('data:') || clean.startsWith('blob:') || clean.startsWith('http://') || clean.startsWith('https://')) {
+    return clean;
+  }
+  if (clean.startsWith('/uploads/')) {
+    const apiBase = getApiBaseUrl();
+    return apiBase ? `${apiBase}${clean}` : clean;
+  }
+  return clean;
 }
 
 // Görsel Bildirim (Toast) Sistemi
@@ -71,6 +90,36 @@ function safeSetStorage(key, val) {
   try { localStorage.setItem(key, val); } catch (e) {}
 }
 
+// Eski şablondan kalan 'hashtag.lounge' sahte Instagram adresini temizleyip resmi hesaba dönüştürür
+function normalizeInstagramHandle(val) {
+  const raw = String(val || '').trim();
+  const cleaned = raw
+    .replace(/^https?:\/\/(www\.)?instagram\.com\//i, '')
+    .split(/[/?#]/)[0]
+    .replace(/^@+/, '')
+    .trim();
+  if (!cleaned || cleaned.toLowerCase() === 'hashtag.lounge') {
+    return 'hashtagcafe07';
+  }
+  return cleaned;
+}
+
+function sanitizeMenuDataSettings(data) {
+  if (!data || typeof data !== 'object') return data;
+  if (!data.settings || typeof data.settings !== 'object') {
+    data.settings = {};
+  }
+  data.settings.instagram = normalizeInstagramHandle(data.settings.instagram);
+  if (
+    data.settings.baseUrl === 'https://hashtag-menu.com' ||
+    data.settings.baseUrl === 'null' ||
+    data.settings.baseUrl === 'file://'
+  ) {
+    data.settings.baseUrl = '';
+  }
+  return data;
+}
+
 // Sekmeler Arası Eşitleme Kanalı (BroadcastChannel)
 const syncChannel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('hashtag_menu_sync') : null;
 if (syncChannel) {
@@ -78,9 +127,11 @@ if (syncChannel) {
     if (ev.data === 'sync') {
       await loadMenuData();
       if (document.getElementById('menu-app')) {
-        renderHeaderInfo();
-        renderCategoryPills();
-        renderMenuItems();
+        applyLiveCustomerMenuRefresh(false);
+      } else if (document.getElementById('admin-main-content') && typeof updateAdminStats === 'function') {
+        updateAdminStats();
+        if (typeof renderAdminProductTable === 'function') renderAdminProductTable();
+        if (typeof renderQuickPriceTable === 'function') renderQuickPriceTable();
       }
     }
   };
@@ -89,29 +140,36 @@ if (syncChannel) {
 // Depolama Olayı Dinleyicisi (Farklı Sekmeler İçin)
 if (typeof window !== 'undefined' && window.addEventListener) {
   window.addEventListener('storage', (e) => {
-    if (e.key === 'hashtag_menu_cache') {
+    if (e.key === 'hashtag_menu_cache' && e.newValue) {
       try {
-        menuData = JSON.parse(e.newValue);
+        menuData = sanitizeMenuDataSettings(JSON.parse(e.newValue));
+        if (menuData && (menuData._version || menuData.updatedAt)) {
+          lastKnownMenuVersion = menuData._version || menuData.updatedAt;
+        }
         if (document.getElementById('menu-app')) {
-          renderHeaderInfo();
-          renderCategoryPills();
-          renderMenuItems();
+          applyLiveCustomerMenuRefresh(false);
+        } else if (document.getElementById('admin-main-content') && typeof updateAdminStats === 'function') {
+          updateAdminStats();
+          if (typeof renderAdminProductTable === 'function') renderAdminProductTable();
+          if (typeof renderQuickPriceTable === 'function') renderQuickPriceTable();
         }
       } catch (err) {}
     }
   });
 }
 
-// Menü Verisini Yükleme (Önbellek atlatmalı canlı sunucu kontrolü)
+// Menü Verisini Yükleme (CORS preflight engeline takılmayan önbellek atlatmalı canlı sunucu kontrolü)
 async function loadMenuData() {
   try {
     const apiBase = getApiBaseUrl();
     const res = await fetch(apiBase + '/api/menu?_t=' + Date.now(), {
-      cache: 'no-store',
-      headers: { 'Cache-Control': 'no-cache, no-store' }
+      cache: 'no-store'
     });
     if (res.ok) {
-      menuData = await res.json();
+      menuData = sanitizeMenuDataSettings(await res.json());
+      if (menuData && (menuData._version || menuData.updatedAt)) {
+        lastKnownMenuVersion = menuData._version || menuData.updatedAt;
+      }
       safeSetStorage('hashtag_menu_cache', JSON.stringify(menuData));
       return menuData;
     }
@@ -119,11 +177,16 @@ async function loadMenuData() {
     console.warn("Canlı sunucudan çekilemedi, önbelleğe bakılıyor:", err);
   }
 
-  // Önbellek kontrolü
+  // Önbellek kontrolü (Eski 'hashtag.lounge' kalıntısı varsa anında temizle ve düzelt)
   const cached = safeGetStorage('hashtag_menu_cache');
   if (cached) {
     try {
-      menuData = JSON.parse(cached);
+      const parsedCache = JSON.parse(cached);
+      const prevInsta = parsedCache && parsedCache.settings && parsedCache.settings.instagram;
+      menuData = sanitizeMenuDataSettings(parsedCache);
+      if (prevInsta !== menuData.settings.instagram) {
+        safeSetStorage('hashtag_menu_cache', JSON.stringify(menuData));
+      }
       return menuData;
     } catch (e) {
       console.error(e);
@@ -132,12 +195,12 @@ async function loadMenuData() {
 
   // Varsayılan zengin veri
   if (window.DEFAULT_MENU_DATA) {
-    menuData = JSON.parse(JSON.stringify(window.DEFAULT_MENU_DATA));
+    menuData = sanitizeMenuDataSettings(JSON.parse(JSON.stringify(window.DEFAULT_MENU_DATA)));
     return menuData;
   }
 
   // Acil durum boş veri
-  menuData = {
+  menuData = sanitizeMenuDataSettings({
     settings: {
       cafeName: "HASHTAG",
       cafeTagline: "Lounge & Hookah Experience",
@@ -147,22 +210,19 @@ async function loadMenuData() {
       wifiPassword: "hashtagwelcome",
       instagram: "hashtagcafe07",
       enableServiceCalls: false,
-      baseUrl: window.location.origin
+      baseUrl: window.location.protocol.startsWith('http') ? window.location.origin : ''
     },
     categories: [],
     items: []
-  };
+  });
   return menuData;
 }
 
-// Menüyü Kaydetme (Sunucuya POST, LocalStorage'a da yaz)
+// Menüyü Kaydetme (Önce Sunucuya POST, doğrulandıktan sonra tüm sekmelere/cihazlara yay)
 async function saveMenuData(updatedData) {
+  sanitizeMenuDataSettings(updatedData);
+  updatedData.updatedAt = Date.now();
   menuData = updatedData;
-  safeSetStorage('hashtag_menu_cache', JSON.stringify(menuData));
-
-  if (syncChannel) {
-    try { syncChannel.postMessage('sync'); } catch (e) {}
-  }
 
   // Giriş yapılmış PIN'i header ile gönder (Güvenlik)
   let pin = '';
@@ -182,14 +242,22 @@ async function saveMenuData(updatedData) {
 
     if (res.ok) {
       showToast('✅ Değişiklikler canlı menüye başarıyla kaydedildi!', 'success');
-      // Arka planda sunucudan tekrar çekip doğrula
+      // Sunucudan güncel versiyon damgalı veriyi çekip önbelleği ve diğer sekmeleri eşitle
       try {
         const verifyRes = await fetch(apiBase + '/api/menu?_t=' + Date.now(), { cache: 'no-store' });
         if (verifyRes.ok) {
-          menuData = await verifyRes.json();
-          safeSetStorage('hashtag_menu_cache', JSON.stringify(menuData));
+          menuData = sanitizeMenuDataSettings(await verifyRes.json());
         }
       } catch (e) {}
+
+      if (menuData && (menuData._version || menuData.updatedAt)) {
+        lastKnownMenuVersion = menuData._version || menuData.updatedAt;
+      }
+      safeSetStorage('hashtag_menu_cache', JSON.stringify(menuData));
+
+      if (syncChannel) {
+        try { syncChannel.postMessage('sync'); } catch (e) {}
+      }
       return true;
     } else {
       const errJson = await res.json().catch(() => ({}));
@@ -206,13 +274,75 @@ async function saveMenuData(updatedData) {
   }
 }
 
-window.refreshCustomerMenu = async function(btn) {
-  if (btn) btn.classList.add('animate-spin');
-  await loadMenuData();
+// Müşteri Menüsünü Canlı Yenileme (Silinen kategori & güncellenen adisyon korumalı)
+function applyLiveCustomerMenuRefresh(forceHero = false) {
+  if (!document.getElementById('menu-app') || !menuData) return;
+
+  if (currentCategory !== 'all') {
+    const catExists = (menuData.categories || []).some(c => c.id === currentCategory);
+    if (!catExists) {
+      currentCategory = 'all';
+    }
+  }
+
+  // Müşterinin adisyon hesaplayıcısındaki ürünleri güncel fiyat/isim/silinme durumuna göre eşitle
+  if (estimatedBillItems && typeof estimatedBillItems === 'object') {
+    const latestItems = menuData.items || [];
+    Object.keys(estimatedBillItems).forEach(itemId => {
+      const found = latestItems.find(i => i.id === itemId);
+      if (!found) {
+        delete estimatedBillItems[itemId];
+      } else {
+        estimatedBillItems[itemId].item = found;
+      }
+    });
+    if (typeof updateBillEstimateUI === 'function') {
+      updateBillEstimateUI();
+    }
+  }
+
   renderHeaderInfo();
   renderCategoryPills();
   renderMenuItems();
-  initHeroBanner();
+
+  const heroSig = JSON.stringify({
+    cafeName: (menuData.settings && menuData.settings.cafeName) || '',
+    announcement: (menuData.settings && menuData.settings.announcement) || null,
+    brandMedia: (menuData.settings && menuData.settings.brandMedia) || null
+  });
+  if (forceHero || heroSig !== lastHeroSignature) {
+    lastHeroSignature = heroSig;
+    initHeroBanner();
+  }
+}
+
+// Farklı Cihazlar (Telefon / Tablet / Bilgisayar) Arası Hafif Canlı Senkronizasyon (4 sn)
+function startCustomerLiveMenuSync() {
+  if (customerMenuSyncTimer) clearInterval(customerMenuSyncTimer);
+  customerMenuSyncTimer = setInterval(async () => {
+    if (document.visibilityState !== 'visible' || !document.getElementById('menu-app')) return;
+    try {
+      const apiBase = getApiBaseUrl();
+      const res = await fetch(apiBase + '/api/menu/version?_t=' + Date.now(), { cache: 'no-store' });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data && data.version) {
+        if (lastKnownMenuVersion === null) {
+          lastKnownMenuVersion = data.version;
+        } else if (data.version !== lastKnownMenuVersion) {
+          lastKnownMenuVersion = data.version;
+          await loadMenuData();
+          applyLiveCustomerMenuRefresh(false);
+        }
+      }
+    } catch (e) {}
+  }, 4000);
+}
+
+window.refreshCustomerMenu = async function(btn) {
+  if (btn) btn.classList.add('animate-spin');
+  await loadMenuData();
+  applyLiveCustomerMenuRefresh(true);
   showToast('✅ Menü güncellendi!');
   if (btn) {
     setTimeout(() => btn.classList.remove('animate-spin'), 600);
@@ -224,10 +354,7 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
     loadMenuData().then(() => {
       if (document.getElementById('menu-app')) {
-        renderHeaderInfo();
-        renderCategoryPills();
-        renderMenuItems();
-        initHeroBanner();
+        applyLiveCustomerMenuRefresh(false);
       }
     });
   }
@@ -269,7 +396,13 @@ function initCustomerMenu() {
   setupWifiModal();
   setupServiceCallModal();
   initHookahSmokeEngine();
+  lastHeroSignature = JSON.stringify({
+    cafeName: (menuData && menuData.settings && menuData.settings.cafeName) || '',
+    announcement: (menuData && menuData.settings && menuData.settings.announcement) || null,
+    brandMedia: (menuData && menuData.settings && menuData.settings.brandMedia) || null
+  });
   initHeroBanner();
+  startCustomerLiveMenuSync();
 }
 
 /* ==========================================================================
@@ -563,63 +696,83 @@ function getHeroTimeAdaptiveConfig() {
 function buildHeroSlides() {
   const slides = [];
   const s = (menuData && menuData.settings) ? menuData.settings : {};
+  const bm = s.brandMedia || {};
   const cafeName = (s.cafeName || 'HASHTAG').toUpperCase();
 
-  // Slayt 1: İkonik Neon Atmosfer & Banner
+  // Slayt 1: Yönetici Kontrollü Ana Kapak & Atmosfer Görseli
+  const heroCustomImg = (bm.heroBannerImage && String(bm.heroBannerImage).trim())
+    ? resolveImageUrl(bm.heroBannerImage, 'hashtag-banner.jpg?v=3.0')
+    : 'hashtag-banner.jpg?v=3.0';
+  const heroBadge = bm.heroBannerBadge !== undefined
+    ? String(bm.heroBannerBadge).trim()
+    : 'PREMİUM ATMOSFER';
+  const heroTitle = (bm.heroBannerTitle !== undefined && String(bm.heroBannerTitle).trim())
+    ? String(bm.heroBannerTitle).trim()
+    : `${cafeName} LOUNGE & HOOKAH`;
+  const heroDesc = bm.heroBannerDesc !== undefined
+    ? String(bm.heroBannerDesc).trim()
+    : '💨 Özel Nargile Karışımları • 🍹 Mocktail & Kahve';
+
   slides.push({
     id: 'neon-banner',
-    image: 'hashtag-banner.jpg?v=3.0',
+    image: heroCustomImg,
+    imageFit: bm.heroBannerFit || 'cover',
     fallbackImage: 'images/hashtag-banner.jpg?v=3.0',
     badgeIcon: 'sparkles',
-    badgeText: 'PREMİUM ATMOSFER',
+    badgeText: heroBadge,
     badgeClass: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
-    title: `${cafeName} LOUNGE & HOOKAH`,
-    desc: '💨 Özel Nargile Karışımları • 🍹 Mocktail & Kahve',
+    title: heroTitle,
+    desc: heroDesc,
     liveLabel: 'CANLI'
   });
 
-  // Slayt 2: Yönetici Kontrollü Günün / Haftanın Duyurusu
-  const ann = s.announcement || {};
-  if (ann.enabled !== false) {
+  // Slayt 2: Yönetici Kontrollü Günün / Haftanın Duyurusu (Açık/Kapalı Kontrolü)
+  const ann = s.announcement;
+  const isAnnEnabled = !ann || ann.enabled !== false;
+  if (isAnnEnabled) {
+    const annObj = ann || {};
+    const badgeVal = annObj.badge !== undefined ? String(annObj.badge).trim() : '🔥 ŞEFİN TAVSİYESİ';
+    const titleVal = (annObj.title !== undefined && String(annObj.title).trim())
+      ? String(annObj.title).trim()
+      : 'Love 66 & Lady Killer Özel Mix';
+    const descVal = annObj.desc !== undefined
+      ? String(annObj.desc).trim()
+      : 'Özel buzlu marpuç ve taze nane esintisiyle hazırlanan günün karışımı.';
+
     slides.push({
       id: 'admin-announcement',
-      image: ann.image || 'https://images.unsplash.com/photo-1527661591475-527312dd65f5?auto=format&fit=crop&w=1200&q=80',
+      image: resolveImageUrl(annObj.image, 'https://images.unsplash.com/photo-1527661591475-527312dd65f5?auto=format&fit=crop&w=1200&q=80'),
+      imageFit: annObj.imageFit || 'cover',
       fallbackImage: 'hashtag-banner.jpg?v=3.0',
       badgeIcon: 'flame',
-      badgeText: ann.badge || '🔥 ŞEFİN TAVSİYESİ',
+      badgeText: badgeVal,
       badgeClass: 'bg-amber-500/25 text-amber-200 border-amber-400/40',
-      title: ann.title || 'Love 66 & Lady Killer Özel Mix',
-      desc: ann.desc || 'Özel buzlu marpuç ve taze nane esintisiyle hazırlanan günün karışımı.',
+      title: titleVal,
+      desc: descVal,
       liveLabel: 'GÜNÜN ÖZELİ'
-    });
-  } else {
-    // Duyuru kapalıysa alternatif VIP Lounge kartı
-    slides.push({
-      id: 'lounge-vip',
-      image: 'https://images.unsplash.com/photo-1527661591475-527312dd65f5?auto=format&fit=crop&w=1200&q=80',
-      fallbackImage: 'hashtag-banner.jpg?v=3.0',
-      badgeIcon: 'crown',
-      badgeText: 'VIP LOCALAR & REZERVASYON',
-      badgeClass: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
-      title: 'Özel Gruplar & Doğum Günleri',
-      desc: 'Konforlu VIP oturma alanları ve kişiye özel nargile servisi.',
-      liveLabel: 'VIP'
     });
   }
 
-  // Slayt 3: Saat Bazlı Adaptif Canlı Mood
-  const timeMood = getHeroTimeAdaptiveConfig();
-  slides.push({
-    id: 'time-mood',
-    image: timeMood.image,
-    fallbackImage: 'hashtag-banner.jpg?v=3.0',
-    badgeIcon: timeMood.badgeIcon,
-    badgeText: timeMood.badgeText,
-    badgeClass: timeMood.badgeClass,
-    title: timeMood.title,
-    desc: timeMood.desc,
-    liveLabel: timeMood.timeLabel
-  });
+  // Slayt 3: Saat Bazlı Adaptif Canlı Mood (Yönetici özel görsel yükleyebilir veya kapatabilir)
+  const isMoodEnabled = bm.moodSlideEnabled !== false;
+  if (isMoodEnabled) {
+    const timeMood = getHeroTimeAdaptiveConfig();
+    const moodCustomImg = (bm.moodBannerImage && String(bm.moodBannerImage).trim())
+      ? resolveImageUrl(bm.moodBannerImage, timeMood.image)
+      : timeMood.image;
+    slides.push({
+      id: 'time-mood',
+      image: moodCustomImg,
+      imageFit: bm.moodBannerFit || 'cover',
+      fallbackImage: 'hashtag-banner.jpg?v=3.0',
+      badgeIcon: timeMood.badgeIcon,
+      badgeText: timeMood.badgeText,
+      badgeClass: timeMood.badgeClass,
+      title: timeMood.title,
+      desc: timeMood.desc,
+      liveLabel: timeMood.timeLabel
+    });
+  }
 
   return slides;
 }
@@ -628,32 +781,61 @@ function initHeroBanner() {
   const card = document.getElementById('hero-banner-card');
   if (!card) return;
 
+  if (heroProgressAnimFrame) {
+    cancelAnimationFrame(heroProgressAnimFrame);
+    heroProgressAnimFrame = null;
+  }
+
   heroSlidesList = buildHeroSlides();
   if (heroSlidesList.length === 0) return;
 
-  // Render progress bar segments
+  // Render progress bar segments & nav arrows visibility
   const progressContainer = document.getElementById('hero-progress-bars');
   if (progressContainer) {
-    progressContainer.innerHTML = heroSlidesList.map((_, i) => `
-      <div class="h-1 flex-1 rounded-full bg-white/20 overflow-hidden cursor-pointer backdrop-blur-sm" onclick="jumpToHeroSlide(${i})">
-        <div id="hero-progress-fill-${i}" class="h-full bg-gradient-to-r from-amber-400 to-amber-200 rounded-full transition-all duration-75" style="width: 0%;"></div>
-      </div>
-    `).join('');
+    if (heroSlidesList.length <= 1) {
+      progressContainer.innerHTML = '';
+      progressContainer.classList.add('hidden');
+    } else {
+      progressContainer.classList.remove('hidden');
+      progressContainer.innerHTML = heroSlidesList.map((_, i) => `
+        <div class="h-1 flex-1 rounded-full bg-white/20 overflow-hidden cursor-pointer backdrop-blur-sm" onclick="jumpToHeroSlide(${i})">
+          <div id="hero-progress-fill-${i}" class="h-full bg-gradient-to-r from-amber-400 to-amber-200 rounded-full transition-all duration-75" style="width: 0%;"></div>
+        </div>
+      `).join('');
+    }
   }
+
+  card.querySelectorAll('.hero-nav-btn').forEach(btn => {
+    if (heroSlidesList.length <= 1) btn.classList.add('hidden');
+    else btn.classList.remove('hidden');
+  });
 
   // Render slide image elements
   const slidesWrapper = document.getElementById('hero-slides-wrapper');
   if (slidesWrapper) {
-    slidesWrapper.innerHTML = heroSlidesList.map((slide, i) => `
-      <div id="hero-slide-${i}" class="hero-slide ${i === 0 ? 'active' : ''}">
-        <img 
-          src="${slide.image}" 
-          onerror="if(!this.src.includes('hashtag-banner.jpg')) this.src='${slide.fallbackImage}';" 
-          alt="${escapeHtml(slide.title)}" 
-          class="w-full h-full object-cover object-center brightness-90 hero-kenburns"
-        />
-      </div>
-    `).join('');
+    slidesWrapper.innerHTML = heroSlidesList.map((slide, i) => {
+      const fit = slide.imageFit || 'cover';
+      const fitClasses = fit === 'contain'
+        ? 'relative z-10 w-full h-full object-contain brightness-95'
+        : (fit === 'top'
+            ? 'w-full h-full object-cover object-top brightness-90 hero-kenburns'
+            : 'w-full h-full object-cover object-center brightness-90 hero-kenburns');
+      return `
+        <div id="hero-slide-${i}" class="hero-slide ${i === 0 ? 'active' : ''}">
+          ${fit === 'contain' ? `
+            <img src="${slide.image}" alt="" aria-hidden="true"
+                 class="absolute inset-0 w-full h-full object-cover scale-125 blur-xl brightness-50 pointer-events-none"
+                 onerror="this.style.display='none'" />
+          ` : ''}
+          <img 
+            src="${slide.image}" 
+            onerror="if(!this.src.includes('hashtag-banner.jpg')) this.src='${slide.fallbackImage}';" 
+            alt="${escapeHtml(slide.title)}" 
+            class="${fitClasses}"
+          />
+        </div>
+      `;
+    }).join('');
   }
 
   // Mouse hover & touch hold events to pause story
@@ -714,8 +896,13 @@ function showHeroSlide(index) {
   }
 
   if (badgeEl) {
-    badgeEl.className = `inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider uppercase mb-1.5 backdrop-blur-md shadow-sm border ${slide.badgeClass || 'bg-amber-500/20 text-amber-300 border-amber-500/30'}`;
-    badgeEl.innerHTML = `<i data-lucide="${slide.badgeIcon || 'sparkles'}" class="w-3 h-3 text-amber-400"></i><span>${slide.badgeText}</span>`;
+    if (slide.badgeText) {
+      badgeEl.className = `inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider uppercase mb-1.5 backdrop-blur-md shadow-sm border ${slide.badgeClass || 'bg-amber-500/20 text-amber-300 border-amber-500/30'}`;
+      badgeEl.innerHTML = `<i data-lucide="${slide.badgeIcon || 'sparkles'}" class="w-3 h-3 text-amber-400"></i><span>${escapeHtml(slide.badgeText)}</span>`;
+    } else {
+      badgeEl.className = 'hidden';
+      badgeEl.innerHTML = '';
+    }
   }
 
   if (titleEl) {
@@ -796,6 +983,7 @@ window.jumpToHeroSlide = function(index) {
 };
 
 function renderHeaderInfo() {
+  if (!menuData || !menuData.settings) return;
   const { settings } = menuData;
   const nameEl = document.getElementById('cafe-name');
   const taglineEl = document.getElementById('cafe-tagline');
@@ -813,6 +1001,34 @@ function renderHeaderInfo() {
   if (taglineEl) taglineEl.textContent = cafeTagline;
   if (footerNameEl) footerNameEl.textContent = `${cafeName.toUpperCase()} LOUNGE & HOOKAH`;
   document.title = `${cafeName} | ${cafeTagline}`;
+
+  // Sol Üst & Sayfa En Altı Profil Fotoğraflarını ve Arka Plan Atmosfer Görselini Canlı Güncelle
+  const bm = settings.brandMedia || {};
+  const logoSrc = (bm.logoImage && String(bm.logoImage).trim())
+    ? resolveImageUrl(bm.logoImage, 'hashtag-logo.jpg?v=2.5')
+    : 'hashtag-logo.jpg?v=2.5';
+  const logoFitClass = bm.logoFit === 'contain'
+    ? 'w-full h-full object-contain p-0.5'
+    : 'w-full h-full object-cover';
+
+  const headerLogoEl = document.getElementById('header-logo-img');
+  const footerLogoEl = document.getElementById('footer-logo-img');
+  if (headerLogoEl) {
+    headerLogoEl.src = logoSrc;
+    headerLogoEl.className = logoFitClass;
+  }
+  if (footerLogoEl) {
+    footerLogoEl.src = logoSrc;
+    footerLogoEl.className = logoFitClass;
+  }
+
+  const ambientImgEl = document.getElementById('ambient-photo-img');
+  if (ambientImgEl) {
+    const ambientSrc = (bm.heroBannerImage && String(bm.heroBannerImage).trim())
+      ? resolveImageUrl(bm.heroBannerImage, 'hashtag-banner.jpg?v=2.7')
+      : 'hashtag-banner.jpg?v=2.7';
+    ambientImgEl.src = ambientSrc;
+  }
 
   // Wi-Fi Bilgilerini Anında Güncelle
   if (wifiTitleEl) wifiTitleEl.textContent = `${cafeName} Misafir Wi-Fi`;
@@ -843,18 +1059,10 @@ function renderHeaderInfo() {
   const instaHandleEl = document.getElementById('instagram-handle-display');
   const instaCardSec = document.getElementById('instagram-card-section');
 
-  const rawInstagram = (settings.instagram || 'hashtagcafe07').trim();
-  const cleanInstagram = rawInstagram
-    .replace(/^https?:\/\/(www\.)?instagram\.com\//i, '')
-    .split(/[/?#]/)[0]
-    .replace('@', '')
-    .trim();
+  const cleanInstagram = normalizeInstagramHandle(settings.instagram);
+  const fullInstaUrl = `https://www.instagram.com/${cleanInstagram}`;
 
-  const fullInstaUrl = cleanInstagram 
-    ? `https://www.instagram.com/${cleanInstagram}` 
-    : 'https://www.instagram.com/hashtagcafe07';
-
-  if (instaHandleEl) instaHandleEl.textContent = cleanInstagram || 'hashtagcafe07';
+  if (instaHandleEl) instaHandleEl.textContent = cleanInstagram;
 
   if (instaEl) {
     if (cleanInstagram) {
@@ -903,20 +1111,22 @@ function renderCategoryPills() {
   const container = document.getElementById('categories-container');
   if (!container) return;
 
-  const categories = [{ id: 'all', name: 'Tüm Menü', icon: 'sparkles' }, ...menuData.categories];
+  const activeCategories = Array.isArray(menuData?.categories) ? menuData.categories : [];
+  const categories = [{ id: 'all', name: 'Tüm Menü', icon: 'sparkles' }, ...activeCategories];
 
   container.innerHTML = categories.map(cat => {
     const isActive = currentCategory === cat.id;
+    const safeId = String(cat.id || '').replace(/'/g, "\\'");
     return `
       <button 
-        onclick="selectCategory('${cat.id}')"
+        onclick="selectCategory('${safeId}')"
         class="category-pill flex items-center gap-2 px-4 py-2 rounded-full whitespace-nowrap text-sm font-medium transition-all ${
           isActive 
             ? 'bg-amber-500 text-black font-semibold shadow-lg shadow-amber-500/20 scale-105' 
             : 'bg-white/5 text-gray-300 hover:bg-white/10 border border-white/5'
         }">
-        <i data-lucide="${cat.icon || 'utensils'}" class="w-4 h-4"></i>
-        <span>${cat.name}</span>
+        <i data-lucide="${escapeHtml(cat.icon || 'utensils')}" class="w-4 h-4"></i>
+        <span>${escapeHtml(cat.name)}</span>
       </button>
     `;
   }).join('');
@@ -967,7 +1177,11 @@ function renderMenuItems() {
   const container = document.getElementById('menu-items-list');
   if (!container) return;
 
-  let items = menuData.items || [];
+  const allItems = Array.isArray(menuData?.items) ? menuData.items : [];
+  const categories = Array.isArray(menuData?.categories) ? menuData.categories : [];
+  const currency = (menuData?.settings && menuData.settings.currency) || '₺';
+
+  let items = allItems;
 
   // Kategori Filtresi
   if (currentCategory !== 'all') {
@@ -977,69 +1191,180 @@ function renderMenuItems() {
   // Arama Filtresi (İsim, açıklama ve aroma etiketlerinde arama)
   if (searchQuery.length > 0) {
     items = items.filter(it => {
-      const matchName = it.name.toLowerCase().includes(searchQuery);
+      const matchName = (it.name || '').toLowerCase().includes(searchQuery);
       const matchDesc = (it.description || '').toLowerCase().includes(searchQuery);
-      const matchFlavors = (it.flavors || []).some(f => f.toLowerCase().includes(searchQuery));
+      const matchFlavors = (it.flavors || []).some(f => String(f).toLowerCase().includes(searchQuery));
       return matchName || matchDesc || matchFlavors;
     });
-  }
 
-  if (items.length === 0) {
-    container.innerHTML = `
-      <div class="text-center py-16 px-4">
-        <div class="w-16 h-16 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mx-auto mb-4 text-gray-400">
-          <i data-lucide="search-x" class="w-8 h-8"></i>
+    if (items.length === 0) {
+      container.innerHTML = `
+        <div class="text-center py-16 px-4">
+          <div class="w-16 h-16 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mx-auto mb-4 text-gray-400">
+            <i data-lucide="search-x" class="w-8 h-8"></i>
+          </div>
+          <h3 class="text-lg font-semibold text-gray-200">Sonuç Bulunamadı</h3>
+          <p class="text-sm text-gray-400 mt-1 max-w-xs mx-auto">Aradığınız kriterlere uygun ürün bulunamadı. Lütfen farklı bir arama yapmayı deneyin.</p>
         </div>
-        <h3 class="text-lg font-semibold text-gray-200">Sonuç Bulunamadı</h3>
-        <p class="text-sm text-gray-400 mt-1 max-w-xs mx-auto">Aradığınız kriterlere uygun ürün bulunamadı. Lütfen farklı bir arama yapmayı deneyin.</p>
+      `;
+      if (window.lucide) lucide.createIcons();
+      return;
+    }
+
+    container.innerHTML = `
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+        ${items.map(item => renderItemCard(item, currency)).join('')}
       </div>
     `;
     if (window.lucide) lucide.createIcons();
     return;
   }
 
-  const currency = menuData.settings.currency || '₺';
+  // Tekil bir kategori seçiliyse (ve arama yoksa)
+  if (currentCategory !== 'all') {
+    const selectedCat = categories.find(c => c.id === currentCategory);
+    const catTitle = selectedCat ? escapeHtml(selectedCat.name) : 'Kategori';
+    const catIcon = escapeHtml((selectedCat && selectedCat.icon) || 'star');
 
-  // Kategoriye göre gruplama (eğer 'Tüm Menü' seçiliyse ve arama yapılmıyorsa)
-  if (currentCategory === 'all' && searchQuery.length === 0) {
-    const grouped = {};
-    menuData.categories.forEach(cat => {
-      grouped[cat.id] = items.filter(it => it.categoryId === cat.id);
-    });
+    if (items.length === 0) {
+      container.innerHTML = `
+        <div class="mb-8">
+          <div class="flex items-center gap-3 mb-4 px-1">
+            <div class="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+              <i data-lucide="${catIcon}" class="w-4 h-4"></i>
+            </div>
+            <h2 class="text-lg font-bold tracking-tight text-white">${catTitle}</h2>
+            <div class="flex-1 h-px bg-gradient-to-r from-white/10 to-transparent"></div>
+          </div>
+          <div class="p-8 rounded-2xl bg-white/[0.03] border border-white/10 text-center">
+            <div class="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mx-auto mb-3 text-amber-400">
+              <i data-lucide="${catIcon}" class="w-6 h-6"></i>
+            </div>
+            <h3 class="text-sm font-bold text-white">${catTitle}</h3>
+            <p class="text-xs text-gray-400 mt-1 max-w-xs mx-auto">Bu kategorideki ürünlerimiz hazırlanıyor, çok yakında menüde yer alacaktır.</p>
+          </div>
+        </div>
+      `;
+    } else {
+      container.innerHTML = `
+        <div class="mb-8">
+          <div class="flex items-center gap-3 mb-4 px-1">
+            <div class="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+              <i data-lucide="${catIcon}" class="w-4 h-4"></i>
+            </div>
+            <h2 class="text-lg font-bold tracking-tight text-white">${catTitle}</h2>
+            <div class="flex-1 h-px bg-gradient-to-r from-white/10 to-transparent"></div>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+            ${items.map(item => renderItemCard(item, currency)).join('')}
+          </div>
+        </div>
+      `;
+    }
+    if (window.lucide) lucide.createIcons();
+    return;
+  }
 
-    container.innerHTML = menuData.categories.map(cat => {
-      const catItems = grouped[cat.id] || [];
-      if (catItems.length === 0) return '';
+  // 'Tüm Menü' seçiliyse ve arama yapılmıyorsa:
+  // Yönetici panelinde eklenen TÜM kategorileri (henüz 0 ürünü olan yeni kategoriler dahil) sırasıyla göster!
+  if (categories.length === 0 && allItems.length === 0) {
+    container.innerHTML = `
+      <div class="text-center py-16 px-4">
+        <div class="w-16 h-16 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mx-auto mb-4 text-gray-400">
+          <i data-lucide="utensils" class="w-8 h-8"></i>
+        </div>
+        <h3 class="text-lg font-semibold text-gray-200">Menü Hazırlanıyor</h3>
+        <p class="text-sm text-gray-400 mt-1 max-w-xs mx-auto">Menümüz güncelleniyor, lütfen birazdan tekrar kontrol edin.</p>
+      </div>
+    `;
+    if (window.lucide) lucide.createIcons();
+    return;
+  }
 
+  const grouped = {};
+  const validCatIds = new Set();
+  categories.forEach(cat => {
+    validCatIds.add(cat.id);
+    grouped[cat.id] = allItems.filter(it => it.categoryId === cat.id);
+  });
+
+  let sectionsHtml = categories.map(cat => {
+    const catItems = grouped[cat.id] || [];
+    const safeCatName = escapeHtml(cat.name);
+    const safeCatIcon = escapeHtml(cat.icon || 'star');
+
+    if (catItems.length === 0) {
       return `
         <div class="mb-10">
           <div class="flex items-center gap-3 mb-4 px-1">
             <div class="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
-              <i data-lucide="${cat.icon || 'star'}" class="w-4 h-4"></i>
+              <i data-lucide="${safeCatIcon}" class="w-4 h-4"></i>
             </div>
-            <h2 class="text-lg font-bold tracking-tight text-white">${cat.name}</h2>
+            <h2 class="text-lg font-bold tracking-tight text-white">${safeCatName}</h2>
+            <span class="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-300 font-semibold">Yeni</span>
             <div class="flex-1 h-px bg-gradient-to-r from-white/10 to-transparent"></div>
           </div>
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-            ${catItems.map(item => renderItemCard(item, currency)).join('')}
+          <div class="p-4 rounded-2xl bg-white/[0.025] border border-dashed border-white/10 flex items-center gap-3 text-gray-400">
+            <div class="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 flex-shrink-0">
+              <i data-lucide="sparkles" class="w-4 h-4"></i>
+            </div>
+            <div>
+              <p class="text-xs font-semibold text-gray-200">${safeCatName} kategorisi hazırlandı</p>
+              <p class="text-[11px] text-gray-400 mt-0.5">Bu kategorideki ürünlerimiz çok yakında eklenecektir.</p>
+            </div>
           </div>
         </div>
       `;
-    }).join('');
-  } else {
-    container.innerHTML = `
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-        ${items.map(item => renderItemCard(item, currency)).join('')}
+    }
+
+    return `
+      <div class="mb-10">
+        <div class="flex items-center gap-3 mb-4 px-1">
+          <div class="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+            <i data-lucide="${safeCatIcon}" class="w-4 h-4"></i>
+          </div>
+          <h2 class="text-lg font-bold tracking-tight text-white">${safeCatName}</h2>
+          <div class="flex-1 h-px bg-gradient-to-r from-white/10 to-transparent"></div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+          ${catItems.map(item => renderItemCard(item, currency)).join('')}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  // Kategorisi silinmiş veya eşleşmeyen (sahipsiz) ürünler varsa hiçbir zaman gizlenmesin, en altta gösterilsin
+  const orphanItems = allItems.filter(it => !validCatIds.has(it.categoryId));
+  if (orphanItems.length > 0) {
+    sectionsHtml += `
+      <div class="mb-10">
+        <div class="flex items-center gap-3 mb-4 px-1">
+          <div class="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+            <i data-lucide="layers" class="w-4 h-4"></i>
+          </div>
+          <h2 class="text-lg font-bold tracking-tight text-white">Diğer Ürünler</h2>
+          <div class="flex-1 h-px bg-gradient-to-r from-white/10 to-transparent"></div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+          ${orphanItems.map(item => renderItemCard(item, currency)).join('')}
+        </div>
       </div>
     `;
   }
 
+  container.innerHTML = sectionsHtml;
   if (window.lucide) lucide.createIcons();
 }
 
 function renderItemCard(item, currency) {
   const isOutOfStock = (item.inStock === false) || (item.isAvailable === false);
   const isHookah = item.categoryId && item.categoryId.includes('hookah');
+  const fallbackThumb = 'https://images.unsplash.com/photo-1527661591475-527312dd65f5?auto=format&fit=crop&w=300&q=80';
+  const imgSrc = resolveImageUrl(item.image, fallbackThumb);
+  const fitMode = item.imageFit || 'cover';
+  const imgFitClasses = fitMode === 'contain'
+    ? 'relative z-10 w-full h-full object-contain'
+    : (fitMode === 'top' ? 'w-full h-full object-cover object-top' : 'w-full h-full object-cover object-center');
 
   return `
     <div onclick="openItemDetails('${item.id}')" 
@@ -1049,14 +1374,19 @@ function renderItemCard(item, currency) {
       
       <!-- Görsel Bölümü -->
       <div class="relative w-24 h-24 sm:w-28 sm:h-28 flex-shrink-0 rounded-xl overflow-hidden bg-neutral-900 border border-white/5">
-        <img src="${item.image || 'https://images.unsplash.com/photo-1527661591475-527312dd65f5?auto=format&fit=crop&w=300&q=80'}" 
-             alt="${item.name}" 
+        ${fitMode === 'contain' ? `
+          <img src="${imgSrc}" alt="" aria-hidden="true" loading="lazy"
+               class="absolute inset-0 w-full h-full object-cover scale-125 blur-md brightness-50 pointer-events-none"
+               onerror="this.style.display='none'" />
+        ` : ''}
+        <img src="${imgSrc}" 
+             alt="${escapeHtml(item.name)}" 
              loading="lazy"
-             class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-             onerror="this.src='https://images.unsplash.com/photo-1527661591475-527312dd65f5?auto=format&fit=crop&w=300&q=80'" />
+             class="${imgFitClasses} transition-transform duration-500 group-hover:scale-105"
+             onerror="this.src='${fallbackThumb}'" />
         
         ${isOutOfStock ? `
-          <div class="absolute inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center">
+          <div class="absolute inset-0 z-20 bg-black/80 backdrop-blur-sm flex items-center justify-center">
             <span class="text-[10px] font-bold uppercase tracking-wider text-red-400 border border-red-500/40 px-2 py-0.5 rounded bg-red-950/60">Tükendi</span>
           </div>
         ` : ''}
@@ -1131,20 +1461,32 @@ function openItemDetails(itemId) {
   if (!modal || !modalContent) return;
 
   const currency = menuData.settings.currency || '₺';
+  const fallbackLarge = 'https://images.unsplash.com/photo-1527661591475-527312dd65f5?auto=format&fit=crop&w=600&q=80';
+  const detailImgSrc = resolveImageUrl(item.image, fallbackLarge);
+  const fitMode = item.imageFit || 'cover';
+  const detailFitClasses = fitMode === 'contain'
+    ? 'relative z-10 w-full h-full object-contain'
+    : (fitMode === 'top' ? 'w-full h-full object-cover object-top' : 'w-full h-full object-cover object-center');
 
   modalContent.innerHTML = `
-    <div class="relative h-64 w-full bg-neutral-900">
-      <img src="${item.image || 'https://images.unsplash.com/photo-1527661591475-527312dd65f5?auto=format&fit=crop&w=600&q=80'}" 
-           alt="${item.name}" 
-           class="w-full h-full object-cover" />
-      <div class="absolute inset-0 bg-gradient-to-t from-neutral-950 via-neutral-950/40 to-transparent"></div>
+    <div class="relative h-64 w-full bg-neutral-900 overflow-hidden">
+      ${fitMode === 'contain' ? `
+        <img src="${detailImgSrc}" alt="" aria-hidden="true"
+             class="absolute inset-0 w-full h-full object-cover scale-125 blur-xl brightness-50 pointer-events-none"
+             onerror="this.style.display='none'" />
+      ` : ''}
+      <img src="${detailImgSrc}" 
+           alt="${escapeHtml(item.name)}" 
+           class="${detailFitClasses}"
+           onerror="this.src='${fallbackLarge}'" />
+      <div class="absolute inset-0 z-10 pointer-events-none bg-gradient-to-t from-neutral-950 via-neutral-950/35 to-transparent"></div>
       
-      <button onclick="closeItemModal()" class="absolute top-4 right-4 w-9 h-9 rounded-full bg-black/60 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/90 transition-all border border-white/10">
+      <button onclick="closeItemModal()" class="absolute top-4 right-4 z-20 w-9 h-9 rounded-full bg-black/60 backdrop-blur-md text-white flex items-center justify-center hover:bg-black/90 transition-all border border-white/10">
         <i data-lucide="x" class="w-5 h-5"></i>
       </button>
 
       ${item.badge ? `
-        <span class="absolute bottom-4 left-6 text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-500 text-black">
+        <span class="absolute bottom-4 left-6 z-20 text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-500 text-black">
           ${item.badge}
         </span>
       ` : ''}

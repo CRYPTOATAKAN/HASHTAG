@@ -15,6 +15,24 @@ let staffList = [];
 let audioEnabled = true;
 let audioCtx = null;
 let pollInterval = null;
+let lastStaffMenuVersion = null;
+
+const staffSyncChannel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('hashtag_menu_sync') : null;
+if (staffSyncChannel) {
+  staffSyncChannel.onmessage = async (ev) => {
+    if (ev.data === 'sync') {
+      await loadMenuData();
+      if (currentStockCategory !== 'all' && menuData && Array.isArray(menuData.categories)) {
+        if (!menuData.categories.some(c => c.id === currentStockCategory)) {
+          currentStockCategory = 'all';
+        }
+      }
+      renderStockCategories();
+      renderStockItems();
+      renderTablesGrid();
+    }
+  };
+}
 
 function escapeHtml(text) {
   if (text === null || text === undefined) return '';
@@ -56,6 +74,16 @@ function getApiBaseUrl() {
     return '';
   }
   return 'https://p01--hashtag--xqx4khzq6gkf.code.run';
+}
+
+function resolveStaffImageUrl(url) {
+  if (!url || typeof url !== 'string' || !url.trim()) return '';
+  const clean = url.trim();
+  if (clean.startsWith('/uploads/')) {
+    const apiBase = getApiBaseUrl();
+    return apiBase ? `${apiBase}${clean}` : clean;
+  }
+  return clean;
 }
 
 // =========================================================================
@@ -521,6 +549,34 @@ async function updateCallsLoop() {
   activeCalls = calls;
   renderCallsView();
   renderTablesGrid();
+
+  // Menü versiyonu değiştiyse (kategori/ürün/fiyat/stok/masa sayısı güncellemesi) anında eşitle
+  try {
+    const apiBase = getApiBaseUrl();
+    const vRes = await fetch(apiBase + '/api/menu/version?_t=' + Date.now(), { cache: 'no-store' });
+    if (vRes.ok) {
+      const vData = await vRes.json();
+      if (vData && vData.version) {
+        if (lastStaffMenuVersion === null) {
+          lastStaffMenuVersion = vData.version;
+        } else if (vData.version !== lastStaffMenuVersion) {
+          lastStaffMenuVersion = vData.version;
+          await loadMenuData();
+          if (currentStockCategory !== 'all' && menuData && Array.isArray(menuData.categories)) {
+            if (!menuData.categories.some(c => c.id === currentStockCategory)) {
+              currentStockCategory = 'all';
+            }
+          }
+          renderStockCategories();
+          const isEditingPrice = document.activeElement && document.activeElement.classList && document.activeElement.classList.contains('staff-price-input');
+          if (!isEditingPrice) {
+            renderStockItems();
+          }
+          renderTablesGrid();
+        }
+      }
+    }
+  } catch (e) {}
 }
 
 function getElapsedText(timestamp) {
@@ -713,18 +769,36 @@ function filterCalls(type) {
 // 6. KISITLI YETKİLİ ÜRÜN STOK YÖNETİMİ
 // =========================================================================
 
+function applyStaffBrandLogo() {
+  const logoEl = document.getElementById('staff-login-logo-img');
+  if (!logoEl || !menuData || !menuData.settings) return;
+  const bm = menuData.settings.brandMedia || {};
+  const customLogo = bm.logoImage && String(bm.logoImage).trim()
+    ? resolveStaffImageUrl(bm.logoImage)
+    : '';
+  logoEl.src = customLogo || 'hashtag-logo.jpg?v=2.7';
+  logoEl.className = bm.logoFit === 'contain'
+    ? 'w-full h-full object-contain p-0.5'
+    : 'w-full h-full object-cover';
+}
+
 async function loadMenuData() {
   try {
     const apiBase = getApiBaseUrl();
-    const res = await fetch(apiBase + '/api/menu', { cache: 'no-store' });
+    const res = await fetch(apiBase + '/api/menu?_t=' + Date.now(), { cache: 'no-store' });
     if (res.ok) {
       menuData = await res.json();
+      if (menuData && (menuData._version || menuData.updatedAt)) {
+        lastStaffMenuVersion = menuData._version || menuData.updatedAt;
+      }
+      applyStaffBrandLogo();
       return;
     }
   } catch (e) {}
 
   if (window.DEFAULT_MENU_DATA) {
     menuData = JSON.parse(JSON.stringify(window.DEFAULT_MENU_DATA));
+    applyStaffBrandLogo();
   }
 }
 
@@ -754,11 +828,51 @@ function handleStockSearch(val) {
   renderStockItems();
 }
 
+function showStaffToast(message, type = 'success') {
+  let toast = document.getElementById('hashtag-staff-toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'hashtag-staff-toast';
+    document.body.appendChild(toast);
+  }
+  toast.className = type === 'success'
+    ? 'fixed top-5 right-5 z-[9999] px-4 py-3 rounded-2xl shadow-2xl font-bold text-xs transition-all duration-300 bg-emerald-500 text-black flex items-center gap-2 shadow-emerald-500/30'
+    : 'fixed top-5 right-5 z-[9999] px-4 py-3 rounded-2xl shadow-2xl font-bold text-xs transition-all duration-300 bg-red-500 text-white flex items-center gap-2 shadow-red-500/30';
+  toast.textContent = message;
+  toast.style.transform = 'translateY(0)';
+  toast.style.opacity = '1';
+  setTimeout(() => {
+    toast.style.transform = 'translateY(-20px)';
+    toast.style.opacity = '0';
+  }, 3000);
+}
+
 function renderStockItems() {
   const container = document.getElementById('stock-items-container');
   if (!container || !menuData) return;
 
   const canToggleStock = menuData.settings?.staffPermissions?.allowStockToggle !== false;
+  const canEditPrice = menuData.settings?.staffPermissions?.allowPriceEdit === true;
+  const currency = escapeHtml(menuData.settings?.currency || '₺');
+
+  // Üst bilgi kutusunu aktif yetkilere göre canlı güncelle
+  const bannerTitleEl = document.getElementById('staff-stock-mode-title');
+  const bannerDescEl = document.getElementById('staff-stock-mode-desc');
+  if (bannerTitleEl && bannerDescEl) {
+    if (canToggleStock && canEditPrice) {
+      bannerTitleEl.textContent = 'Personel Stok & Fiyat Modu (Yetkiler Açık)';
+      bannerDescEl.innerHTML = 'Yönetici izniyle ürünlerin hem <b class="text-emerald-400">stok durumunu</b> değiştirebilir hem de <b class="text-amber-300">fiyatlarını</b> anlık güncelleyebilirsiniz.';
+    } else if (canToggleStock && !canEditPrice) {
+      bannerTitleEl.textContent = 'Personel Stok Modu (Fiyat Kilitli)';
+      bannerDescEl.innerHTML = 'Biten ürünleri tek tıkla <b class="text-red-400">"Tükendi"</b> yapabilirsiniz. Fiyat değiştirme yetkisi yönetici tarafından kapalıdır.';
+    } else if (!canToggleStock && canEditPrice) {
+      bannerTitleEl.textContent = 'Personel Fiyat Modu (Stok Kilitli)';
+      bannerDescEl.innerHTML = 'Ürün <b class="text-amber-300">fiyatlarını</b> güncelleyebilirsiniz. Stok durumu değiştirme yetkisi yönetici tarafından kapalıdır.';
+    } else {
+      bannerTitleEl.textContent = 'Salt Görüntüleme Modu (Yetkiler Kapalı)';
+      bannerDescEl.innerHTML = 'Stok ve fiyat değiştirme yetkileri yönetici tarafından kapatılmıştır. Ürünler yalnızca görüntülenebilir.';
+    }
+  }
 
   let items = menuData.items || [];
 
@@ -768,7 +882,7 @@ function renderStockItems() {
 
   if (stockSearchQuery) {
     items = items.filter(it => 
-      it.name.toLowerCase().includes(stockSearchQuery) || 
+      (it.name || '').toLowerCase().includes(stockSearchQuery) || 
       (it.description && it.description.toLowerCase().includes(stockSearchQuery))
     );
   }
@@ -778,63 +892,163 @@ function renderStockItems() {
     return;
   }
 
-  const permissionNotice = !canToggleStock 
+  const permissionNotice = (!canToggleStock && !canEditPrice)
     ? `<div class="col-span-full p-3.5 rounded-xl bg-red-500/10 border border-red-500/25 text-red-300 text-xs flex items-center gap-2.5 mb-2">
          <i data-lucide="shield-alert" class="w-4 h-4 text-red-400 flex-shrink-0"></i>
          <div>
-           <b class="text-white">Yetki Kısıtlaması:</b> Stok durumu değiştirme yetkisi yönetici tarafından kapatılmıştır. Ürünler yalnızca görüntülenebilir.
+           <b class="text-white">Yetki Kısıtlaması:</b> Stok ve fiyat değiştirme yetkisi yönetici tarafından kapatılmıştır. Ürünler yalnızca görüntülenebilir.
          </div>
        </div>`
     : '';
 
   container.innerHTML = permissionNotice + items.map(item => {
     const isAvailable = (item.isAvailable !== false) && (item.inStock !== false);
-    return `
-      <div class="flex items-center justify-between p-3.5 rounded-2xl bg-neutral-900/80 border border-white/10 transition-colors ${!isAvailable ? 'opacity-60 bg-red-950/10 border-red-500/20' : ''}">
-        
-        <div class="flex items-center gap-3 pr-2 flex-1 min-w-0">
-          <div class="w-11 h-11 rounded-xl bg-black border border-white/10 overflow-hidden flex-shrink-0 flex items-center justify-center">
-            ${item.image 
-              ? `<img src="${item.image}" alt="" class="w-full h-full object-cover" onerror="this.src='hashtag-logo.jpg'" />`
-              : `<i data-lucide="package" class="w-5 h-5 text-gray-500"></i>`}
-          </div>
+    const safeId = String(item.id || '').replace(/'/g, "\\'");
 
-          <div class="min-w-0 flex-1">
-            <h4 class="text-sm font-bold text-white truncate">${item.name}</h4>
-            <div class="flex items-center gap-2 mt-0.5">
-              <span class="text-xs font-mono font-semibold text-amber-400">${item.price} ₺</span>
-              <span class="text-[10px] text-gray-500">•</span>
-              <span class="text-[11px] ${isAvailable ? 'text-emerald-400 font-medium' : 'text-red-400 font-bold'}">
-                ${isAvailable ? 'Mevcut' : 'Tükendi'}
-              </span>
+    return `
+      <div class="flex flex-col gap-2.5 p-3.5 rounded-2xl bg-neutral-900/80 border border-white/10 transition-colors ${!isAvailable ? 'opacity-70 bg-red-950/10 border-red-500/20' : ''}">
+        <div class="flex items-center justify-between gap-2">
+          <div class="flex items-center gap-3 pr-2 flex-1 min-w-0">
+            <div class="w-11 h-11 rounded-xl bg-black border border-white/10 overflow-hidden flex-shrink-0 flex items-center justify-center">
+              ${item.image 
+                ? `<img src="${resolveStaffImageUrl(item.image)}" alt="" class="w-full h-full ${item.imageFit === 'contain' ? 'object-contain' : (item.imageFit === 'top' ? 'object-cover object-top' : 'object-cover')}" onerror="this.src='hashtag-logo.jpg'" />`
+                : `<i data-lucide="package" class="w-5 h-5 text-gray-500"></i>`}
+            </div>
+
+            <div class="min-w-0 flex-1">
+              <h4 class="text-sm font-bold text-white truncate">${escapeHtml(item.name)}</h4>
+              <div class="flex items-center gap-2 mt-0.5">
+                <span class="text-xs font-mono font-semibold text-amber-400">${item.price} ${currency}</span>
+                ${!canEditPrice ? `<i data-lucide="lock" class="w-3 h-3 text-gray-600" title="Fiyat düzenleme yetkisi kapalı"></i>` : ''}
+                <span class="text-[10px] text-gray-500">•</span>
+                <span class="text-[11px] ${isAvailable ? 'text-emerald-400 font-medium' : 'text-red-400 font-bold'}">
+                  ${isAvailable ? 'Mevcut' : 'Tükendi'}
+                </span>
+              </div>
             </div>
           </div>
+
+          ${canToggleStock ? `
+            <button 
+              onclick="toggleItemStock('${safeId}', ${!isAvailable})" 
+              class="px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all active:scale-95 flex-shrink-0 ${isAvailable ? 'bg-red-500/15 hover:bg-red-500/25 text-red-400 border border-red-500/30' : 'bg-emerald-500 hover:bg-emerald-400 text-black shadow-md shadow-emerald-500/20'}"
+            >
+              <i data-lucide="${isAvailable ? 'slash' : 'check'}" class="w-3.5 h-3.5"></i>
+              <span>${isAvailable ? 'Tükendi Yap' : 'Stokta Var'}</span>
+            </button>
+          ` : `
+            <button 
+              disabled 
+              class="px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 opacity-50 cursor-not-allowed bg-neutral-800 text-gray-400 border border-white/10 flex-shrink-0"
+              title="Yönetici stok durumu değiştirme yetkisini kapattı"
+            >
+              <i data-lucide="lock" class="w-3.5 h-3.5"></i>
+              <span>Stok Kilitli</span>
+            </button>
+          `}
         </div>
 
-        ${canToggleStock ? `
-          <button 
-            onclick="toggleItemStock('${item.id}', ${!isAvailable})" 
-            class="px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all active:scale-95 flex-shrink-0 ${isAvailable ? 'bg-red-500/15 hover:bg-red-500/25 text-red-400 border border-red-500/30' : 'bg-emerald-500 hover:bg-emerald-400 text-black shadow-md shadow-emerald-500/20'}"
-          >
-            <i data-lucide="${isAvailable ? 'slash' : 'check'}" class="w-3.5 h-3.5"></i>
-            <span>${isAvailable ? 'Tükendi Yap' : 'Stokta Var'}</span>
-          </button>
-        ` : `
-          <button 
-            disabled 
-            class="px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 opacity-50 cursor-not-allowed bg-neutral-800 text-gray-400 border border-white/10 flex-shrink-0"
-            title="Yönetici stok durumu değiştirme yetkisini kapattı"
-          >
-            <i data-lucide="lock" class="w-3.5 h-3.5"></i>
-            <span>Yetki Kapalı</span>
-          </button>
-        `}
+        ${canEditPrice ? `
+          <div class="pt-2.5 border-t border-white/5 flex items-center justify-between gap-2">
+            <span class="text-[11px] text-gray-400 font-medium flex items-center gap-1">
+              <i data-lucide="dollar-sign" class="w-3.5 h-3.5 text-amber-400"></i>
+              <span>Fiyat Düzenle:</span>
+            </span>
+            <div class="flex items-center gap-1.5">
+              <input
+                type="number"
+                step="any"
+                min="0"
+                id="staff-price-${escapeHtml(item.id)}"
+                value="${item.price}"
+                onkeydown="if(event.key==='Enter'){ event.preventDefault(); saveStaffItemPrice('${safeId}'); }"
+                class="staff-price-input w-24 px-2.5 py-1.5 rounded-xl bg-black border border-amber-500/30 focus:border-amber-400 text-right font-mono font-bold text-xs text-amber-400 focus:outline-none"
+              />
+              <span class="text-xs font-bold text-gray-400">${currency}</span>
+              <button
+                type="button"
+                id="staff-price-btn-${escapeHtml(item.id)}"
+                onclick="saveStaffItemPrice('${safeId}')"
+                class="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold transition-all active:scale-95 flex items-center gap-1 shadow-sm shadow-amber-500/20"
+              >
+                <i data-lucide="save" class="w-3.5 h-3.5"></i>
+                <span>Kaydet</span>
+              </button>
+            </div>
+          </div>
+        ` : ''}
 
       </div>
     `;
   }).join('');
 
   if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+async function saveStaffItemPrice(itemId) {
+  const canEditPrice = menuData?.settings?.staffPermissions?.allowPriceEdit === true;
+  if (!canEditPrice) {
+    alert("⚠️ Ürün fiyatı değiştirme yetkisi yönetici tarafından kapatılmıştır.");
+    return;
+  }
+
+  const inputEl = document.getElementById(`staff-price-${itemId}`);
+  const btnEl = document.getElementById(`staff-price-btn-${itemId}`);
+  if (!inputEl) return;
+
+  const parsed = parseFloat(inputEl.value);
+  if (isNaN(parsed) || parsed < 0 || parsed > 1000000) {
+    showStaffToast('⚠️ Lütfen geçerli bir fiyat girin.', 'error');
+    return;
+  }
+
+  const cleanPrice = Number.isInteger(parsed) ? parsed : Math.round(parsed * 100) / 100;
+  const origBtnHtml = btnEl ? btnEl.innerHTML : '';
+  if (btnEl) {
+    btnEl.disabled = true;
+    btnEl.textContent = '...';
+  }
+
+  try {
+    const apiBase = getApiBaseUrl();
+    const res = await fetch(apiBase + '/api/staff/update-price', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        itemId,
+        price: cleanPrice,
+        staffId: currentStaff ? currentStaff.id : '',
+        staffName: currentStaff ? currentStaff.name : 'Personel',
+        device: currentDevice
+      })
+    });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      showStaffToast('⚠️ ' + (errData.message || 'Fiyat güncellenemedi veya yetkiniz yok.'), 'error');
+      await loadMenuData();
+      renderStockItems();
+      return;
+    }
+
+    await loadMenuData();
+    try { localStorage.setItem('hashtag_menu_cache', JSON.stringify(menuData)); } catch (e) {}
+    if (staffSyncChannel) {
+      try { staffSyncChannel.postMessage('sync'); } catch (e) {}
+    }
+
+    const updatedItem = (menuData?.items || []).find(i => i.id === itemId);
+    const cur = menuData?.settings?.currency || '₺';
+    showStaffToast(`✅ "${updatedItem ? updatedItem.name : 'Ürün'}" fiyatı ${cleanPrice} ${cur} olarak güncellendi!`);
+    renderStockItems();
+  } catch (e) {
+    console.error("Update price error:", e);
+    showStaffToast('⚠️ Sunucu bağlantı hatası, fiyat kaydedilemedi.', 'error');
+    if (btnEl) {
+      btnEl.disabled = false;
+      btnEl.innerHTML = origBtnHtml;
+    }
+  }
 }
 
 async function toggleItemStock(itemId, newAvailable) {
@@ -871,6 +1085,12 @@ async function toggleItemStock(itemId, newAvailable) {
       alert(errData.message || "Stok durumu güncellenemedi veya yetkiniz yok.");
       await loadMenuData();
       renderStockItems();
+    } else {
+      await loadMenuData();
+      try { localStorage.setItem('hashtag_menu_cache', JSON.stringify(menuData)); } catch (e) {}
+      if (staffSyncChannel) {
+        try { staffSyncChannel.postMessage('sync'); } catch (e) {}
+      }
     }
   } catch (e) {
     console.error("Toggle stock error:", e);

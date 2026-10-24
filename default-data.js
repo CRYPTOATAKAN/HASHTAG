@@ -25,6 +25,18 @@ window.DEFAULT_MENU_DATA = {
       "desc": "Özel buzlu marpuç ve taze nane esintisiyle hazırlanan günün karışımı.",
       "image": "https://images.unsplash.com/photo-1527661591475-527312dd65f5?auto=format&fit=crop&w=1200&q=80"
     },
+    "brandMedia": {
+      "logoImage": "",
+      "logoFit": "cover",
+      "heroBannerImage": "",
+      "heroBannerFit": "cover",
+      "heroBannerBadge": "PREMİUM ATMOSFER",
+      "heroBannerTitle": "HASHTAG LOUNGE & HOOKAH",
+      "heroBannerDesc": "💨 Özel Nargile Karışımları • 🍹 Mocktail & Kahve",
+      "moodSlideEnabled": true,
+      "moodBannerImage": "",
+      "moodBannerFit": "cover"
+    },
     "baseUrl": ""
   },
   "categories": [

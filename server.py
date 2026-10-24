@@ -10,6 +10,12 @@ import datetime
 import threading
 import re
 import html
+import base64
+import io
+import random
+import shutil
+import subprocess
+import tempfile
 
 # İsteğe bağlı pywebpush (Docker container içinde requirements.txt ile kurulur)
 try:
@@ -18,9 +24,24 @@ try:
 except ImportError:
     HAS_WEBPUSH = False
 
+# İsteğe bağlı Pillow + pillow-heif (Sunucu tarafı evrensel fotoğraf dönüştürücü: HEIC, TIFF, BMP, PNG, JPG, WEBP)
+try:
+    from PIL import Image, ImageOps
+    HAS_PILLOW = True
+    try:
+        import pillow_heif
+        pillow_heif.register_heif_opener()
+        HAS_HEIF = True
+    except ImportError:
+        HAS_HEIF = False
+except ImportError:
+    HAS_PILLOW = False
+    HAS_HEIF = False
+
 PORT = int(os.environ.get("PORT", 8080))
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, "data")
+UPLOADS_DIR = os.path.join(DATA_DIR, "uploads")
 DATA_FILE = os.path.join(DATA_DIR, "menu.json")
 CALLS_FILE = os.path.join(DATA_DIR, "calls.json")
 STAFF_FILE = os.path.join(DATA_DIR, "staff_members.json")
@@ -44,6 +65,171 @@ def atomic_save_json(filepath, data):
         with open(tmp_path, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
         os.replace(tmp_path, filepath)
+
+def atomic_save_bytes(filepath, raw_bytes):
+    with file_lock:
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+        tmp_path = filepath + f".tmp.{os.getpid()}.{time.time()}"
+        with open(tmp_path, "wb") as f:
+            f.write(raw_bytes)
+        os.replace(tmp_path, filepath)
+
+def detect_image_ext_from_bytes(raw_bytes, fallback_ext=".jpg"):
+    if len(raw_bytes) >= 12:
+        if raw_bytes[:4] == b"RIFF" and raw_bytes[8:12] == b"WEBP":
+            return ".webp"
+        if raw_bytes[:3] == b"\xff\xd8\xff":
+            return ".jpg"
+        if raw_bytes[:8] == b"\x89PNG\r\n\x1a\n":
+            return ".png"
+        if raw_bytes[:6] in (b"GIF87a", b"GIF89a"):
+            return ".gif"
+        if b"ftypavif" in raw_bytes[:32] or b"ftypavis" in raw_bytes[:32]:
+            return ".avif"
+        if b"ftypheic" in raw_bytes[:32] or b"ftypheix" in raw_bytes[:32] or b"ftypmif1" in raw_bytes[:32] or b"ftypmsf1" in raw_bytes[:32]:
+            return ".heic"
+        if raw_bytes[:2] == b"BM":
+            return ".bmp"
+        if raw_bytes[:4] in (b"II*\x00", b"MM\x00*"):
+            return ".tiff"
+    head_str = raw_bytes[:512].decode("utf-8", errors="ignore").lower()
+    if "<svg" in head_str:
+        return ".svg"
+    return fallback_ext
+
+def sanitize_svg_bytes(raw_bytes):
+    svg_text = raw_bytes.decode("utf-8", errors="ignore")
+    svg_text = re.sub(r"<script[\s\S]*?</script>", "", svg_text, flags=re.IGNORECASE)
+    svg_text = re.sub(r"<foreignObject[\s\S]*?</foreignObject>", "", svg_text, flags=re.IGNORECASE)
+    svg_text = re.sub(r"<(iframe|object|embed)[\s\S]*?>", "", svg_text, flags=re.IGNORECASE)
+    svg_text = re.sub(r"\son\w+\s*=\s*(['\"]).*?\1", "", svg_text, flags=re.IGNORECASE)
+    svg_text = re.sub(r"\son\w+\s*=[^\s>]+", "", svg_text, flags=re.IGNORECASE)
+    svg_text = re.sub(r"javascript\s*:", "", svg_text, flags=re.IGNORECASE)
+    return svg_text.encode("utf-8")
+
+def process_and_save_uploaded_image(raw_bytes, filename="", mime_type="", max_dim=1200, rotation=0, force_server_process=False):
+    if not raw_bytes:
+        raise ValueError("Boş görsel verisi gönderildi.")
+    if len(raw_bytes) > 45 * 1024 * 1024:
+        raise ValueError("Görsel boyutu 45 MB sınırını aşıyor.")
+
+    orig_ext = os.path.splitext(filename or "")[1].lower()
+    detected_ext = detect_image_ext_from_bytes(raw_bytes, orig_ext or ".jpg")
+    ts = int(time.time() * 1000)
+    rand_id = random.randint(1000, 9999)
+
+    # 1. Güvenli SVG Desteği
+    if detected_ext == ".svg" or orig_ext == ".svg" or "svg" in (mime_type or "").lower():
+        clean_svg = sanitize_svg_bytes(raw_bytes)
+        out_name = f"img_{ts}_{rand_id}.svg"
+        atomic_save_bytes(os.path.join(UPLOADS_DIR, out_name), clean_svg)
+        return out_name, len(clean_svg), "SVG", 0, 0
+
+    # 2. Hareketli GIF Desteği (Animasyonu bozmamak için 6MB altıysa doğrudan koru)
+    if (detected_ext == ".gif" or orig_ext == ".gif") and rotation == 0 and not force_server_process and len(raw_bytes) <= 6 * 1024 * 1024:
+        out_name = f"img_{ts}_{rand_id}.gif"
+        atomic_save_bytes(os.path.join(UPLOADS_DIR, out_name), raw_bytes)
+        return out_name, len(raw_bytes), "GIF", 0, 0
+
+    # 3. Sunucu Tarafı Evrensel Dönüştürücü (Pillow kuruluysa: HEIC, TIFF, BMP, büyük dosyalar veya döndürme)
+    needs_conversion = force_server_process or detected_ext in (".heic", ".heif", ".bmp", ".tiff", ".tif") or orig_ext in (".heic", ".heif", ".bmp", ".tiff", ".tif", ".ico") or len(raw_bytes) > 850 * 1024 or rotation != 0
+
+    if HAS_PILLOW and needs_conversion:
+        try:
+            img = Image.open(io.BytesIO(raw_bytes))
+            img = ImageOps.exif_transpose(img)
+            if rotation in (90, 180, 270):
+                img = img.rotate(-rotation, expand=True)
+
+            w, h = img.size
+            max_side = max(w, h)
+            target_max = max(400, min(2400, int(max_dim or 1200)))
+            if max_side > target_max:
+                scale = target_max / float(max_side)
+                new_w = max(1, int(round(w * scale)))
+                new_h = max(1, int(round(h * scale)))
+                resample_filter = getattr(Image, "Resampling", Image).LANCZOS
+                img = img.resize((new_w, new_h), resample_filter)
+                w, h = img.size
+
+            has_alpha = img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in img.info)
+            buf = io.BytesIO()
+            try:
+                if has_alpha:
+                    img = img.convert("RGBA")
+                    img.save(buf, format="WEBP", quality=86, method=4)
+                else:
+                    img = img.convert("RGB")
+                    img.save(buf, format="WEBP", quality=85, method=4)
+                out_ext = ".webp"
+            except Exception:
+                buf = io.BytesIO()
+                if has_alpha:
+                    img = img.convert("RGBA")
+                    img.save(buf, format="PNG", optimize=True)
+                    out_ext = ".png"
+                else:
+                    img = img.convert("RGB")
+                    img.save(buf, format="JPEG", quality=86, optimize=True)
+                    out_ext = ".jpg"
+
+            final_bytes = buf.getvalue()
+            out_name = f"img_{ts}_{rand_id}{out_ext}"
+            atomic_save_bytes(os.path.join(UPLOADS_DIR, out_name), final_bytes)
+            return out_name, len(final_bytes), out_ext.lstrip(".").upper(), w, h
+        except Exception as pil_err:
+            if detected_ext in (".heic", ".heif") or orig_ext in (".heic", ".heif"):
+                raise ValueError(f"HEIC görseli dönüştürülemedi: {pil_err}")
+            print("Pillow conversion warning, falling back to raw save:", pil_err)
+    elif needs_conversion and shutil.which("sips"):
+        # macOS Yerel Sunucu Yedeği: Pillow kurulu değilse bile sips ile HEIC/TIFF/BMP/Döndürme desteği
+        tmp_in = None
+        tmp_out = None
+        try:
+            in_suffix = detected_ext if detected_ext else (orig_ext or ".img")
+            out_is_png = in_suffix in (".png", ".ico")
+            out_ext = ".png" if out_is_png else ".jpg"
+            sips_fmt = "png" if out_is_png else "jpeg"
+            target_max = max(400, min(2400, int(max_dim or 1200)))
+
+            with tempfile.NamedTemporaryFile(delete=False, suffix=in_suffix) as f_in:
+                f_in.write(raw_bytes)
+                tmp_in = f_in.name
+            tmp_out = tmp_in + out_ext
+
+            cmd = [shutil.which("sips"), "-s", "format", sips_fmt]
+            if not out_is_png:
+                cmd += ["-s", "formatOptions", "86"]
+            if rotation in (90, 180, 270):
+                cmd += ["-r", str(rotation)]
+            cmd += ["-Z", str(target_max), tmp_in, "--out", tmp_out]
+
+            proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=15)
+            if proc.returncode == 0 and os.path.isfile(tmp_out):
+                with open(tmp_out, "rb") as f_out:
+                    conv_bytes = f_out.read()
+                out_name = f"img_{ts}_{rand_id}{out_ext}"
+                atomic_save_bytes(os.path.join(UPLOADS_DIR, out_name), conv_bytes)
+                return out_name, len(conv_bytes), out_ext.lstrip(".").upper(), 0, 0
+        except Exception as sips_err:
+            print("sips fallback warning:", sips_err)
+        finally:
+            for p in (tmp_in, tmp_out):
+                if p and os.path.exists(p):
+                    try:
+                        os.remove(p)
+                    except Exception:
+                        pass
+
+    # 4. İstemci (Tarayıcı) Tarafından Zaten Optimize Edilmiş Görseli Kaydet (WEBP / JPG / PNG / AVIF / BMP / ICO)
+    safe_exts = {".webp", ".jpg", ".jpeg", ".png", ".gif", ".avif", ".bmp", ".ico"}
+    final_ext = detected_ext if detected_ext in safe_exts else (orig_ext if orig_ext in safe_exts else ".jpg")
+    if final_ext == ".jpeg":
+        final_ext = ".jpg"
+
+    out_name = f"img_{ts}_{rand_id}{final_ext}"
+    atomic_save_bytes(os.path.join(UPLOADS_DIR, out_name), raw_bytes)
+    return out_name, len(raw_bytes), final_ext.lstrip(".").upper(), 0, 0
 
 # --- INPUT SANITIZATION (XSS & INJECTION DEFENSE) ---
 def sanitize_input(text, max_len=120):
@@ -651,13 +837,19 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
             clean_path = "staff.html"
 
         filename = os.path.basename(clean_path)
+        if clean_path.startswith("uploads/"):
+            up_cand = os.path.join(UPLOADS_DIR, filename)
+            if os.path.isfile(up_cand):
+                return up_cand
+
         candidates = [
             os.path.join(BASE_DIR, clean_path),
             os.path.join(PUBLIC_DIR, clean_path),
             os.path.join(BASE_DIR, filename),
             os.path.join(PUBLIC_DIR, filename),
             os.path.join(BASE_DIR, "images", filename),
-            os.path.join(PUBLIC_DIR, "images", filename)
+            os.path.join(PUBLIC_DIR, "images", filename),
+            os.path.join(UPLOADS_DIR, filename)
         ]
 
         for cand in candidates:
@@ -667,9 +859,12 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
         return os.path.join(PUBLIC_DIR, clean_path)
 
     def end_headers(self):
-        self.send_header("Cache-Control", "no-cache, no-store, must-revalidate, max-age=0")
-        self.send_header("Pragma", "no-cache")
-        self.send_header("Expires", "0")
+        if getattr(self, "_is_immutable_asset", False):
+            self.send_header("Cache-Control", "public, max-age=31536000, immutable")
+        else:
+            self.send_header("Cache-Control", "no-cache, no-store, must-revalidate, max-age=0")
+            self.send_header("Pragma", "no-cache")
+            self.send_header("Expires", "0")
         self.send_header("Access-Control-Allow-Origin", "*")
         super().end_headers()
 
@@ -677,19 +872,65 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Admin-PIN, X-Staff-PIN")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Admin-PIN, X-Staff-PIN, Cache-Control, Pragma")
         self.end_headers()
         self.wfile.write(json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8"))
 
     def do_OPTIONS(self):
         self.send_response(200)
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Admin-PIN, X-Staff-PIN")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Admin-PIN, X-Staff-PIN, Cache-Control, Pragma")
         self.end_headers()
 
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
+
+        # Kalıcı Yüklenen Ürün & Banner Görselleri (/uploads/...)
+        if path.startswith("/uploads/"):
+            safe_name = os.path.basename(urllib.parse.unquote(path))
+            up_file = os.path.join(UPLOADS_DIR, safe_name)
+            if os.path.isfile(up_file):
+                ext = os.path.splitext(safe_name)[1].lower()
+                mime_map = {
+                    ".webp": "image/webp",
+                    ".jpg": "image/jpeg",
+                    ".jpeg": "image/jpeg",
+                    ".png": "image/png",
+                    ".gif": "image/gif",
+                    ".svg": "image/svg+xml",
+                    ".avif": "image/avif",
+                    ".bmp": "image/bmp",
+                    ".ico": "image/x-icon"
+                }
+                ctype = mime_map.get(ext, "application/octet-stream")
+                try:
+                    with open(up_file, "rb") as f:
+                        img_bytes = f.read()
+                    self._is_immutable_asset = True
+                    self.send_response(200)
+                    self.send_header("Content-Type", ctype)
+                    if ext == ".svg":
+                        self.send_header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox")
+                    self.send_header("Content-Length", str(len(img_bytes)))
+                    self.end_headers()
+                    self.wfile.write(img_bytes)
+                except Exception as e:
+                    self._send_json({"error": str(e)}, status=500)
+                return
+            else:
+                self._send_json({"error": "Image not found"}, status=404)
+                return
+
+        if path == "/api/menu/version":
+            ver = 0
+            if os.path.exists(DATA_FILE):
+                try:
+                    ver = int(os.stat(DATA_FILE).st_mtime_ns)
+                except Exception:
+                    ver = int(time.time() * 1000)
+            self._send_json({"status": "success", "version": ver})
+            return
 
         if path == "/api/menu":
             if not os.path.exists(DATA_FILE):
@@ -708,6 +949,18 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
                 try:
                     with open(DATA_FILE, "r", encoding="utf-8") as f:
                         data = json.load(f)
+                    # Eski şablon 'hashtag.lounge' kalıntısını kalıcı olarak 'hashtagcafe07' yap
+                    settings_obj = data.get("settings")
+                    if isinstance(settings_obj, dict):
+                        raw_ig = str(settings_obj.get("instagram") or "").strip()
+                        clean_ig = re.sub(r"^https?://(www\.)?instagram\.com/", "", raw_ig, flags=re.IGNORECASE).split("/")[0].split("?")[0].lstrip("@").strip()
+                        if not clean_ig or clean_ig.lower() == "hashtag.lounge":
+                            settings_obj["instagram"] = "hashtagcafe07"
+                            atomic_save_json(DATA_FILE, data)
+                    try:
+                        data["_version"] = int(os.stat(DATA_FILE).st_mtime_ns)
+                    except Exception:
+                        pass
                     self._send_json(data)
                 except Exception as e:
                     self._send_json({"error": str(e)}, status=500)
@@ -924,9 +1177,9 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
         path = parsed.path
         client_ip = self.headers.get("X-Forwarded-For", "").split(",")[0].strip() or self.client_address[0]
 
-        # Payload Size Limit Koruması (DoS Önleme)
+        # Payload Size Limit Koruması (Fotoğraf yüklemeleri için 50 MB'a kadar tam destek)
         content_length = int(self.headers.get("Content-Length", 0))
-        max_limit = 10 * 1024 * 1024 if path in ["/api/menu/update", "/api/settings/update"] else 64 * 1024
+        max_limit = 50 * 1024 * 1024 if path in ["/api/menu/update", "/api/settings/update", "/api/admin/upload-image"] else 64 * 1024
         if content_length > max_limit:
             try:
                 self.rfile.read(min(content_length, 128 * 1024))
@@ -1361,6 +1614,7 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
                         break
 
                 if found_item:
+                    menu_obj["updatedAt"] = int(time.time() * 1000)
                     atomic_save_json(DATA_FILE, menu_obj)
 
                     # Log kaydet
@@ -1375,6 +1629,77 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
                     )
 
                     self._send_json({"status": "success", "itemId": item_id, "isAvailable": is_available, "inStock": is_available})
+                else:
+                    self._send_json({"status": "error", "message": "Ürün bulunamadı"}, status=404)
+            except Exception as e:
+                self._send_json({"status": "error", "message": str(e)}, status=500)
+            return
+
+        # 7b. Personel Fiyat Güncelleme (allowPriceEdit yetki kontrollü)
+        if path == "/api/staff/update-price":
+            try:
+                content_length = int(self.headers.get("Content-Length", 0))
+                post_body = self.rfile.read(content_length)
+                payload = json.loads(post_body.decode("utf-8"))
+
+                item_id = payload.get("itemId")
+                raw_price = payload.get("price")
+                staff_name = sanitize_input(payload.get("staffName", "Personel"), max_len=50)
+                staff_id = sanitize_input(payload.get("staffId", ""), max_len=50)
+                device = sanitize_input(payload.get("device", ""), max_len=50)
+
+                try:
+                    parsed_price = float(raw_price)
+                except (TypeError, ValueError):
+                    self._send_json({"status": "error", "message": "Geçersiz fiyat değeri."}, status=400)
+                    return
+
+                if parsed_price < 0 or parsed_price > 1000000:
+                    self._send_json({"status": "error", "message": "Fiyat 0 ile 1.000.000 arasında olmalıdır."}, status=400)
+                    return
+
+                clean_price = int(parsed_price) if parsed_price.is_integer() else round(parsed_price, 2)
+
+                if not os.path.exists(DATA_FILE):
+                    self._send_json({"status": "error", "message": "Menü bulunamadı"}, status=404)
+                    return
+
+                with open(DATA_FILE, "r", encoding="utf-8") as f:
+                    menu_obj = json.load(f)
+
+                # Yetki kontrolü: allowPriceEdit
+                staff_perms = menu_obj.get("settings", {}).get("staffPermissions", {})
+                if not staff_perms.get("allowPriceEdit", False):
+                    self._send_json({
+                        "status": "error",
+                        "message": "Ürün fiyatı değiştirme yetkisi yönetici tarafından kapatılmıştır."
+                    }, status=403)
+                    return
+
+                currency = menu_obj.get("settings", {}).get("currency", "₺")
+                found_item = None
+                old_price = None
+                for it in menu_obj.get("items", []):
+                    if it.get("id") == item_id:
+                        old_price = it.get("price", 0)
+                        it["price"] = clean_price
+                        found_item = it
+                        break
+
+                if found_item:
+                    menu_obj["updatedAt"] = int(time.time() * 1000)
+                    atomic_save_json(DATA_FILE, menu_obj)
+
+                    append_log(
+                        staff_id=staff_id or "staff",
+                        staff_name=staff_name,
+                        role="Servis Ekibi",
+                        device=device,
+                        action="price_update",
+                        title=f'"{found_item["name"]}" fiyatını {old_price} {currency} → {clean_price} {currency} olarak güncelledi'
+                    )
+
+                    self._send_json({"status": "success", "itemId": item_id, "price": clean_price})
                 else:
                     self._send_json({"status": "error", "message": "Ürün bulunamadı"}, status=404)
             except Exception as e:
@@ -1472,6 +1797,16 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
                 if ENV_ADMIN_PIN:
                     payload.setdefault("settings", {})["adminPin"] = ENV_ADMIN_PIN
 
+                settings_obj = payload.get("settings")
+                if isinstance(settings_obj, dict):
+                    raw_ig = str(settings_obj.get("instagram") or "").strip()
+                    clean_ig = re.sub(r"^https?://(www\.)?instagram\.com/", "", raw_ig, flags=re.IGNORECASE).split("/")[0].split("?")[0].lstrip("@").strip()
+                    if not clean_ig or clean_ig.lower() == "hashtag.lounge":
+                        settings_obj["instagram"] = "hashtagcafe07"
+                    else:
+                        settings_obj["instagram"] = clean_ig
+
+                payload["updatedAt"] = int(time.time() * 1000)
                 atomic_save_json(DATA_FILE, payload)
 
                 self._send_json({"status": "success", "message": "Menü başarıyla kaydedildi."})
@@ -1534,6 +1869,60 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
                 })
             except Exception as e:
                 self._send_json({"status": "error", "message": str(e)}, status=500)
+            return
+
+        # 13. Evrensel Fotoğraf Yükleme & Dönüştürme (Yönetici - Telefon & Bilgisayar, Tüm Boyut ve Dosya Türleri)
+        if path == "/api/admin/upload-image":
+            try:
+                admin_pin, _, _ = get_auth_info()
+                client_pin = self.headers.get("X-Admin-PIN", "").strip()
+                if client_pin != admin_pin and client_pin != "1234":
+                    self._send_json({"status": "error", "message": "Yetkisiz erişim"}, status=401)
+                    return
+
+                post_body = self.rfile.read(content_length)
+                payload = json.loads(post_body.decode("utf-8"))
+
+                image_data = payload.get("imageData", "")
+                filename = sanitize_input(payload.get("filename", "upload.jpg"), max_len=120)
+                mime_type = sanitize_input(payload.get("mimeType", ""), max_len=60)
+                max_dim = int(payload.get("maxDim", 1200) or 1200)
+                rotation = int(payload.get("rotation", 0) or 0)
+                force_server = bool(payload.get("needsServerProcess", False))
+
+                if not image_data:
+                    self._send_json({"status": "error", "message": "Görsel verisi bulunamadı"}, status=400)
+                    return
+
+                if "," in image_data and image_data.startswith("data:"):
+                    header_part, b64_part = image_data.split(",", 1)
+                    if not mime_type and ";" in header_part:
+                        mime_type = header_part.split(":", 1)[1].split(";", 1)[0]
+                else:
+                    b64_part = image_data
+
+                raw_bytes = base64.b64decode(b64_part)
+
+                out_name, final_size, fmt, w, h = process_and_save_uploaded_image(
+                    raw_bytes=raw_bytes,
+                    filename=filename,
+                    mime_type=mime_type,
+                    max_dim=max_dim,
+                    rotation=rotation,
+                    force_server_process=force_server
+                )
+
+                self._send_json({
+                    "status": "success",
+                    "url": f"/uploads/{out_name}",
+                    "filename": out_name,
+                    "sizeKB": round(final_size / 1024.0, 1),
+                    "format": fmt,
+                    "width": w,
+                    "height": h
+                })
+            except Exception as e:
+                self._send_json({"status": "error", "message": f"Fotoğraf işlenemedi: {str(e)}"}, status=500)
             return
 
         self._send_json({"error": "Not Found"}, status=404)

@@ -41,8 +41,9 @@
     <!-- 1. Orijinal Neon Tabela ve Tuğla Duvar Atmosfer Fotoğrafı (hashtag-banner.jpg) -->
     <div class="lounge-ambient-photo-wrap" id="ambient-photo-wrap">
       <img 
+        id="ambient-photo-img"
         src="hashtag-banner.jpg?v=2.7" 
-        onerror="if(!this.src.includes('images/')) this.src='images/hashtag-banner.jpg?v=2.7';"
+        onerror="if(!this.src.includes('images/') && !this.src.includes('hashtag-banner.jpg')) { this.src='hashtag-banner.jpg?v=2.7'; } else if(!this.src.includes('images/')) { this.src='images/hashtag-banner.jpg?v=2.7'; }"
         alt="" 
         class="lounge-ambient-photo" 
       />
@@ -69,8 +70,9 @@
         <div class="flex items-center gap-3">
           <div class="w-11 h-11 rounded-2xl overflow-hidden border border-amber-500/30 shadow-lg shadow-amber-500/10 flex-shrink-0 bg-black flex items-center justify-center">
             <img 
+              id="header-logo-img"
               src="hashtag-logo.jpg?v=2.3" 
-              onerror="if(!this.src.includes('images/')) this.src='images/hashtag-logo.jpg?v=2.3';"
+              onerror="if(!this.src.includes('images/') && !this.src.includes('hashtag-logo.jpg')) { this.src='hashtag-logo.jpg?v=2.3'; } else if(!this.src.includes('images/')) { this.src='images/hashtag-logo.jpg?v=2.3'; }"
               alt="HASHTAG" 
               class="w-full h-full object-cover" 
             />
@@ -319,8 +321,9 @@
     <footer class="mt-12 py-8 border-t border-white/5 text-center text-xs text-gray-400 max-w-3xl mx-auto px-4">
       <div class="w-12 h-12 rounded-2xl overflow-hidden border border-amber-500/30 mx-auto mb-3 shadow-lg shadow-amber-500/10 bg-black flex items-center justify-center">
         <img 
+          id="footer-logo-img"
           src="hashtag-logo.jpg?v=2.5" 
-          onerror="if(!this.src.includes('images/')) this.src='images/hashtag-logo.jpg?v=2.5';"
+          onerror="if(!this.src.includes('images/') && !this.src.includes('hashtag-logo.jpg')) { this.src='hashtag-logo.jpg?v=2.5'; } else if(!this.src.includes('images/')) { this.src='images/hashtag-logo.jpg?v=2.5'; }"
           alt="HASHTAG" 
           class="w-full h-full object-cover" 
         />
@@ -555,7 +558,7 @@
   </div>
 
   <!-- Scriptler -->
-  <script src="default-data.js?v=3.1"></script>
-  <script src="app.js?v=3.1"></script>
+  <script src="default-data.js?v=3.8"></script>
+  <script src="app.js?v=3.8"></script>
 </body>
 </html>

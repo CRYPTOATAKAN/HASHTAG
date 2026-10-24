@@ -30,6 +30,7 @@ function initAdminPanel() {
   }
 
   setupPinLogin();
+  setupUniversalImageDropAndPaste();
 }
 
 // Güvenli başlatma garantisi
@@ -224,13 +225,17 @@ function renderAdminProductTable() {
           ${items.map(item => {
             const cat = menuData.categories.find(c => c.id === item.categoryId);
             const isOut = item.inStock === false || item.isAvailable === false;
+            const thumbFallback = 'https://images.unsplash.com/photo-1527661591475-527312dd65f5?auto=format&fit=crop&w=100&q=80';
+            const thumbSrc = resolveAdminImageUrl(item.image, thumbFallback);
+            const thumbFit = item.imageFit === 'contain' ? 'object-contain' : (item.imageFit === 'top' ? 'object-cover object-top' : 'object-cover');
 
             return `
               <tr class="hover:bg-white/5 transition-colors">
                 <td class="py-3 px-4">
                   <div class="flex items-center gap-3">
-                    <img src="${item.image || 'https://images.unsplash.com/photo-1527661591475-527312dd65f5?auto=format&fit=crop&w=100&q=80'}" 
-                         alt="" class="w-12 h-12 rounded-lg object-cover bg-neutral-900 border border-white/5" />
+                    <img src="${thumbSrc}" 
+                         alt="" class="w-12 h-12 rounded-lg ${thumbFit} bg-neutral-900 border border-white/5 flex-shrink-0"
+                         onerror="this.src='${thumbFallback}'" />
                     <div>
                       <div class="font-semibold text-white flex items-center gap-2">
                         ${item.name}
@@ -287,10 +292,16 @@ async function toggleStockStatus(itemId) {
   const item = menuData.items.find(it => it.id === itemId);
   if (!item) return;
 
+  const prevInStock = item.inStock;
+  const prevAvailable = item.isAvailable;
   const currentAvailable = (item.inStock !== false) && (item.isAvailable !== false);
   item.inStock = !currentAvailable;
   item.isAvailable = !currentAvailable;
-  await saveMenuData(menuData);
+  const ok = await saveMenuData(menuData);
+  if (!ok) {
+    item.inStock = prevInStock;
+    item.isAvailable = prevAvailable;
+  }
   updateAdminStats();
   renderAdminProductTable();
 }
@@ -394,13 +405,19 @@ function openNewItemModal() {
   editingItemId = null;
   document.getElementById('modal-item-title').textContent = 'Yeni Ürün Ekle';
   document.getElementById('item-form').reset();
-  
+  document.getElementById('form-item-stock').checked = true;
+
+  resetProductImageUploadState();
+  setItemImageFit('cover', false);
+  updateItemImagePreviewUI('', 'cover');
+
   // Kategorileri Doldur
   fillCategorySelect();
 
   const modal = document.getElementById('edit-item-modal');
   modal.classList.remove('hidden');
   modal.classList.add('flex');
+  if (window.lucide) lucide.createIcons();
 }
 
 function openEditItemModal(itemId) {
@@ -411,6 +428,8 @@ function openEditItemModal(itemId) {
   document.getElementById('modal-item-title').textContent = 'Ürünü Düzenle';
   fillCategorySelect(item.categoryId);
 
+  resetProductImageUploadState();
+
   document.getElementById('form-item-name').value = item.name || '';
   document.getElementById('form-item-price').value = item.price || '';
   document.getElementById('form-item-desc').value = item.description || '';
@@ -419,15 +438,21 @@ function openEditItemModal(itemId) {
   document.getElementById('form-item-flavors').value = (item.flavors || []).join(', ');
   document.getElementById('form-item-stock').checked = (item.inStock !== false) && (item.isAvailable !== false);
 
+  const savedFit = item.imageFit || 'cover';
+  setItemImageFit(savedFit, false);
+  updateItemImagePreviewUI(item.image || '', savedFit);
+
   const modal = document.getElementById('edit-item-modal');
   modal.classList.remove('hidden');
   modal.classList.add('flex');
+  if (window.lucide) lucide.createIcons();
 }
 
 function closeItemEditModal() {
   const modal = document.getElementById('edit-item-modal');
   modal.classList.add('hidden');
   modal.classList.remove('flex');
+  resetProductImageUploadState();
 }
 
 function fillCategorySelect(selectedCatId = null) {
@@ -441,12 +466,19 @@ function fillCategorySelect(selectedCatId = null) {
 async function handleSaveItem(e) {
   e.preventDefault();
 
+  if (isUploadingProductImage) {
+    showToast('⏳ Fotoğraf işleniyor, lütfen 1-2 saniye bekleyin...', 'error');
+    return;
+  }
+
   const name = document.getElementById('form-item-name').value.trim();
   const categoryId = document.getElementById('form-item-category').value;
   const price = parseFloat(document.getElementById('form-item-price').value) || 0;
   const description = document.getElementById('form-item-desc').value.trim();
   const badge = document.getElementById('form-item-badge').value.trim();
   const image = document.getElementById('form-item-image').value.trim() || 'https://images.unsplash.com/photo-1527661591475-527312dd65f5?auto=format&fit=crop&w=600&q=80';
+  const imageFitEl = document.getElementById('form-item-image-fit');
+  const imageFit = (imageFitEl && imageFitEl.value) ? imageFitEl.value : 'cover';
   const flavorsRaw = document.getElementById('form-item-flavors').value;
   const flavors = flavorsRaw ? flavorsRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
   const inStock = document.getElementById('form-item-stock').checked;
@@ -461,6 +493,7 @@ async function handleSaveItem(e) {
       item.description = description;
       item.badge = badge;
       item.image = image;
+      item.imageFit = imageFit;
       item.flavors = flavors;
       item.inStock = inStock;
       item.isAvailable = inStock;
@@ -476,6 +509,7 @@ async function handleSaveItem(e) {
       description,
       badge,
       image,
+      imageFit,
       flavors,
       inStock,
       isAvailable: inStock
@@ -487,16 +521,24 @@ async function handleSaveItem(e) {
     closeItemEditModal();
     updateAdminStats();
     renderAdminProductTable();
+    renderAdminCategories();
+    renderQuickPriceTable();
   }
 }
 
 async function deleteItem(itemId) {
   if (!confirm('Bu ürünü silmek istediğinize emin misiniz?')) return;
 
+  const prevItems = [...menuData.items];
   menuData.items = menuData.items.filter(it => it.id !== itemId);
-  await saveMenuData(menuData);
+  const ok = await saveMenuData(menuData);
+  if (!ok) {
+    menuData.items = prevItems;
+  }
   updateAdminStats();
   renderAdminProductTable();
+  renderAdminCategories();
+  renderQuickPriceTable();
 }
 
 /* ==========================================================================
@@ -530,7 +572,15 @@ function setPresetImage(type) {
   };
 
   if (presets[type]) {
+    resetProductImageUploadState();
     input.value = presets[type];
+    setItemImageFit('cover', false);
+    updateItemImagePreviewUI(presets[type], 'cover');
+    const badgeEl = document.getElementById('item-image-meta-badge');
+    if (badgeEl) {
+      badgeEl.textContent = 'Hazır Şablon Seçildi';
+      badgeEl.className = 'text-[10px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 font-mono';
+    }
   }
 }
 
@@ -558,30 +608,35 @@ function renderAdminCategories() {
         const count = items.filter(it => it.categoryId === cat.id).length;
         const isFirst = idx === 0;
         const isLast = idx === categories.length - 1;
+        const safeId = String(cat.id || '').replace(/'/g, "\\'");
 
         return `
-          <div class="flex items-center justify-between p-3.5 rounded-xl bg-black border border-white/10 hover:border-white/20 transition-all">
-            <div class="flex items-center gap-3">
-              <div class="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center font-bold">
-                <i data-lucide="${cat.icon || 'star'}" class="w-5 h-5"></i>
+          <div class="flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 p-3.5 rounded-xl bg-black border border-white/10 hover:border-white/20 transition-all">
+            <div class="flex items-center gap-3 min-w-0">
+              <div class="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center font-bold flex-shrink-0">
+                <i data-lucide="${escapeHtml(cat.icon || 'star')}" class="w-5 h-5"></i>
               </div>
-              <div>
-                <div class="font-bold text-white text-sm">${cat.name}</div>
+              <div class="min-w-0">
+                <div class="font-bold text-white text-sm truncate">${escapeHtml(cat.name)}</div>
                 <div class="text-xs text-gray-400 mt-0.5">${count} ürün bulunuyor</div>
               </div>
             </div>
 
-            <div class="flex items-center gap-2">
-              <button onclick="moveCategory('${cat.id}', -1)" ${isFirst ? 'disabled class="p-1.5 rounded-lg text-gray-600 cursor-not-allowed"' : 'class="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 transition-colors"'} title="Yukarı Taşı">
+            <div class="flex items-center gap-2 ml-auto">
+              <button onclick="openNewItemModalForCategory('${safeId}')" class="px-2.5 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 text-xs font-semibold flex items-center gap-1 transition-colors" title="Bu kategoriye yeni ürün ekle">
+                <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                <span>Ürün Ekle</span>
+              </button>
+              <button onclick="moveCategory('${safeId}', -1)" ${isFirst ? 'disabled class="p-1.5 rounded-lg text-gray-600 cursor-not-allowed"' : 'class="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 transition-colors"'} title="Yukarı Taşı">
                 <i data-lucide="arrow-up" class="w-4 h-4"></i>
               </button>
-              <button onclick="moveCategory('${cat.id}', 1)" ${isLast ? 'disabled class="p-1.5 rounded-lg text-gray-600 cursor-not-allowed"' : 'class="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 transition-colors"'} title="Aşağı Taşı">
+              <button onclick="moveCategory('${safeId}', 1)" ${isLast ? 'disabled class="p-1.5 rounded-lg text-gray-600 cursor-not-allowed"' : 'class="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 transition-colors"'} title="Aşağı Taşı">
                 <i data-lucide="arrow-down" class="w-4 h-4"></i>
               </button>
-              <button onclick="openEditCategoryModal('${cat.id}')" class="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white transition-colors" title="Düzenle">
+              <button onclick="openEditCategoryModal('${safeId}')" class="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white transition-colors" title="Düzenle">
                 <i data-lucide="edit-3" class="w-4 h-4"></i>
               </button>
-              <button onclick="deleteCategory('${cat.id}')" class="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 transition-colors" title="Sil">
+              <button onclick="deleteCategory('${safeId}')" class="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 transition-colors" title="Sil">
                 <i data-lucide="trash-2" class="w-4 h-4"></i>
               </button>
             </div>
@@ -592,6 +647,11 @@ function renderAdminCategories() {
   `;
 
   if (window.lucide) lucide.createIcons();
+}
+
+function openNewItemModalForCategory(catId) {
+  openNewItemModal();
+  fillCategorySelect(catId);
 }
 
 function openNewCategoryModal() {
@@ -627,6 +687,9 @@ async function handleSaveCategory(e) {
   e.preventDefault();
   const name = document.getElementById('form-category-name').value.trim();
   const icon = document.getElementById('form-category-icon').value;
+  if (!name) return;
+
+  if (!Array.isArray(menuData.categories)) menuData.categories = [];
 
   if (editingCategoryId) {
     const cat = menuData.categories.find(c => c.id === editingCategoryId);
@@ -644,10 +707,15 @@ async function handleSaveCategory(e) {
     });
   }
 
-  await saveMenuData(menuData);
-  closeCategoryModal();
-  renderAdminCategories();
-  fillCategorySelect();
+  menuData.categories.forEach((c, i) => { c.order = i + 1; });
+
+  const ok = await saveMenuData(menuData);
+  if (ok) {
+    closeCategoryModal();
+    renderAdminCategories();
+    renderAdminProductTable();
+    fillCategorySelect();
+  }
 }
 
 async function moveCategory(catId, dir) {
@@ -659,28 +727,40 @@ async function moveCategory(catId, dir) {
   const temp = menuData.categories[idx];
   menuData.categories[idx] = menuData.categories[targetIdx];
   menuData.categories[targetIdx] = temp;
+  menuData.categories.forEach((c, i) => { c.order = i + 1; });
 
-  await saveMenuData(menuData);
-  renderAdminCategories();
-  fillCategorySelect();
+  const ok = await saveMenuData(menuData);
+  if (ok) {
+    renderAdminCategories();
+    renderAdminProductTable();
+    fillCategorySelect();
+  }
 }
 
 async function deleteCategory(catId) {
   const cat = menuData.categories.find(c => c.id === catId);
   if (!cat) return;
 
-  const itemsInCat = menuData.items.filter(it => it.categoryId === catId);
+  const itemsInCat = (menuData.items || []).filter(it => it.categoryId === catId);
   if (itemsInCat.length > 0) {
-    if (!confirm(`"${cat.name}" kategorisinde ${itemsInCat.length} adet ürün bulunuyor. Kategoriyi silerseniz bu ürünler sahipsiz kalacaktır. Devam etmek istiyor musunuz?`)) {
+    if (!confirm(`"${cat.name}" kategorisinde ${itemsInCat.length} adet ürün bulunuyor. Kategoriyi silerseniz bu ürünler menüde "Diğer Ürünler" altında görünmeye devam edecektir. Devam etmek istiyor musunuz?`)) {
       return;
     }
   } else {
     if (!confirm(`"${cat.name}" kategorisini silmek istediğinize emin misiniz?`)) return;
   }
 
+  const prevCategories = [...menuData.categories];
   menuData.categories = menuData.categories.filter(c => c.id !== catId);
-  await saveMenuData(menuData);
+  menuData.categories.forEach((c, i) => { c.order = i + 1; });
+
+  const ok = await saveMenuData(menuData);
+  if (!ok) {
+    menuData.categories = prevCategories;
+    return;
+  }
   renderAdminCategories();
+  renderAdminProductTable();
   fillCategorySelect();
 }
 
@@ -740,6 +820,11 @@ function updateQrPreview() {
   if (!printArea) return;
 
   let cardsHtml = '';
+  const bm = (menuData && menuData.settings && menuData.settings.brandMedia) ? menuData.settings.brandMedia : {};
+  const qrLogoSrc = (bm.logoImage && String(bm.logoImage).trim())
+    ? resolveAdminImageUrl(bm.logoImage, 'hashtag-logo.jpg?v=2.3')
+    : 'hashtag-logo.jpg?v=2.3';
+  const qrLogoFitClass = bm.logoFit === 'contain' ? 'w-full h-full object-contain p-0.5' : 'w-full h-full object-cover';
 
   for (let i = 1; i <= printCount; i++) {
     const tableNum = mode === 'all' ? i : (mode === 'single' ? singleTableNum : null);
@@ -752,10 +837,10 @@ function updateQrPreview() {
         <div class="mb-4">
           <div class="w-14 h-14 rounded-2xl overflow-hidden border border-amber-500/40 mx-auto mb-2 shadow-lg shadow-amber-500/20 bg-black flex items-center justify-center">
             <img 
-              src="hashtag-logo.jpg?v=2.3" 
-              onerror="if(!this.src.includes('images/')) this.src='images/hashtag-logo.jpg?v=2.3';"
+              src="${qrLogoSrc}" 
+              onerror="if(!this.src.includes('hashtag-logo.jpg')) { this.src='hashtag-logo.jpg?v=2.3'; } else if(!this.src.includes('images/')) { this.src='images/hashtag-logo.jpg?v=2.3'; }"
               alt="HASHTAG" 
-              class="w-full h-full object-cover" 
+              class="${qrLogoFitClass}" 
             />
           </div>
           <h2 class="text-2xl font-black tracking-tight text-white uppercase">${menuData.settings.cafeName || 'HASHTAG'}</h2>
@@ -823,12 +908,18 @@ function fillSettingsForm() {
     if (el) el.value = val || '';
   };
 
+  const cleanInsta = typeof normalizeInstagramHandle === 'function'
+    ? normalizeInstagramHandle(s.instagram)
+    : ((s.instagram && s.instagram.toLowerCase() !== 'hashtag.lounge') ? s.instagram : 'hashtagcafe07');
+  s.instagram = cleanInsta;
+
   setVal('set-cafe-name', s.cafeName);
   setVal('set-tagline', s.cafeTagline);
   setVal('set-currency', s.currency);
   setVal('set-wifi-name', s.wifiName);
   setVal('set-wifi-pass', s.wifiPassword);
-  setVal('set-instagram', s.instagram);
+  setVal('set-instagram', cleanInsta);
+  updateInstagramPreviewLink(cleanInsta);
   setVal('set-google-maps', s.googleMapsUrl || 'https://www.google.com/maps/place/HashTag+Shısha+TowN/@36.5441256,31.9875018,17z/data=!4m8!3m7!1s0x14dca29d1fbf1249:0x4b3340264cde0fb8!8m2!3d36.5441256!4d31.9900767!9m1!1b1!16s%2Fg%2F11c5swfnsx?entry=ttu&g_ep=EgoyMDI2MTAyMC4wIKXMDSoASAFQAw%3D%3D');
   setVal('set-admin-pin', s.adminPin);
   setVal('set-base-url', s.baseUrl);
@@ -846,13 +937,74 @@ function fillSettingsForm() {
   if (priceEditEl) priceEditEl.checked = !!staffPerms.allowPriceEdit;
 
   // Haftanın / Günün Duyurusu & Banner Ayarları
+  const hasSavedAnn = s.announcement !== undefined && s.announcement !== null;
   const ann = s.announcement || {};
+  const isAnnEnabled = ann.enabled !== false;
   const annEnabledEl = document.getElementById('set-announcement-enabled');
-  if (annEnabledEl) annEnabledEl.checked = ann.enabled !== false;
-  setVal('set-announcement-badge', ann.badge || '🔥 ŞEFİN TAVSİYESİ');
-  setVal('set-announcement-title', ann.title || 'Love 66 & Lady Killer Özel Mix');
-  setVal('set-announcement-desc', ann.desc || 'Özel buzlu marpuç ve taze nane esintisiyle hazırlanan günün karışımı.');
+  if (annEnabledEl) annEnabledEl.checked = isAnnEnabled;
+
+  setVal('set-announcement-badge', hasSavedAnn && ann.badge !== undefined ? ann.badge : '🔥 ŞEFİN TAVSİYESİ');
+  setVal('set-announcement-title', hasSavedAnn && ann.title !== undefined ? ann.title : 'Love 66 & Lady Killer Özel Mix');
+  setVal('set-announcement-desc', hasSavedAnn && ann.desc !== undefined ? ann.desc : 'Özel buzlu marpuç ve taze nane esintisiyle hazırlanan günün karışımı.');
   setVal('set-announcement-image', ann.image || '');
+  const annFit = ann.imageFit || 'cover';
+  setVal('set-announcement-image-fit', annFit);
+  if (typeof resetAnnouncementUploadState === 'function') {
+    resetAnnouncementUploadState();
+  }
+  if (typeof setAnnouncementImageFit === 'function') {
+    setAnnouncementImageFit(annFit, false);
+  }
+  if (typeof updateAnnouncementToggleUI === 'function') {
+    updateAnnouncementToggleUI(isAnnEnabled);
+  }
+  updateAnnouncementImagePreview(ann.image || '', annFit);
+
+  // Profil Fotoğrafları (Sol Üst & Sayfa Altı) ve Anasayfa Kapak Medya Eklentisi
+  const bm = s.brandMedia || {};
+  const defaultHeroTitle = `${(s.cafeName || 'HASHTAG').toUpperCase()} LOUNGE & HOOKAH`;
+  setVal('set-brand-logo-image', bm.logoImage || '');
+  setVal('set-brand-logo-fit', bm.logoFit || 'cover');
+  setVal('set-brand-hero-image', bm.heroBannerImage || '');
+  setVal('set-brand-hero-fit', bm.heroBannerFit || 'cover');
+  setVal('set-hero-banner-badge', bm.heroBannerBadge !== undefined ? bm.heroBannerBadge : 'PREMİUM ATMOSFER');
+  setVal('set-hero-banner-title', bm.heroBannerTitle !== undefined ? bm.heroBannerTitle : defaultHeroTitle);
+  setVal('set-hero-banner-desc', bm.heroBannerDesc !== undefined ? bm.heroBannerDesc : '💨 Özel Nargile Karışımları • 🍹 Mocktail & Kahve');
+  setVal('set-brand-mood-image', bm.moodBannerImage || '');
+  setVal('set-brand-mood-fit', bm.moodBannerFit || 'cover');
+
+  const isMoodEnabled = bm.moodSlideEnabled !== false;
+  const moodEnabledEl = document.getElementById('set-mood-slide-enabled');
+  if (moodEnabledEl) moodEnabledEl.checked = isMoodEnabled;
+
+  if (typeof resetBrandMediaUploadState === 'function') {
+    resetBrandMediaUploadState();
+  }
+  if (typeof setBrandMediaSlotFit === 'function') {
+    setBrandMediaSlotFit('logo', bm.logoFit || 'cover', false);
+    setBrandMediaSlotFit('hero', bm.heroBannerFit || 'cover', false);
+    setBrandMediaSlotFit('mood', bm.moodBannerFit || 'cover', false);
+  }
+  if (typeof updateMoodSlideToggleUI === 'function') {
+    updateMoodSlideToggleUI(isMoodEnabled);
+  }
+  if (typeof syncHeroPreviewTexts === 'function') {
+    syncHeroPreviewTexts();
+  }
+  if (typeof applyAdminBrandLogoUI === 'function') {
+    applyAdminBrandLogoUI();
+  }
+}
+
+function updateInstagramPreviewLink(val) {
+  const clean = typeof normalizeInstagramHandle === 'function'
+    ? normalizeInstagramHandle(val)
+    : (String(val || '').trim().replace(/^https?:\/\/(www\.)?instagram\.com\//i, '').split(/[/?#]/)[0].replace(/^@+/, '') || 'hashtagcafe07');
+  const linkEl = document.getElementById('instagram-live-preview-link');
+  if (linkEl) {
+    linkEl.href = `https://www.instagram.com/${clean}`;
+    linkEl.textContent = `instagram.com/${clean}`;
+  }
 }
 
 function openStaffPortalFromAdmin(e) {
@@ -878,10 +1030,25 @@ function toggleStaffPinVisibility() {
 async function handleSaveSettings(e) {
   e.preventDefault();
 
+  if ((typeof isUploadingAnnouncementImage !== 'undefined' && isUploadingAnnouncementImage) ||
+      (typeof isAnyBrandMediaUploading === 'function' && isAnyBrandMediaUploading())) {
+    showToast('⏳ Görsel işleniyor, lütfen 1-2 saniye bekleyin...', 'error');
+    return;
+  }
+
+  const currentAuthPin = getAdminPin();
+  try { sessionStorage.setItem('hashtag_admin_pin', currentAuthPin); } catch (err) {}
+
   const newPin = document.getElementById('set-admin-pin').value.trim() || '1234';
   const newStaffPin = document.getElementById('set-staff-pin') ? document.getElementById('set-staff-pin').value.trim() || '5555' : '5555';
   const allowStock = document.getElementById('set-staff-allow-stock') ? document.getElementById('set-staff-allow-stock').checked : true;
   const allowPrice = document.getElementById('set-staff-allow-price') ? document.getElementById('set-staff-allow-price').checked : false;
+
+  const badgeInputEl = document.getElementById('set-announcement-badge');
+  const titleInputEl = document.getElementById('set-announcement-title');
+  const descInputEl = document.getElementById('set-announcement-desc');
+  const baseUrlEl = document.getElementById('set-base-url');
+  const enableCallsEl = document.getElementById('set-enable-calls');
 
   menuData.settings = {
     ...menuData.settings,
@@ -890,7 +1057,9 @@ async function handleSaveSettings(e) {
     currency: document.getElementById('set-currency').value.trim() || '₺',
     wifiName: document.getElementById('set-wifi-name').value.trim(),
     wifiPassword: document.getElementById('set-wifi-pass').value.trim(),
-    instagram: document.getElementById('set-instagram').value.trim(),
+    instagram: typeof normalizeInstagramHandle === 'function'
+      ? normalizeInstagramHandle(document.getElementById('set-instagram').value)
+      : document.getElementById('set-instagram').value.trim(),
     googleMapsUrl: document.getElementById('set-google-maps') ? document.getElementById('set-google-maps').value.trim() : (menuData.settings.googleMapsUrl || ''),
     adminPin: newPin,
     staffPin: newStaffPin,
@@ -901,21 +1070,25 @@ async function handleSaveSettings(e) {
     },
     announcement: {
       enabled: document.getElementById('set-announcement-enabled') ? document.getElementById('set-announcement-enabled').checked : true,
-      badge: document.getElementById('set-announcement-badge') ? document.getElementById('set-announcement-badge').value.trim() || '🔥 ŞEFİN TAVSİYESİ' : '🔥 ŞEFİN TAVSİYESİ',
-      title: document.getElementById('set-announcement-title') ? document.getElementById('set-announcement-title').value.trim() || 'Love 66 & Lady Killer Özel Mix' : 'Love 66 & Lady Killer Özel Mix',
-      desc: document.getElementById('set-announcement-desc') ? document.getElementById('set-announcement-desc').value.trim() || 'Özel buzlu marpuç ve taze nane esintisiyle hazırlanan günün karışımı.' : 'Özel buzlu marpuç ve taze nane esintisiyle hazırlanan günün karışımı.',
-      image: document.getElementById('set-announcement-image') ? document.getElementById('set-announcement-image').value.trim() : ''
+      badge: badgeInputEl ? badgeInputEl.value.trim() : '🔥 ŞEFİN TAVSİYESİ',
+      title: titleInputEl ? (titleInputEl.value.trim() || 'HASHTAG Özel Seçim') : 'Love 66 & Lady Killer Özel Mix',
+      desc: descInputEl ? descInputEl.value.trim() : '',
+      image: document.getElementById('set-announcement-image') ? document.getElementById('set-announcement-image').value.trim() : '',
+      imageFit: document.getElementById('set-announcement-image-fit') ? (document.getElementById('set-announcement-image-fit').value || 'cover') : 'cover'
     },
-    baseUrl: document.getElementById('set-base-url').value.trim() || window.location.origin,
+    brandMedia: typeof readBrandMediaFormObject === 'function'
+      ? readBrandMediaFormObject()
+      : (menuData.settings.brandMedia || {}),
+    baseUrl: (baseUrlEl ? baseUrlEl.value.trim() : (menuData.settings.baseUrl || '')) || (window.location.protocol.startsWith('http') ? window.location.origin : 'https://p01--hashtag--xqx4khzq6gkf.code.run'),
     tableCount: parseInt(document.getElementById('set-table-count').value) || 24,
-    enableServiceCalls: document.getElementById('set-enable-calls').checked
+    enableServiceCalls: enableCallsEl ? enableCallsEl.checked : !!menuData.settings.enableServiceCalls
   };
 
   const ok = await saveMenuData(menuData);
   if (ok) {
     try { sessionStorage.setItem('hashtag_admin_pin', newPin); } catch (err) {}
     fillSettingsForm();
-    showToast('✅ Kafe ve Wi-Fi ayarları başarıyla kaydedildi!', 'success');
+    showToast('✅ Kafe, profil görselleri, duyuru ve Wi-Fi ayarları kaydedildi!', 'success');
   }
 }
 
@@ -1175,7 +1348,7 @@ function renderLogsList() {
   } else if (currentLogFilter === 'call') {
     filtered = filtered.filter(l => l.action === 'call_taken' || l.action === 'call_completed');
   } else if (currentLogFilter === 'stock') {
-    filtered = filtered.filter(l => l.action === 'stock_toggle');
+    filtered = filtered.filter(l => l.action === 'stock_toggle' || l.action === 'price_update');
   }
 
   if (filtered.length === 0) {
@@ -1189,6 +1362,7 @@ function renderLogsList() {
     'call_taken': '<i data-lucide="footprints" class="w-4 h-4 text-blue-400"></i>',
     'call_completed': '<i data-lucide="check-circle" class="w-4 h-4 text-emerald-400"></i>',
     'stock_toggle': '<i data-lucide="package" class="w-4 h-4 text-amber-400"></i>',
+    'price_update': '<i data-lucide="dollar-sign" class="w-4 h-4 text-emerald-400"></i>',
     'feedback': '<i data-lucide="star" class="w-4 h-4 text-amber-400"></i>'
   };
 
@@ -2210,3 +2384,1555 @@ async function deleteStaffMember(staffId) {
     alert("Bağlantı hatası: " + (err.message || "Sunucuya ulaşılamadı."));
   }
 }
+
+/* ==========================================================================
+   EVRENSEL FOTOĞRAF YÜKLEME, HEIC/TÜM FORMAT DÖNÜŞTÜRÜCÜ & AKILLI BOYUTLANDIRMA
+   (Telefon & Bilgisayar • Tüm Dosya Türleri • 50MB'a Kadar • Otomatik Kadraj)
+   ========================================================================== */
+
+const MAX_RAW_IMAGE_BYTES = 50 * 1024 * 1024; // 50 MB
+const DEFAULT_PRODUCT_FALLBACK_IMG = 'https://images.unsplash.com/photo-1527661591475-527312dd65f5?auto=format&fit=crop&w=600&q=80';
+
+let activeProductImageFile = null;
+let activeProductImageRotation = 0;
+let isUploadingProductImage = false;
+let userManuallyChangedImageFit = false;
+let heicConverterLoadPromise = null;
+
+function resolveAdminImageUrl(url, fallback = DEFAULT_PRODUCT_FALLBACK_IMG) {
+  if (typeof resolveImageUrl === 'function') {
+    return resolveImageUrl(url, fallback);
+  }
+  if (!url || typeof url !== 'string' || !url.trim()) {
+    return fallback;
+  }
+  const clean = url.trim();
+  if (clean.startsWith('data:') || clean.startsWith('blob:') || clean.startsWith('http://') || clean.startsWith('https://')) {
+    return clean;
+  }
+  if (clean.startsWith('/uploads/')) {
+    const apiBase = getApiBaseUrl();
+    return apiBase ? `${apiBase}${clean}` : clean;
+  }
+  return clean;
+}
+
+function resetProductImageUploadState() {
+  activeProductImageFile = null;
+  activeProductImageRotation = 0;
+  isUploadingProductImage = false;
+  userManuallyChangedImageFit = false;
+
+  const fileInput = document.getElementById('item-image-file-input');
+  if (fileInput) fileInput.value = '';
+  const camInput = document.getElementById('item-camera-file-input');
+  if (camInput) camInput.value = '';
+
+  setProductUploadBusy(false);
+
+  const badgeEl = document.getElementById('item-image-meta-badge');
+  if (badgeEl) {
+    badgeEl.textContent = 'Tüm Boyut & Formatlar';
+    badgeEl.className = 'text-[10px] px-2 py-0.5 rounded-full bg-white/5 text-gray-400 border border-white/10 font-mono';
+  }
+}
+
+function setProductUploadBusy(busy, loadingText = 'Optimize ediliyor...') {
+  isUploadingProductImage = !!busy;
+  const loader = document.getElementById('item-image-loading');
+  const loaderText = document.getElementById('item-image-loading-text');
+  const saveBtn = document.getElementById('btn-save-item');
+
+  if (loaderText && loadingText) {
+    loaderText.textContent = loadingText;
+  }
+  if (loader) {
+    if (busy) loader.classList.remove('hidden');
+    else loader.classList.add('hidden');
+  }
+  if (saveBtn) {
+    saveBtn.disabled = !!busy;
+    if (busy) {
+      saveBtn.classList.add('opacity-60', 'cursor-wait');
+      saveBtn.textContent = 'Fotoğraf İşleniyor...';
+    } else {
+      saveBtn.classList.remove('opacity-60', 'cursor-wait');
+      saveBtn.textContent = 'Kaydet';
+    }
+  }
+}
+
+function setItemImageFit(fitMode, isManual = true) {
+  const validMode = ['cover', 'top', 'contain'].includes(fitMode) ? fitMode : 'cover';
+  if (isManual) {
+    userManuallyChangedImageFit = true;
+  }
+
+  const hiddenFit = document.getElementById('form-item-image-fit');
+  if (hiddenFit) hiddenFit.value = validMode;
+
+  ['cover', 'top', 'contain'].forEach(mode => {
+    const btn = document.getElementById(`fit-btn-${mode}`);
+    if (!btn) return;
+    if (mode === validMode) {
+      btn.className = 'py-1.5 px-2 rounded-xl text-[10px] font-bold bg-amber-500 text-black shadow transition-all';
+    } else {
+      btn.className = 'py-1.5 px-2 rounded-xl text-[10px] font-medium bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10 transition-all';
+    }
+  });
+
+  const currentUrl = document.getElementById('form-item-image')?.value || '';
+  updateItemImagePreviewUI(currentUrl, validMode);
+}
+
+function updateItemImagePreviewUI(url, fitMode = null) {
+  const previewImg = document.getElementById('item-image-preview');
+  const blurBgImg = document.getElementById('item-image-blur-bg');
+  if (!previewImg) return;
+
+  const mode = fitMode || document.getElementById('form-item-image-fit')?.value || 'cover';
+  const resolved = resolveAdminImageUrl(url, DEFAULT_PRODUCT_FALLBACK_IMG);
+
+  previewImg.src = resolved;
+  previewImg.onerror = () => {
+    if (previewImg.src !== DEFAULT_PRODUCT_FALLBACK_IMG) {
+      previewImg.src = DEFAULT_PRODUCT_FALLBACK_IMG;
+    }
+  };
+
+  if (mode === 'contain') {
+    previewImg.className = 'relative z-10 w-full h-full object-contain transition-all duration-300';
+    if (blurBgImg) {
+      blurBgImg.src = resolved;
+      blurBgImg.classList.remove('hidden');
+    }
+  } else if (mode === 'top') {
+    previewImg.className = 'relative z-10 w-full h-full object-cover object-top transition-all duration-300';
+    if (blurBgImg) blurBgImg.classList.add('hidden');
+  } else {
+    previewImg.className = 'relative z-10 w-full h-full object-cover object-center transition-all duration-300';
+    if (blurBgImg) blurBgImg.classList.add('hidden');
+  }
+}
+
+function onManualImageUrlInput(val) {
+  const fit = document.getElementById('form-item-image-fit')?.value || 'cover';
+  updateItemImagePreviewUI(val, fit);
+}
+
+function readFileAsDataURL(fileOrBlob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('Dosya okunamadı.'));
+    reader.readAsDataURL(fileOrBlob);
+  });
+}
+
+async function detectImageFileFormatInfo(file) {
+  const name = (file && file.name ? file.name : '').toLowerCase();
+  const mime = (file && file.type ? file.type : '').toLowerCase();
+  const extMatch = name.match(/\.([a-z0-9]+)$/);
+  const ext = extMatch ? extMatch[1] : '';
+
+  let headBytes = new Uint8Array(0);
+  try {
+    const buf = await file.slice(0, 64).arrayBuffer();
+    headBytes = new Uint8Array(buf);
+  } catch (e) {}
+
+  let asciiHead = '';
+  for (let i = 0; i < headBytes.length; i++) {
+    asciiHead += String.fromCharCode(headBytes[i]);
+  }
+  const lowerHead = asciiHead.toLowerCase();
+
+  const isSvg = ext === 'svg' || mime.includes('svg') || lowerHead.includes('<svg');
+  const isGif = ext === 'gif' || mime === 'image/gif' || asciiHead.startsWith('GIF87a') || asciiHead.startsWith('GIF89a');
+  const isHeic =
+    ext === 'heic' ||
+    ext === 'heif' ||
+    mime.includes('heic') ||
+    mime.includes('heif') ||
+    lowerHead.includes('ftypheic') ||
+    lowerHead.includes('ftypheix') ||
+    lowerHead.includes('ftypmif1') ||
+    lowerHead.includes('ftypmsf1');
+  const isTiff = ext === 'tif' || ext === 'tiff' || mime.includes('tiff') ||
+    (headBytes.length >= 4 && ((headBytes[0] === 0x49 && headBytes[1] === 0x49 && headBytes[2] === 0x2A && headBytes[3] === 0x00) ||
+                               (headBytes[0] === 0x4D && headBytes[1] === 0x4D && headBytes[2] === 0x00 && headBytes[3] === 0x2A)));
+
+  return { ext, mime, isSvg, isGif, isHeic, isTiff };
+}
+
+function ensureHeicConverterLoaded() {
+  if (typeof window !== 'undefined' && typeof window.heic2any === 'function') {
+    return Promise.resolve(window.heic2any);
+  }
+  if (heicConverterLoadPromise) {
+    return heicConverterLoadPromise;
+  }
+  heicConverterLoadPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js';
+    script.async = true;
+    script.onload = () => {
+      if (typeof window.heic2any === 'function') resolve(window.heic2any);
+      else reject(new Error('HEIC dönüştürücü yüklenemedi.'));
+    };
+    script.onerror = () => {
+      heicConverterLoadPromise = null;
+      reject(new Error('HEIC kütüphanesi indirilemedi.'));
+    };
+    document.head.appendChild(script);
+  });
+  return heicConverterLoadPromise;
+}
+
+async function decodeImageUniversal(blobOrFile) {
+  if (typeof createImageBitmap === 'function') {
+    try {
+      const bmp = await createImageBitmap(blobOrFile, { imageOrientation: 'from-image' });
+      return {
+        source: bmp,
+        width: bmp.width,
+        height: bmp.height,
+        cleanup: () => { try { bmp.close(); } catch (e) {} }
+      };
+    } catch (e) {
+      // Fallback to HTMLImageElement below
+    }
+  }
+
+  return new Promise((resolve, reject) => {
+    const objUrl = URL.createObjectURL(blobOrFile);
+    const img = new Image();
+    img.onload = () => {
+      const w = img.naturalWidth || img.width;
+      const h = img.naturalHeight || img.height;
+      if (!w || !h) {
+        URL.revokeObjectURL(objUrl);
+        reject(new Error('Görsel boyutları okunamadı.'));
+        return;
+      }
+      resolve({
+        source: img,
+        width: w,
+        height: h,
+        cleanup: () => URL.revokeObjectURL(objUrl)
+      });
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(objUrl);
+      reject(new Error('Görsel tarayıcıda çözümlenemedi.'));
+    };
+    img.src = objUrl;
+  });
+}
+
+function canvasHasTransparency(canvas) {
+  try {
+    const sampleSize = 64;
+    const probe = document.createElement('canvas');
+    probe.width = Math.min(sampleSize, canvas.width);
+    probe.height = Math.min(sampleSize, canvas.height);
+    const pCtx = probe.getContext('2d', { willReadFrequently: true });
+    pCtx.drawImage(canvas, 0, 0, probe.width, probe.height);
+    const data = pCtx.getImageData(0, 0, probe.width, probe.height).data;
+    for (let i = 3; i < data.length; i += 4) {
+      if (data[i] < 250) return true;
+    }
+  } catch (e) {}
+  return false;
+}
+
+function renderHighQualityScaledImage(decoded, maxDim = 1200, rotationDeg = 0) {
+  const normRot = ((rotationDeg % 360) + 360) % 360;
+  const swapSides = normRot === 90 || normRot === 270;
+
+  const baseW = swapSides ? decoded.height : decoded.width;
+  const baseH = swapSides ? decoded.width : decoded.height;
+
+  const maxSide = Math.max(baseW, baseH);
+  const scale = maxSide > maxDim ? (maxDim / maxSide) : 1;
+  const targetW = Math.max(1, Math.round(baseW * scale));
+  const targetH = Math.max(1, Math.round(baseH * scale));
+
+  // İlk aşama: döndürmeyi uygula (çok büyük 48MP fotoğraflarda bellek dostu ara boyutla)
+  const preMax = Math.max(maxDim * 2, 2400);
+  const preScale = maxSide > preMax ? (preMax / maxSide) : 1;
+  let curW = Math.max(1, Math.round(baseW * preScale));
+  let curH = Math.max(1, Math.round(baseH * preScale));
+
+  let workCanvas = document.createElement('canvas');
+  workCanvas.width = curW;
+  workCanvas.height = curH;
+  const wCtx = workCanvas.getContext('2d');
+  wCtx.imageSmoothingEnabled = true;
+  wCtx.imageSmoothingQuality = 'high';
+
+  wCtx.save();
+  if (normRot === 90) {
+    wCtx.translate(curW, 0);
+    wCtx.rotate(Math.PI / 2);
+    wCtx.drawImage(decoded.source, 0, 0, curH, curW);
+  } else if (normRot === 180) {
+    wCtx.translate(curW, curH);
+    wCtx.rotate(Math.PI);
+    wCtx.drawImage(decoded.source, 0, 0, curW, curH);
+  } else if (normRot === 270) {
+    wCtx.translate(0, curH);
+    wCtx.rotate((3 * Math.PI) / 2);
+    wCtx.drawImage(decoded.source, 0, 0, curH, curW);
+  } else {
+    wCtx.drawImage(decoded.source, 0, 0, curW, curH);
+  }
+  wCtx.restore();
+
+  // Çok adımlı (Multi-step Lanczos benzeri) net küçültme: keskinliği maksimumda tutar
+  while (curW * 0.5 > targetW && curH * 0.5 > targetH) {
+    const nextW = Math.max(targetW, Math.round(curW * 0.5));
+    const nextH = Math.max(targetH, Math.round(curH * 0.5));
+    const stepCanvas = document.createElement('canvas');
+    stepCanvas.width = nextW;
+    stepCanvas.height = nextH;
+    const sCtx = stepCanvas.getContext('2d');
+    sCtx.imageSmoothingEnabled = true;
+    sCtx.imageSmoothingQuality = 'high';
+    sCtx.drawImage(workCanvas, 0, 0, nextW, nextH);
+    workCanvas = stepCanvas;
+    curW = nextW;
+    curH = nextH;
+  }
+
+  if (curW !== targetW || curH !== targetH) {
+    const finalCanvas = document.createElement('canvas');
+    finalCanvas.width = targetW;
+    finalCanvas.height = targetH;
+    const fCtx = finalCanvas.getContext('2d');
+    fCtx.imageSmoothingEnabled = true;
+    fCtx.imageSmoothingQuality = 'high';
+    fCtx.drawImage(workCanvas, 0, 0, targetW, targetH);
+    workCanvas = finalCanvas;
+  }
+
+  const hasAlpha = canvasHasTransparency(workCanvas);
+
+  // Önce modern, şeffaflık destekli ve çok hafif WebP formatını dene
+  let dataUrl = workCanvas.toDataURL('image/webp', 0.86);
+  let mimeType = 'image/webp';
+  let ext = 'webp';
+
+  if (!dataUrl.startsWith('data:image/webp')) {
+    // WebP kodlaması desteklenmeyen eski tarayıcılar için PNG (şeffafsa) veya JPEG
+    if (hasAlpha) {
+      dataUrl = workCanvas.toDataURL('image/png');
+      mimeType = 'image/png';
+      ext = 'png';
+    } else {
+      dataUrl = workCanvas.toDataURL('image/jpeg', 0.88);
+      mimeType = 'image/jpeg';
+      ext = 'jpg';
+    }
+  }
+
+  const approxBytes = Math.round((dataUrl.length - (dataUrl.indexOf(',') + 1)) * 0.75);
+
+  return {
+    dataUrl,
+    mimeType,
+    ext,
+    width: targetW,
+    height: targetH,
+    sizeKB: Math.max(1, Math.round((approxBytes / 1024) * 10) / 10)
+  };
+}
+
+async function uploadOptimizedImageToServer({ dataUrl, filename, mimeType, maxDim = 1200, rotation = 0, needsServerProcess = false }) {
+  const apiBase = getApiBaseUrl();
+  const adminPin = getAdminPin();
+
+  try {
+    const res = await fetch(apiBase + '/api/admin/upload-image', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Admin-PIN': adminPin
+      },
+      body: JSON.stringify({
+        imageData: dataUrl,
+        filename: filename || 'upload.webp',
+        mimeType: mimeType || 'image/webp',
+        maxDim,
+        rotation,
+        needsServerProcess
+      })
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data && data.url) {
+      return {
+        url: data.url,
+        sizeKB: data.sizeKB || 0,
+        format: data.format || 'WEBP',
+        width: data.width || 0,
+        height: data.height || 0
+      };
+    }
+
+    if (res.status === 401 || res.status === 403 || res.status === 429) {
+      const authErr = new Error(data.message || 'Yönetici PIN yetkisi doğrulanamadı.');
+      authErr.isAuthError = true;
+      throw authErr;
+    }
+
+    throw new Error(data.message || `Sunucu yanıtı: ${res.status}`);
+  } catch (err) {
+    if (err && err.isAuthError) {
+      throw err;
+    }
+    // Çevrimdışı modda veya henüz upload-image uç noktası yayınlanmamış sunucuda sıkıştırılmış görseli koru
+    if (!needsServerProcess && dataUrl && dataUrl.length < 2200 * 1024) {
+      console.warn('Sunucu dosya yükleme uç noktasına ulaşılamadı, sıkıştırılmış görsel doğrudan korundu:', err);
+      return {
+        url: dataUrl,
+        sizeKB: Math.round((dataUrl.length * 0.75) / 1024),
+        format: (mimeType || 'image/webp').split('/')[1]?.toUpperCase() || 'IMG',
+        width: 0,
+        height: 0
+      };
+    }
+    throw err;
+  }
+}
+
+async function processUniversalImageFile(file, { maxDim = 1200, rotationDeg = 0, onProgress = null } = {}) {
+  if (!file) throw new Error('Lütfen geçerli bir fotoğraf seçin.');
+  if (file.size > MAX_RAW_IMAGE_BYTES) {
+    throw new Error('Dosya boyutu çok büyük (Maksimum 50 MB). Lütfen 50 MB altında bir fotoğraf seçin.');
+  }
+
+  const fmtInfo = await detectImageFileFormatInfo(file);
+  const baseName = (file.name || 'urun-gorsel').replace(/\.[^.]+$/, '') || 'urun-gorsel';
+
+  // 1. Vektörel SVG Dosyası
+  if (fmtInfo.isSvg) {
+    if (onProgress) onProgress('SVG temizleniyor...');
+    const rawDataUrl = await readFileAsDataURL(file);
+    const uploaded = await uploadOptimizedImageToServer({
+      dataUrl: rawDataUrl,
+      filename: `${baseName}.svg`,
+      mimeType: 'image/svg+xml',
+      maxDim
+    });
+    return { ...uploaded, width: uploaded.width || 800, height: uploaded.height || 800 };
+  }
+
+  // 2. Hareketli GIF Dosyası (Animasyonu bozmadan koru)
+  if (fmtInfo.isGif && ((rotationDeg % 360) === 0) && file.size <= 6 * 1024 * 1024) {
+    if (onProgress) onProgress('GIF yükleniyor...');
+    const rawDataUrl = await readFileAsDataURL(file);
+    const uploaded = await uploadOptimizedImageToServer({
+      dataUrl: rawDataUrl,
+      filename: `${baseName}.gif`,
+      mimeType: 'image/gif',
+      maxDim
+    });
+    return { ...uploaded, width: uploaded.width || 600, height: uploaded.height || 600 };
+  }
+
+  // 3. HEIC / HEIF (iPhone & iPad Fotoğrafları) + Tüm Raster Formatlar (JPG, PNG, WEBP, AVIF, BMP, TIFF, ICO)
+  let workingBlob = file;
+  let decoded = null;
+
+  try {
+    if (onProgress) onProgress('Fotoğraf okunuyor...');
+    decoded = await decodeImageUniversal(workingBlob);
+  } catch (nativeErr) {
+    // Tarayıcı doğrudan açamadıysa ve HEIC ise heic2any ile tarayıcıda dönüştürmeyi dene
+    if (fmtInfo.isHeic) {
+      try {
+        if (onProgress) onProgress('iPhone (HEIC) dönüştürülüyor...');
+        const heic2anyFn = await ensureHeicConverterLoaded();
+        const converted = await heic2anyFn({
+          blob: file,
+          toType: 'image/jpeg',
+          quality: 0.92
+        });
+        workingBlob = Array.isArray(converted) ? converted[0] : converted;
+        decoded = await decodeImageUniversal(workingBlob);
+      } catch (heicClientErr) {
+        console.warn('Tarayıcı HEIC dönüşümü başarısız, sunucuya devrediliyor:', heicClientErr);
+      }
+    }
+  }
+
+  // Eğer tarayıcıda başarıyla çözümlendiyse yüksek kaliteli çok adımlı ölçekleme yap
+  if (decoded) {
+    try {
+      if (onProgress) onProgress('Boyut optimize ediliyor...');
+      const scaled = renderHighQualityScaledImage(decoded, maxDim, rotationDeg);
+      if (onProgress) onProgress('Sunucuya kaydediliyor...');
+      const uploaded = await uploadOptimizedImageToServer({
+        dataUrl: scaled.dataUrl,
+        filename: `${baseName}.${scaled.ext}`,
+        mimeType: scaled.mimeType,
+        maxDim,
+        rotation: 0,
+        needsServerProcess: false
+      });
+      return {
+        url: uploaded.url,
+        sizeKB: uploaded.sizeKB || scaled.sizeKB,
+        format: uploaded.format || scaled.ext.toUpperCase(),
+        width: scaled.width,
+        height: scaled.height
+      };
+    } finally {
+      decoded.cleanup();
+    }
+  }
+
+  // 4. Tarayıcının açamadığı özel formatlar (HEIC, CMYK TIFF, RAW vb.) için Doğrudan Sunucu Dönüştürücüsü
+  if (onProgress) onProgress('Sunucuda dönüştürülüyor...');
+  const rawDataUrl = await readFileAsDataURL(file);
+  const serverUploaded = await uploadOptimizedImageToServer({
+    dataUrl: rawDataUrl,
+    filename: file.name || `${baseName}.${fmtInfo.ext || 'jpg'}`,
+    mimeType: file.type || 'application/octet-stream',
+    maxDim,
+    rotation: ((rotationDeg % 360) + 360) % 360,
+    needsServerProcess: true
+  });
+  return serverUploaded;
+}
+
+async function applyUploadedProductFile(file, rotationDeg = 0, allowAutoFit = true) {
+  if (!file) return;
+  activeProductImageFile = file;
+  activeProductImageRotation = ((rotationDeg % 360) + 360) % 360;
+
+  const badgeEl = document.getElementById('item-image-meta-badge');
+  setProductUploadBusy(true, 'Optimize ediliyor...');
+
+  try {
+    const result = await processUniversalImageFile(file, {
+      maxDim: 1200,
+      rotationDeg: activeProductImageRotation,
+      onProgress: (msg) => setProductUploadBusy(true, msg)
+    });
+
+    const imageInput = document.getElementById('form-item-image');
+    if (imageInput) {
+      imageInput.value = result.url;
+    }
+
+    // Dikey (9:16 telefon çekimi) veya ultra yatay fotoğraflarda kesilmeyi önlemek için otomatik kadraj uyumu
+    if (allowAutoFit && !userManuallyChangedImageFit && result.width > 0 && result.height > 0) {
+      const ratioHW = result.height / result.width;
+      const ratioWH = result.width / result.height;
+      if (ratioHW > 1.35 || ratioWH > 1.85) {
+        setItemImageFit('contain', false);
+      } else {
+        setItemImageFit('cover', false);
+      }
+    } else {
+      const currentFit = document.getElementById('form-item-image-fit')?.value || 'cover';
+      updateItemImagePreviewUI(result.url, currentFit);
+    }
+
+    if (badgeEl) {
+      const dimLabel = (result.width && result.height) ? ` • ${result.width}×${result.height}` : '';
+      badgeEl.textContent = `✓ ${result.format || 'WEBP'} • ${result.sizeKB || ''} KB${dimLabel}`;
+      badgeEl.className = 'text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-mono';
+    }
+
+    showToast('✅ Fotoğraf her ekran boyutuna uygun şekilde optimize edildi!', 'success');
+  } catch (err) {
+    console.error('Product photo upload error:', err);
+    if (badgeEl) {
+      badgeEl.textContent = 'Yükleme Hatası';
+      badgeEl.className = 'text-[10px] px-2 py-0.5 rounded-full bg-red-500/15 text-red-300 border border-red-500/30 font-mono';
+    }
+    showToast('❌ ' + (err.message || 'Fotoğraf yüklenemedi.'), 'error');
+  } finally {
+    setProductUploadBusy(false);
+    const fileInput = document.getElementById('item-image-file-input');
+    if (fileInput) fileInput.value = '';
+    const camInput = document.getElementById('item-camera-file-input');
+    if (camInput) camInput.value = '';
+  }
+}
+
+async function handleProductImageFileSelect(event) {
+  const file = event && event.target && event.target.files ? event.target.files[0] : null;
+  if (!file) return;
+  userManuallyChangedImageFit = false;
+  await applyUploadedProductFile(file, 0, true);
+}
+
+async function rotateProductImage() {
+  if (isUploadingProductImage) return;
+
+  // 1. Yeni seçilmiş aktif dosya varsa kayıpsız olarak +90 derece yeniden işle
+  if (activeProductImageFile) {
+    const nextRot = (activeProductImageRotation + 90) % 360;
+    await applyUploadedProductFile(activeProductImageFile, nextRot, true);
+    return;
+  }
+
+  // 2. Mevcut kayıtlı ürün görseli varsa onu çekip +90 derece döndürerek kaydet
+  const currentUrl = document.getElementById('form-item-image')?.value?.trim();
+  if (!currentUrl) {
+    showToast('⚠️ Önce bir fotoğraf seçin veya yükleyin.', 'error');
+    return;
+  }
+
+  setProductUploadBusy(true, '90° Döndürülüyor...');
+  try {
+    const resolved = resolveAdminImageUrl(currentUrl, '');
+    const res = await fetch(resolved, { mode: 'cors' });
+    if (!res.ok) throw new Error('Mevcut görsel indirilemedi.');
+    const blob = await res.blob();
+    const syntheticFile = new File([blob], 'rotated-image.webp', { type: blob.type || 'image/webp' });
+    await applyUploadedProductFile(syntheticFile, 90, true);
+  } catch (err) {
+    setProductUploadBusy(false);
+    showToast('⚠️ Harici linkli görseller güvenlik (CORS) nedeniyle döndürülemez. Cihazınızdan fotoğraf yükleyerek döndürebilirsiniz.', 'error');
+  }
+}
+
+function setupUniversalImageDropAndPaste() {
+  if (window._universalImageDropInitialized) return;
+  window._universalImageDropInitialized = true;
+
+  // Sürükle & Bırak (Drag & Drop) Desteği (Ürün Modalı, Duyuru Banner & Profil/Kapak Alanları)
+  const dropzoneIds = [
+    'item-image-dropzone',
+    'announcement-image-dropzone',
+    'brand-logo-dropzone',
+    'brand-hero-dropzone',
+    'brand-mood-dropzone'
+  ];
+
+  document.addEventListener('dragover', (e) => {
+    for (const zId of dropzoneIds) {
+      const zone = document.getElementById(zId);
+      if (zone && zone.contains(e.target)) {
+        e.preventDefault();
+        zone.classList.add('border-amber-400', 'bg-amber-500/10');
+        break;
+      }
+    }
+  });
+
+  document.addEventListener('dragleave', (e) => {
+    for (const zId of dropzoneIds) {
+      const zone = document.getElementById(zId);
+      if (zone && !zone.contains(e.relatedTarget)) {
+        zone.classList.remove('border-amber-400', 'bg-amber-500/10');
+      }
+    }
+  });
+
+  document.addEventListener('drop', async (e) => {
+    const itemZone = document.getElementById('item-image-dropzone');
+    const annZone = document.getElementById('announcement-image-dropzone');
+    const logoZone = document.getElementById('brand-logo-dropzone');
+    const heroZone = document.getElementById('brand-hero-dropzone');
+    const moodZone = document.getElementById('brand-mood-dropzone');
+
+    if (itemZone && itemZone.contains(e.target)) {
+      e.preventDefault();
+      itemZone.classList.remove('border-amber-400', 'bg-amber-500/10');
+      const files = e.dataTransfer && e.dataTransfer.files;
+      if (files && files.length > 0) {
+        userManuallyChangedImageFit = false;
+        await applyUploadedProductFile(files[0], 0, true);
+      }
+      return;
+    }
+
+    if (logoZone && logoZone.contains(e.target)) {
+      e.preventDefault();
+      logoZone.classList.remove('border-amber-400', 'bg-amber-500/10');
+      const files = e.dataTransfer && e.dataTransfer.files;
+      if (files && files.length > 0) {
+        brandMediaUploadState.logo.manualFit = false;
+        await applyUploadedBrandMediaFile('logo', files[0], 0, true);
+      }
+      return;
+    }
+
+    if (heroZone && heroZone.contains(e.target)) {
+      e.preventDefault();
+      heroZone.classList.remove('border-amber-400', 'bg-amber-500/10');
+      const files = e.dataTransfer && e.dataTransfer.files;
+      if (files && files.length > 0) {
+        brandMediaUploadState.hero.manualFit = false;
+        await applyUploadedBrandMediaFile('hero', files[0], 0, true);
+      }
+      return;
+    }
+
+    if (moodZone && moodZone.contains(e.target)) {
+      e.preventDefault();
+      moodZone.classList.remove('border-amber-400', 'bg-amber-500/10');
+      const files = e.dataTransfer && e.dataTransfer.files;
+      if (files && files.length > 0) {
+        brandMediaUploadState.mood.manualFit = false;
+        await applyUploadedBrandMediaFile('mood', files[0], 0, true);
+      }
+      return;
+    }
+
+    if (annZone && annZone.contains(e.target)) {
+      e.preventDefault();
+      annZone.classList.remove('border-amber-400', 'bg-amber-500/10');
+      const files = e.dataTransfer && e.dataTransfer.files;
+      if (files && files.length > 0) {
+        userManuallyChangedAnnouncementFit = false;
+        await applyUploadedAnnouncementFile(files[0], 0, true);
+      }
+    }
+  });
+
+  // Panodan Yapıştırma (Ctrl+V / Cmd+V ile Ekran Görüntüsü veya Kopyalanan Medya Yükleme)
+  document.addEventListener('paste', async (e) => {
+    const activeTag = document.activeElement ? document.activeElement.tagName : '';
+    const isTypingInInput = activeTag === 'INPUT' || activeTag === 'TEXTAREA';
+
+    const items = e.clipboardData && e.clipboardData.items;
+    if (!items) return;
+
+    let pastedFile = null;
+    for (let i = 0; i < items.length; i++) {
+      const clipItem = items[i];
+      if (clipItem.kind === 'file' && (clipItem.type.startsWith('image/') || clipItem.type === '')) {
+        pastedFile = clipItem.getAsFile();
+        if (pastedFile) break;
+      }
+    }
+    if (!pastedFile) return;
+
+    const itemModal = document.getElementById('edit-item-modal');
+    if (itemModal && !itemModal.classList.contains('hidden')) {
+      e.preventDefault();
+      userManuallyChangedImageFit = false;
+      await applyUploadedProductFile(pastedFile, 0, true);
+      return;
+    }
+
+    const settingsSec = document.getElementById('tab-section-settings');
+    if (!isTypingInInput && settingsSec && !settingsSec.classList.contains('hidden')) {
+      e.preventDefault();
+      userManuallyChangedAnnouncementFit = false;
+      await applyUploadedAnnouncementFile(pastedFile, 0, true);
+    }
+  });
+}
+
+/* --- Duyuru / Ana Sayfa Banner Doğrudan Medya Yükleyici (Telefon & Bilgisayar) --- */
+
+const DEFAULT_ANNOUNCEMENT_BANNER_IMG = 'https://images.unsplash.com/photo-1527661591475-527312dd65f5?auto=format&fit=crop&w=1200&q=80';
+let activeAnnouncementImageFile = null;
+let activeAnnouncementImageRotation = 0;
+let isUploadingAnnouncementImage = false;
+let userManuallyChangedAnnouncementFit = false;
+
+function resetAnnouncementUploadState() {
+  activeAnnouncementImageFile = null;
+  activeAnnouncementImageRotation = 0;
+  isUploadingAnnouncementImage = false;
+  userManuallyChangedAnnouncementFit = false;
+  setAnnouncementUploadBusy(false);
+}
+
+function setAnnouncementUploadBusy(busy, loadingText = 'Medya optimize ediliyor...') {
+  isUploadingAnnouncementImage = !!busy;
+  const loader = document.getElementById('announcement-image-loading');
+  const loaderText = document.getElementById('announcement-image-loading-text');
+  if (loaderText && loadingText) loaderText.textContent = loadingText;
+  if (loader) {
+    if (busy) loader.classList.remove('hidden');
+    else loader.classList.add('hidden');
+  }
+}
+
+function setAnnouncementImageFit(fitMode, isManual = true) {
+  const validMode = ['cover', 'top', 'contain'].includes(fitMode) ? fitMode : 'cover';
+  if (isManual) {
+    userManuallyChangedAnnouncementFit = true;
+  }
+
+  const hiddenFit = document.getElementById('set-announcement-image-fit');
+  if (hiddenFit) hiddenFit.value = validMode;
+
+  ['cover', 'top', 'contain'].forEach(mode => {
+    const btn = document.getElementById(`ann-fit-btn-${mode}`);
+    if (!btn) return;
+    if (mode === validMode) {
+      btn.className = 'py-1.5 px-2 rounded-xl text-[10px] font-bold bg-amber-500 text-black shadow transition-all';
+    } else {
+      btn.className = 'py-1.5 px-2 rounded-xl text-[10px] font-medium bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10 transition-all';
+    }
+  });
+
+  const currentUrl = document.getElementById('set-announcement-image')?.value || '';
+  updateAnnouncementImagePreview(currentUrl, validMode);
+
+  if (isManual && menuData && menuData.settings) {
+    persistAnnouncementMediaQuickly();
+  }
+}
+
+function updateAnnouncementImagePreview(url, fitMode = null) {
+  const img = document.getElementById('announcement-image-preview');
+  const blurBg = document.getElementById('announcement-image-blur-bg');
+  const clearBtn = document.getElementById('btn-clear-announcement-img');
+  const captionEl = document.getElementById('announcement-preview-caption');
+  const statusEl = document.getElementById('announcement-upload-status');
+  if (!img) return;
+
+  const clean = (url || '').trim();
+  const hasCustom = clean.length > 0;
+  const mode = fitMode || document.getElementById('set-announcement-image-fit')?.value || 'cover';
+  const resolved = hasCustom
+    ? resolveAdminImageUrl(clean, DEFAULT_ANNOUNCEMENT_BANNER_IMG)
+    : DEFAULT_ANNOUNCEMENT_BANNER_IMG;
+
+  img.src = resolved;
+  img.onerror = () => {
+    if (img.src !== DEFAULT_ANNOUNCEMENT_BANNER_IMG) {
+      img.src = DEFAULT_ANNOUNCEMENT_BANNER_IMG;
+    }
+  };
+
+  if (mode === 'contain' && hasCustom) {
+    img.className = 'relative z-10 w-full h-full object-contain transition-all duration-300';
+    if (blurBg) {
+      blurBg.src = resolved;
+      blurBg.classList.remove('hidden');
+    }
+  } else if (mode === 'top') {
+    img.className = 'relative z-10 w-full h-full object-cover object-top transition-all duration-300';
+    if (blurBg) blurBg.classList.add('hidden');
+  } else {
+    img.className = 'relative z-10 w-full h-full object-cover object-center transition-all duration-300';
+    if (blurBg) blurBg.classList.add('hidden');
+  }
+
+  if (clearBtn) {
+    if (hasCustom) clearBtn.classList.remove('hidden');
+    else clearBtn.classList.add('hidden');
+  }
+
+  if (captionEl) {
+    captionEl.textContent = hasCustom
+      ? 'Cihazınızdan yüklenen özel banner görseli aktif'
+      : 'Varsayılan şık lounge görseli gösteriliyor';
+  }
+
+  if (statusEl && !isUploadingAnnouncementImage) {
+    if (hasCustom) {
+      if (!statusEl.textContent.startsWith('✓')) {
+        statusEl.textContent = '✓ Özel Medya Aktif';
+        statusEl.className = 'text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-mono';
+      }
+    } else {
+      statusEl.textContent = 'Varsayılan Görsel Aktif';
+      statusEl.className = 'text-[10px] px-2 py-0.5 rounded-full bg-white/5 text-amber-300 border border-white/10 font-mono';
+    }
+  }
+}
+
+function updateAnnouncementToggleUI(isEnabled) {
+  const pill = document.getElementById('announcement-status-pill');
+  const disabledNotice = document.getElementById('announcement-disabled-notice');
+  const configBody = document.getElementById('announcement-config-body');
+
+  if (pill) {
+    if (isEnabled) {
+      pill.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold';
+      pill.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Menüde Yayında';
+    } else {
+      pill.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/10 text-gray-400 border border-white/15 text-[10px] font-semibold';
+      pill.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-gray-400"></span> Kapalı (Gizli)';
+    }
+  }
+
+  if (disabledNotice) {
+    if (isEnabled) disabledNotice.classList.add('hidden');
+    else disabledNotice.classList.remove('hidden');
+  }
+
+  if (configBody) {
+    if (isEnabled) configBody.classList.remove('hidden');
+    else configBody.classList.add('hidden');
+  }
+
+  if (window.lucide) lucide.createIcons();
+}
+
+async function handleAnnouncementToggleChange(isEnabled) {
+  updateAnnouncementToggleUI(!!isEnabled);
+  const ok = await persistAnnouncementMediaQuickly();
+  if (ok) {
+    if (isEnabled) {
+      showToast('✅ Haftanın/Günün Duyurusu aktif edildi ve müşteri menüsünde yayına alındı!', 'success');
+    } else {
+      showToast('ℹ️ Haftanın/Günün Duyurusu kapatıldı ve müşteri menüsünden gizlendi.', 'success');
+    }
+  }
+}
+
+async function enableAnnouncementQuickly() {
+  const el = document.getElementById('set-announcement-enabled');
+  if (el) el.checked = true;
+  await handleAnnouncementToggleChange(true);
+}
+
+async function saveAnnouncementSectionOnly() {
+  if (isUploadingAnnouncementImage) {
+    showToast('⏳ Banner görseli işleniyor, lütfen 1-2 saniye bekleyin...', 'error');
+    return;
+  }
+  const ok = await persistAnnouncementMediaQuickly();
+  if (ok) {
+    showToast('✅ Duyuru metinleri ve banner görseli canlı menüde güncellendi!', 'success');
+  }
+}
+
+async function handleQuickSettingsToggleChange(labelText = 'Ayar') {
+  if (!menuData || !menuData.settings) return;
+  const allowStock = document.getElementById('set-staff-allow-stock') ? document.getElementById('set-staff-allow-stock').checked : true;
+  const allowPrice = document.getElementById('set-staff-allow-price') ? document.getElementById('set-staff-allow-price').checked : false;
+  const enableCalls = document.getElementById('set-enable-calls') ? document.getElementById('set-enable-calls').checked : !!menuData.settings.enableServiceCalls;
+
+  menuData.settings.enableServiceCalls = enableCalls;
+  menuData.settings.staffPermissions = {
+    ...(menuData.settings.staffPermissions || {}),
+    allowStockToggle: allowStock,
+    allowPriceEdit: allowPrice,
+    allowCallsView: true
+  };
+
+  const ok = await saveMenuData(menuData);
+  if (ok) {
+    showToast(`✅ ${labelText} anında güncellendi!`, 'success');
+  }
+}
+
+async function persistAnnouncementMediaQuickly() {
+  if (!menuData || !menuData.settings) return false;
+  const curAnn = menuData.settings.announcement || {};
+  const badgeEl = document.getElementById('set-announcement-badge');
+  const titleEl = document.getElementById('set-announcement-title');
+  const descEl = document.getElementById('set-announcement-desc');
+  const imgEl = document.getElementById('set-announcement-image');
+  const fitEl = document.getElementById('set-announcement-image-fit');
+
+  menuData.settings.announcement = {
+    ...curAnn,
+    enabled: document.getElementById('set-announcement-enabled') ? document.getElementById('set-announcement-enabled').checked : (curAnn.enabled !== false),
+    badge: badgeEl ? badgeEl.value.trim() : (curAnn.badge ?? '🔥 ŞEFİN TAVSİYESİ'),
+    title: titleEl ? (titleEl.value.trim() || 'HASHTAG Özel Seçim') : (curAnn.title || 'Love 66 & Lady Killer Özel Mix'),
+    desc: descEl ? descEl.value.trim() : (curAnn.desc ?? ''),
+    image: imgEl ? imgEl.value.trim() : (curAnn.image || ''),
+    imageFit: fitEl ? (fitEl.value || 'cover') : (curAnn.imageFit || 'cover')
+  };
+  return await saveMenuData(menuData);
+}
+
+async function clearAnnouncementImage() {
+  activeAnnouncementImageFile = null;
+  activeAnnouncementImageRotation = 0;
+  const input = document.getElementById('set-announcement-image');
+  if (input) input.value = '';
+  const fileInput = document.getElementById('announcement-image-file-input');
+  if (fileInput) fileInput.value = '';
+  const camInput = document.getElementById('announcement-camera-file-input');
+  if (camInput) camInput.value = '';
+
+  setAnnouncementImageFit('cover', false);
+  updateAnnouncementImagePreview('', 'cover');
+
+  await persistAnnouncementMediaQuickly();
+  showToast('ℹ️ Özel görsel kaldırıldı, varsayılan lounge görseline dönüldü.', 'success');
+}
+
+async function applyUploadedAnnouncementFile(file, rotationDeg = 0, allowAutoFit = true) {
+  if (!file) return;
+  activeAnnouncementImageFile = file;
+  activeAnnouncementImageRotation = ((rotationDeg % 360) + 360) % 360;
+
+  const statusEl = document.getElementById('announcement-upload-status');
+  setAnnouncementUploadBusy(true, 'Medya optimize ediliyor...');
+  if (statusEl) {
+    statusEl.textContent = '⏳ Yükleniyor...';
+    statusEl.className = 'text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 font-mono animate-pulse';
+  }
+
+  try {
+    const result = await processUniversalImageFile(file, {
+      maxDim: 1600,
+      rotationDeg: activeAnnouncementImageRotation,
+      onProgress: (msg) => setAnnouncementUploadBusy(true, msg)
+    });
+
+    const input = document.getElementById('set-announcement-image');
+    if (input) input.value = result.url;
+
+    // Dikey telefon fotoğraflarında (9:16 veya 3:4) yatay banner'da kesilmemesi için otomatik sığdırma
+    if (allowAutoFit && !userManuallyChangedAnnouncementFit && result.width > 0 && result.height > 0) {
+      if (result.height > result.width * 1.05) {
+        setAnnouncementImageFit('contain', false);
+      } else {
+        setAnnouncementImageFit('cover', false);
+      }
+    } else {
+      const curFit = document.getElementById('set-announcement-image-fit')?.value || 'cover';
+      updateAnnouncementImagePreview(result.url, curFit);
+    }
+
+    if (statusEl) {
+      const dimLabel = (result.width && result.height) ? ` • ${result.width}×${result.height}` : '';
+      statusEl.textContent = `✓ ${result.format || 'WEBP'} • ${result.sizeKB || ''} KB${dimLabel}`;
+      statusEl.className = 'text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-mono';
+    }
+
+    await persistAnnouncementMediaQuickly();
+    showToast('✅ Duyuru banner görseli medyadan yüklendi ve kaydedildi!', 'success');
+  } catch (err) {
+    console.error('Announcement photo upload error:', err);
+    if (statusEl) {
+      statusEl.textContent = '❌ Yükleme Hatası';
+      statusEl.className = 'text-[10px] px-2 py-0.5 rounded-full bg-red-500/15 text-red-300 border border-red-500/30 font-mono';
+    }
+    showToast('❌ ' + (err.message || 'Banner görseli yüklenemedi.'), 'error');
+  } finally {
+    setAnnouncementUploadBusy(false);
+    const fileInput = document.getElementById('announcement-image-file-input');
+    if (fileInput) fileInput.value = '';
+    const camInput = document.getElementById('announcement-camera-file-input');
+    if (camInput) camInput.value = '';
+  }
+}
+
+async function handleAnnouncementImageUpload(event) {
+  const file = event && event.target && event.target.files ? event.target.files[0] : null;
+  if (!file) return;
+  userManuallyChangedAnnouncementFit = false;
+  await applyUploadedAnnouncementFile(file, 0, true);
+}
+
+async function rotateAnnouncementImage() {
+  if (isUploadingAnnouncementImage) return;
+
+  if (activeAnnouncementImageFile) {
+    const nextRot = (activeAnnouncementImageRotation + 90) % 360;
+    await applyUploadedAnnouncementFile(activeAnnouncementImageFile, nextRot, true);
+    return;
+  }
+
+  const currentUrl = document.getElementById('set-announcement-image')?.value?.trim();
+  if (!currentUrl) {
+    showToast('⚠️ Döndürmek için önce galeriden veya bilgisayardan bir fotoğraf seçin.', 'error');
+    return;
+  }
+
+  setAnnouncementUploadBusy(true, '90° Döndürülüyor...');
+  try {
+    const resolved = resolveAdminImageUrl(currentUrl, '');
+    const res = await fetch(resolved, { mode: 'cors' });
+    if (!res.ok) throw new Error('Mevcut görsel okunamadı.');
+    const blob = await res.blob();
+    const syntheticFile = new File([blob], 'rotated-banner.webp', { type: blob.type || 'image/webp' });
+    await applyUploadedAnnouncementFile(syntheticFile, 90, true);
+  } catch (err) {
+    setAnnouncementUploadBusy(false);
+    showToast('⚠️ Lütfen cihazınızdan yeni bir fotoğraf seçerek döndürün.', 'error');
+  }
+}
+
+/* ==========================================================================
+   PROFİL FOTOĞRAFLARI (SOL ÜST & EN ALT) + ANASAYFA KAPAK MEDYA EKLENTİSİ
+   ========================================================================== */
+
+const DEFAULT_BRAND_LOGO_IMG = 'hashtag-logo.jpg?v=2.5';
+const DEFAULT_BRAND_HERO_IMG = 'hashtag-banner.jpg?v=3.0';
+const DEFAULT_BRAND_MOOD_IMG = 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=1200&q=80';
+
+const brandMediaUploadState = {
+  logo: { file: null, rotation: 0, busy: false, manualFit: false },
+  hero: { file: null, rotation: 0, busy: false, manualFit: false },
+  mood: { file: null, rotation: 0, busy: false, manualFit: false }
+};
+
+function isAnyBrandMediaUploading() {
+  return !!(brandMediaUploadState.logo.busy || brandMediaUploadState.hero.busy || brandMediaUploadState.mood.busy);
+}
+
+function resetBrandMediaUploadState() {
+  ['logo', 'hero', 'mood'].forEach(slot => {
+    brandMediaUploadState[slot].file = null;
+    brandMediaUploadState[slot].rotation = 0;
+    brandMediaUploadState[slot].busy = false;
+    brandMediaUploadState[slot].manualFit = false;
+    setBrandMediaSlotBusy(slot, false);
+  });
+}
+
+function openBrandMediaSection() {
+  switchTab('settings');
+  setTimeout(() => {
+    const section = document.getElementById('brand-media-manager-section');
+    if (section) {
+      section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      section.classList.add('ring-2', 'ring-amber-400');
+      setTimeout(() => section.classList.remove('ring-2', 'ring-amber-400'), 1800);
+    }
+  }, 60);
+}
+
+function setBrandMediaSlotBusy(slot, busy, loadingText = 'Medya optimize ediliyor...') {
+  if (!brandMediaUploadState[slot]) return;
+  brandMediaUploadState[slot].busy = !!busy;
+  const loader = document.getElementById(`brand-${slot}-loading`);
+  const loaderText = document.getElementById(`brand-${slot}-loading-text`);
+  if (loaderText && loadingText) loaderText.textContent = loadingText;
+  if (loader) {
+    if (busy) loader.classList.remove('hidden');
+    else loader.classList.add('hidden');
+  }
+}
+
+function readBrandMediaFormObject() {
+  const cur = (menuData && menuData.settings && menuData.settings.brandMedia) ? menuData.settings.brandMedia : {};
+  const cafeName = ((menuData && menuData.settings && menuData.settings.cafeName) || 'HASHTAG').toUpperCase();
+
+  const logoImgEl = document.getElementById('set-brand-logo-image');
+  const logoFitEl = document.getElementById('set-brand-logo-fit');
+  const heroImgEl = document.getElementById('set-brand-hero-image');
+  const heroFitEl = document.getElementById('set-brand-hero-fit');
+  const heroBadgeEl = document.getElementById('set-hero-banner-badge');
+  const heroTitleEl = document.getElementById('set-hero-banner-title');
+  const heroDescEl = document.getElementById('set-hero-banner-desc');
+  const moodEnEl = document.getElementById('set-mood-slide-enabled');
+  const moodImgEl = document.getElementById('set-brand-mood-image');
+  const moodFitEl = document.getElementById('set-brand-mood-fit');
+
+  return {
+    ...cur,
+    logoImage: logoImgEl ? logoImgEl.value.trim() : (cur.logoImage || ''),
+    logoFit: logoFitEl ? (logoFitEl.value || 'cover') : (cur.logoFit || 'cover'),
+    heroBannerImage: heroImgEl ? heroImgEl.value.trim() : (cur.heroBannerImage || ''),
+    heroBannerFit: heroFitEl ? (heroFitEl.value || 'cover') : (cur.heroBannerFit || 'cover'),
+    heroBannerBadge: heroBadgeEl ? heroBadgeEl.value.trim() : (cur.heroBannerBadge ?? 'PREMİUM ATMOSFER'),
+    heroBannerTitle: heroTitleEl
+      ? (heroTitleEl.value.trim() || `${cafeName} LOUNGE & HOOKAH`)
+      : (cur.heroBannerTitle || `${cafeName} LOUNGE & HOOKAH`),
+    heroBannerDesc: heroDescEl
+      ? heroDescEl.value.trim()
+      : (cur.heroBannerDesc ?? '💨 Özel Nargile Karışımları • 🍹 Mocktail & Kahve'),
+    moodSlideEnabled: moodEnEl ? moodEnEl.checked : (cur.moodSlideEnabled !== false),
+    moodBannerImage: moodImgEl ? moodImgEl.value.trim() : (cur.moodBannerImage || ''),
+    moodBannerFit: moodFitEl ? (moodFitEl.value || 'cover') : (cur.moodBannerFit || 'cover')
+  };
+}
+
+function applyAdminBrandLogoUI() {
+  if (!menuData || !menuData.settings) return;
+  const bm = menuData.settings.brandMedia || {};
+  const cafeName = menuData.settings.cafeName || 'HASHTAG';
+  const hasCustomLogo = !!(bm.logoImage && String(bm.logoImage).trim());
+  const resolvedLogo = hasCustomLogo
+    ? resolveAdminImageUrl(bm.logoImage, DEFAULT_BRAND_LOGO_IMG)
+    : DEFAULT_BRAND_LOGO_IMG;
+  const fitClass = bm.logoFit === 'contain' ? 'w-full h-full object-contain p-0.5' : 'w-full h-full object-cover';
+
+  const adminHeaderLogo = document.getElementById('admin-header-logo-img');
+  if (adminHeaderLogo) {
+    adminHeaderLogo.src = resolvedLogo;
+    adminHeaderLogo.className = fitClass;
+  }
+
+  const prevCafeName = document.getElementById('brand-logo-preview-cafe-name');
+  const prevFooterName = document.getElementById('brand-logo-preview-footer-name');
+  if (prevCafeName) prevCafeName.textContent = cafeName;
+  if (prevFooterName) prevFooterName.textContent = `${cafeName.toUpperCase()} LOUNGE & HOOKAH`;
+
+  if (currentTab === 'qr-stands' && typeof updateQrPreview === 'function') {
+    updateQrPreview();
+  }
+}
+
+function syncHeroPreviewTexts() {
+  const cafeName = ((menuData && menuData.settings && menuData.settings.cafeName) || 'HASHTAG').toUpperCase();
+  const badgeVal = document.getElementById('set-hero-banner-badge')?.value.trim();
+  const titleVal = document.getElementById('set-hero-banner-title')?.value.trim();
+  const descVal = document.getElementById('set-hero-banner-desc')?.value.trim();
+
+  const prevBadge = document.getElementById('brand-hero-preview-badge');
+  const prevTitle = document.getElementById('brand-hero-preview-title');
+  const prevDesc = document.getElementById('brand-hero-preview-desc');
+
+  if (prevBadge) {
+    if (badgeVal) {
+      prevBadge.textContent = badgeVal;
+      prevBadge.classList.remove('hidden');
+    } else {
+      prevBadge.classList.add('hidden');
+    }
+  }
+  if (prevTitle) prevTitle.textContent = titleVal || `${cafeName} LOUNGE & HOOKAH`;
+  if (prevDesc) prevDesc.textContent = descVal || '';
+}
+
+function setBrandMediaSlotFit(slot, fitMode, isManual = true) {
+  if (!['logo', 'hero', 'mood'].includes(slot)) return;
+  const allowedModes = slot === 'logo' ? ['cover', 'contain'] : ['cover', 'top', 'contain'];
+  const validMode = allowedModes.includes(fitMode) ? fitMode : 'cover';
+
+  if (isManual && brandMediaUploadState[slot]) {
+    brandMediaUploadState[slot].manualFit = true;
+  }
+
+  const hiddenFit = document.getElementById(`set-brand-${slot}-fit`);
+  if (hiddenFit) hiddenFit.value = validMode;
+
+  allowedModes.forEach(mode => {
+    const btn = document.getElementById(`${slot}-fit-btn-${mode}`);
+    if (!btn) return;
+    if (mode === validMode) {
+      btn.className = slot === 'logo'
+        ? 'py-1.5 px-2.5 rounded-xl text-[10px] font-bold bg-amber-500 text-black shadow transition-all'
+        : 'py-1.5 px-2 rounded-xl text-[10px] font-bold bg-amber-500 text-black shadow transition-all';
+    } else {
+      btn.className = slot === 'logo'
+        ? 'py-1.5 px-2.5 rounded-xl text-[10px] font-medium bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10 transition-all'
+        : 'py-1.5 px-2 rounded-xl text-[10px] font-medium bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10 transition-all';
+    }
+  });
+
+  updateBrandMediaPreviewUI(slot, validMode);
+
+  if (isManual && menuData && menuData.settings) {
+    persistBrandMediaQuickly().then(ok => {
+      if (ok) showToast('✅ Görsel kadraj ayarı canlı menüde güncellendi!', 'success');
+    });
+  }
+}
+
+function updateBrandMediaPreviewUI(slot, fitMode = null) {
+  const imgInput = document.getElementById(`set-brand-${slot}-image`);
+  const fitInput = document.getElementById(`set-brand-${slot}-fit`);
+  const clearBtn = document.getElementById(`btn-clear-brand-${slot}`);
+  const statusEl = document.getElementById(`brand-${slot}-status`);
+
+  const cleanUrl = (imgInput?.value || '').trim();
+  const hasCustom = cleanUrl.length > 0;
+  const mode = fitMode || fitInput?.value || 'cover';
+
+  if (slot === 'logo') {
+    const headerImg = document.getElementById('brand-logo-preview-header');
+    const footerImg = document.getElementById('brand-logo-preview-footer');
+    const resolved = hasCustom
+      ? resolveAdminImageUrl(cleanUrl, DEFAULT_BRAND_LOGO_IMG)
+      : DEFAULT_BRAND_LOGO_IMG;
+    const cls = mode === 'contain' ? 'w-full h-full object-contain p-0.5' : 'w-full h-full object-cover';
+
+    [headerImg, footerImg].forEach(img => {
+      if (!img) return;
+      img.src = resolved;
+      img.className = cls;
+      img.onerror = () => {
+        if (!img.src.includes('hashtag-logo.jpg')) {
+          img.src = DEFAULT_BRAND_LOGO_IMG;
+        } else if (!img.src.includes('images/')) {
+          img.src = 'images/hashtag-logo.jpg?v=2.5';
+        }
+      };
+    });
+
+    if (clearBtn) {
+      if (hasCustom) clearBtn.classList.remove('hidden');
+      else clearBtn.classList.add('hidden');
+    }
+    if (statusEl && !brandMediaUploadState.logo.busy) {
+      if (hasCustom) {
+        if (!statusEl.textContent.startsWith('✓')) {
+          statusEl.textContent = '✓ Özel Profil Aktif';
+          statusEl.className = 'text-[10px] px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-mono';
+        }
+      } else {
+        statusEl.textContent = 'Varsayılan Profil Aktif';
+        statusEl.className = 'text-[10px] px-2.5 py-1 rounded-full bg-white/5 text-amber-300 border border-white/10 font-mono';
+      }
+    }
+    return;
+  }
+
+  // Hero (1. Slayt) veya Mood (3. Slayt)
+  const fallbackImg = slot === 'hero' ? DEFAULT_BRAND_HERO_IMG : DEFAULT_BRAND_MOOD_IMG;
+  const previewImg = document.getElementById(`brand-${slot}-preview`);
+  const blurBg = document.getElementById(`brand-${slot}-blur-bg`);
+  const captionEl = document.getElementById(`brand-${slot}-caption`);
+  if (!previewImg) return;
+
+  const resolved = hasCustom
+    ? resolveAdminImageUrl(cleanUrl, fallbackImg)
+    : fallbackImg;
+
+  previewImg.src = resolved;
+  previewImg.onerror = () => {
+    if (slot === 'hero') {
+      if (!previewImg.src.includes('hashtag-banner.jpg')) previewImg.src = DEFAULT_BRAND_HERO_IMG;
+      else if (!previewImg.src.includes('images/')) previewImg.src = 'images/hashtag-banner.jpg?v=3.0';
+    } else if (previewImg.src !== DEFAULT_BRAND_MOOD_IMG) {
+      previewImg.src = DEFAULT_BRAND_MOOD_IMG;
+    }
+  };
+
+  if (mode === 'contain' && hasCustom) {
+    previewImg.className = 'relative z-10 w-full h-full object-contain transition-all duration-300';
+    if (blurBg) {
+      blurBg.src = resolved;
+      blurBg.classList.remove('hidden');
+    }
+  } else if (mode === 'top') {
+    previewImg.className = 'relative z-10 w-full h-full object-cover object-top transition-all duration-300';
+    if (blurBg) blurBg.classList.add('hidden');
+  } else {
+    previewImg.className = 'relative z-10 w-full h-full object-cover object-center transition-all duration-300';
+    if (blurBg) blurBg.classList.add('hidden');
+  }
+
+  if (clearBtn) {
+    if (hasCustom) clearBtn.classList.remove('hidden');
+    else clearBtn.classList.add('hidden');
+  }
+
+  if (captionEl) {
+    if (slot === 'hero') {
+      captionEl.textContent = hasCustom ? 'Özel kapak aktif' : 'Varsayılan görsel';
+    } else {
+      captionEl.textContent = hasCustom
+        ? 'Cihazınızdan yüklenen özel 3. slayt görseli aktif'
+        : 'Günün saatine göre otomatik atmosfer görseli aktif';
+    }
+  }
+
+  if (statusEl && !brandMediaUploadState[slot].busy) {
+    if (hasCustom) {
+      if (!statusEl.textContent.startsWith('✓')) {
+        statusEl.textContent = '✓ Özel Görsel Aktif';
+        statusEl.className = 'text-[10px] px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-mono';
+      }
+    } else {
+      statusEl.textContent = slot === 'hero' ? 'Varsayılan Kapak Aktif' : 'Saat Bazlı Otomatik Görsel';
+      statusEl.className = 'text-[10px] px-2.5 py-1 rounded-full bg-white/5 text-amber-300 border border-white/10 font-mono';
+    }
+  }
+}
+
+function updateMoodSlideToggleUI(isEnabled) {
+  const pill = document.getElementById('mood-slide-status-pill');
+  const disabledNotice = document.getElementById('mood-slide-disabled-notice');
+  const configBody = document.getElementById('mood-slide-config-body');
+
+  if (pill) {
+    if (isEnabled) {
+      pill.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold';
+      pill.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Aktif';
+    } else {
+      pill.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/10 text-gray-400 border border-white/15 text-[10px] font-semibold';
+      pill.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-gray-400"></span> Gizli';
+    }
+  }
+
+  if (disabledNotice) {
+    if (isEnabled) disabledNotice.classList.add('hidden');
+    else disabledNotice.classList.remove('hidden');
+  }
+
+  if (configBody) {
+    if (isEnabled) configBody.classList.remove('hidden');
+    else configBody.classList.add('hidden');
+  }
+}
+
+async function handleMoodSlideToggleChange(isEnabled) {
+  updateMoodSlideToggleUI(!!isEnabled);
+  const ok = await persistBrandMediaQuickly();
+  if (ok) {
+    showToast(
+      isEnabled
+        ? '✅ Anasayfa 3. slayt aktif edildi ve yayına alındı!'
+        : 'ℹ️ Anasayfa 3. slayt gizlendi.',
+      'success'
+    );
+  }
+}
+
+async function enableMoodSlideQuickly() {
+  const el = document.getElementById('set-mood-slide-enabled');
+  if (el) el.checked = true;
+  await handleMoodSlideToggleChange(true);
+}
+
+async function persistBrandMediaQuickly() {
+  if (!menuData || !menuData.settings) return false;
+  menuData.settings.brandMedia = readBrandMediaFormObject();
+  applyAdminBrandLogoUI();
+  return await saveMenuData(menuData);
+}
+
+async function saveBrandMediaTextsOnly() {
+  if (isAnyBrandMediaUploading()) {
+    showToast('⏳ Görsel işleniyor, lütfen 1-2 saniye bekleyin...', 'error');
+    return;
+  }
+  syncHeroPreviewTexts();
+  const ok = await persistBrandMediaQuickly();
+  if (ok) {
+    showToast('✅ Anasayfa 1. slayt yazıları ve kapak ayarları canlı menüde güncellendi!', 'success');
+  }
+}
+
+async function clearBrandMediaSlot(slot) {
+  if (!['logo', 'hero', 'mood'].includes(slot)) return;
+  brandMediaUploadState[slot].file = null;
+  brandMediaUploadState[slot].rotation = 0;
+  brandMediaUploadState[slot].manualFit = false;
+
+  const input = document.getElementById(`set-brand-${slot}-image`);
+  if (input) input.value = '';
+  const fileInput = document.getElementById(`brand-${slot}-file-input`);
+  if (fileInput) fileInput.value = '';
+  const camInput = document.getElementById(`brand-${slot}-camera-input`);
+  if (camInput) camInput.value = '';
+
+  const statusEl = document.getElementById(`brand-${slot}-status`);
+  if (statusEl) statusEl.textContent = '';
+
+  setBrandMediaSlotFit(slot, 'cover', false);
+  updateBrandMediaPreviewUI(slot, 'cover');
+
+  const ok = await persistBrandMediaQuickly();
+  if (ok) {
+    const labels = {
+      logo: 'Profil fotoğrafı (sol üst & sayfa altı) varsayılan logoya döndürüldü.',
+      hero: 'Anasayfa 1. slayt ve arka plan varsayılan kapak görseline döndürüldü.',
+      mood: 'Anasayfa 3. slayt otomatik atmosfer görseline döndürüldü.'
+    };
+    showToast(`ℹ️ ${labels[slot]}`, 'success');
+  }
+}
+
+async function applyUploadedBrandMediaFile(slot, file, rotationDeg = 0, allowAutoFit = true) {
+  if (!file || !['logo', 'hero', 'mood'].includes(slot)) return;
+  const state = brandMediaUploadState[slot];
+  state.file = file;
+  state.rotation = ((rotationDeg % 360) + 360) % 360;
+
+  const statusEl = document.getElementById(`brand-${slot}-status`);
+  setBrandMediaSlotBusy(slot, true, 'Medya optimize ediliyor...');
+  if (statusEl) {
+    statusEl.textContent = '⏳ Yükleniyor...';
+    statusEl.className = 'text-[10px] px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 font-mono animate-pulse';
+  }
+
+  try {
+    const targetMaxDim = slot === 'logo' ? 800 : 1600;
+    const result = await processUniversalImageFile(file, {
+      maxDim: targetMaxDim,
+      rotationDeg: state.rotation,
+      onProgress: (msg) => setBrandMediaSlotBusy(slot, true, msg)
+    });
+
+    const input = document.getElementById(`set-brand-${slot}-image`);
+    if (input) input.value = result.url;
+
+    if (allowAutoFit && !state.manualFit && result.width > 0 && result.height > 0) {
+      if (slot === 'logo') {
+        const ratio = Math.max(result.width / result.height, result.height / result.width);
+        setBrandMediaSlotFit('logo', ratio > 1.38 ? 'contain' : 'cover', false);
+      } else {
+        setBrandMediaSlotFit(slot, result.height > result.width * 1.05 ? 'contain' : 'cover', false);
+      }
+    } else {
+      const curFit = document.getElementById(`set-brand-${slot}-fit`)?.value || 'cover';
+      updateBrandMediaPreviewUI(slot, curFit);
+    }
+
+    if (statusEl) {
+      const dimLabel = (result.width && result.height) ? ` • ${result.width}×${result.height}` : '';
+      statusEl.textContent = `✓ ${result.format || 'WEBP'} • ${result.sizeKB || ''} KB${dimLabel}`;
+      statusEl.className = 'text-[10px] px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-mono';
+    }
+
+    const ok = await persistBrandMediaQuickly();
+    if (ok) {
+      const successLabels = {
+        logo: '✅ Sol üst ve sayfa altı profil fotoğrafı yüklendi ve canlı menüde güncellendi!',
+        hero: '✅ Anasayfa 1. slayt ve arka plan fotoğrafı yüklendi ve canlı menüde güncellendi!',
+        mood: '✅ Anasayfa 3. slayt fotoğrafı yüklendi ve canlı menüde güncellendi!'
+      };
+      showToast(successLabels[slot], 'success');
+    }
+  } catch (err) {
+    console.error(`Brand media (${slot}) upload error:`, err);
+    if (statusEl) {
+      statusEl.textContent = '❌ Yükleme Hatası';
+      statusEl.className = 'text-[10px] px-2.5 py-1 rounded-full bg-red-500/15 text-red-300 border border-red-500/30 font-mono';
+    }
+    showToast('❌ ' + (err.message || 'Fotoğraf yüklenemedi.'), 'error');
+  } finally {
+    setBrandMediaSlotBusy(slot, false);
+    const fileInput = document.getElementById(`brand-${slot}-file-input`);
+    if (fileInput) fileInput.value = '';
+    const camInput = document.getElementById(`brand-${slot}-camera-input`);
+    if (camInput) camInput.value = '';
+  }
+}
+
+async function handleBrandMediaUpload(slot, event) {
+  const file = event && event.target && event.target.files ? event.target.files[0] : null;
+  if (!file || !brandMediaUploadState[slot]) return;
+  brandMediaUploadState[slot].manualFit = false;
+  await applyUploadedBrandMediaFile(slot, file, 0, true);
+}
+
+async function rotateBrandMediaSlot(slot) {
+  if (!['logo', 'hero', 'mood'].includes(slot)) return;
+  const state = brandMediaUploadState[slot];
+  if (state.busy) return;
+
+  if (state.file) {
+    const nextRot = (state.rotation + 90) % 360;
+    await applyUploadedBrandMediaFile(slot, state.file, nextRot, true);
+    return;
+  }
+
+  const currentUrl = document.getElementById(`set-brand-${slot}-image`)?.value?.trim();
+  if (!currentUrl) {
+    showToast('⚠️ Döndürmek için önce galeriden veya bilgisayardan bir fotoğraf seçin.', 'error');
+    return;
+  }
+
+  setBrandMediaSlotBusy(slot, true, '90° Döndürülüyor...');
+  try {
+    const resolved = resolveAdminImageUrl(currentUrl, '');
+    const res = await fetch(resolved, { mode: 'cors' });
+    if (!res.ok) throw new Error('Mevcut görsel okunamadı.');
+    const blob = await res.blob();
+    const syntheticFile = new File([blob], `rotated-${slot}.webp`, { type: blob.type || 'image/webp' });
+    await applyUploadedBrandMediaFile(slot, syntheticFile, 90, true);
+  } catch (err) {
+    setBrandMediaSlotBusy(slot, false);
+    showToast('⚠️ Lütfen cihazınızdan yeni bir fotoğraf seçerek döndürün.', 'error');
+  }
+}
+
+
