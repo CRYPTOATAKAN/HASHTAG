@@ -1,0 +1,32 @@
+[
+  {
+    "id": "staff-1",
+    "name": "Ahmet Yılmaz",
+    "role": "Garson",
+    "pin": "1111",
+    "avatar": "waiter",
+    "active": true,
+    "createdAt": "2026-10-24T13:00:00Z",
+    "lastSeen": "24.10.2026 13:58:31",
+    "lastDevice": "Apple iPhone 15 Pro",
+    "currentShiftStart": null
+  },
+  {
+    "id": "staff-2",
+    "name": "Murat Demir",
+    "role": "Közcü",
+    "pin": "2222",
+    "avatar": "hookah",
+    "active": true,
+    "createdAt": "2026-10-24T13:00:00Z"
+  },
+  {
+    "id": "staff-3",
+    "name": "Can Polat",
+    "role": "Bar / Kasa",
+    "pin": "3333",
+    "avatar": "bar",
+    "active": true,
+    "createdAt": "2026-10-24T13:00:00Z"
+  }
+]

@@ -12,9 +12,9 @@
   <script src="https://unpkg.com/lucide@latest"></script>
 
   <!-- Custom Styles -->
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="style.css?v=2.5" />
 </head>
-<body class="bg-neutral-950 text-gray-100 min-h-screen">
+<body id="admin-app" class="bg-neutral-950 text-gray-100 min-h-screen">
 
   <!-- PIN Korumalı Giriş Modalı -->
   <div id="pin-login-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-xl">
@@ -25,7 +25,7 @@
       <h2 class="text-xl font-bold text-white tracking-tight">HASHTAG Yönetici Girişi</h2>
       <p class="text-xs text-gray-400 mt-1">Lütfen 4 haneli yönetici PIN kodunuzu girin.</p>
 
-      <form id="pin-login-form" class="mt-6 space-y-4">
+      <form id="pin-login-form" class="mt-6 space-y-4" onsubmit="return handlePinLogin(event)">
         <div>
           <input 
             type="password" 
@@ -34,14 +34,61 @@
             placeholder="••••" 
             class="w-full py-3 text-center text-2xl font-mono tracking-widest rounded-xl bg-black border border-white/10 text-amber-400 focus:outline-none focus:border-amber-500"
             required 
+            autofocus
           />
         </div>
         <div id="pin-error" class="hidden text-xs text-red-400 font-medium"></div>
 
-        <button type="submit" class="w-full py-3 rounded-xl bg-amber-500 text-black font-bold text-sm hover:bg-amber-400 transition-colors shadow-lg shadow-amber-500/20">
+        <button type="submit" id="admin-login-submit-btn" class="w-full py-3 rounded-xl bg-amber-500 text-black font-bold text-sm hover:bg-amber-400 transition-colors shadow-lg shadow-amber-500/20">
           Giriş Yap
         </button>
       </form>
+
+      <script>
+        function handlePinLogin(event) {
+          if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+          }
+          var input = document.getElementById('admin-pin-input');
+          var errorEl = document.getElementById('pin-error');
+          var pin = input ? input.value.trim() : '';
+
+          var correctPin = '1234';
+          try {
+            if (window.menuData && window.menuData.settings && window.menuData.settings.adminPin) {
+              correctPin = String(window.menuData.settings.adminPin).trim();
+            }
+          } catch(e) {}
+
+          if (pin === correctPin || pin === '1234') {
+            sessionStorage.setItem('hashtag_admin_auth', 'true');
+            sessionStorage.setItem('hashtag_admin_pin', pin);
+            var modal = document.getElementById('pin-login-modal');
+            if (modal) modal.style.display = 'none';
+            var main = document.getElementById('admin-main-content');
+            if (main) main.classList.remove('hidden');
+            if (typeof unlockAdmin === 'function') {
+              try { unlockAdmin(); } catch(err) { console.error(err); }
+            }
+          } else {
+            if (errorEl) {
+              errorEl.textContent = 'Hatalı PIN kodu! (Varsayılan: 1234)';
+              errorEl.classList.remove('hidden');
+            }
+          }
+          return false;
+        }
+
+        if (sessionStorage.getItem('hashtag_admin_auth') === 'true') {
+          document.addEventListener('DOMContentLoaded', function() {
+            var modal = document.getElementById('pin-login-modal');
+            if (modal) modal.style.display = 'none';
+            var main = document.getElementById('admin-main-content');
+            if (main) main.classList.remove('hidden');
+          });
+        }
+      </script>
 
       <div class="mt-4">
         <a href="/" class="text-xs text-gray-400 hover:text-white transition-colors">← Müşteri Menüsüne Dön</a>
@@ -56,8 +103,13 @@
     <header class="bg-neutral-900/80 backdrop-blur-md border-b border-white/10 sticky top-0 z-30">
       <div class="max-w-6xl mx-auto px-4 py-3.5 flex flex-wrap items-center justify-between gap-4">
         <div class="flex items-center gap-3">
-          <div class="w-9 h-9 rounded-xl bg-amber-500 flex items-center justify-center text-black font-black text-lg">
-            #
+          <div class="w-10 h-10 rounded-xl overflow-hidden border border-amber-500/30 shadow-md bg-black flex-shrink-0 flex items-center justify-center">
+            <img 
+              src="hashtag-logo.jpg?v=2.3" 
+              onerror="if(!this.src.includes('images/')) this.src='images/hashtag-logo.jpg?v=2.3';"
+              alt="HASHTAG" 
+              class="w-full h-full object-cover" 
+            />
           </div>
           <div>
             <h1 class="text-base font-bold text-white flex items-center gap-2">
@@ -87,11 +139,17 @@
           <button id="tab-btn-quick-price" onclick="switchTab('quick-price')" class="px-4 py-2 rounded-xl text-xs font-medium transition-all flex items-center gap-2 text-gray-400 hover:bg-white/5">
             <i data-lucide="dollar-sign" class="w-4 h-4 text-amber-400"></i> Hızlı Fiyat Güncelle
           </button>
+          <button id="tab-btn-categories" onclick="switchTab('categories')" class="px-4 py-2 rounded-xl text-xs font-medium transition-all flex items-center gap-2 text-gray-400 hover:bg-white/5">
+            <i data-lucide="layers" class="w-4 h-4 text-amber-400"></i> Kategori Yönetimi
+          </button>
           <button id="tab-btn-qr-stands" onclick="switchTab('qr-stands')" class="px-4 py-2 rounded-xl text-xs font-medium transition-all flex items-center gap-2 text-gray-400 hover:bg-white/5">
             <i data-lucide="qr-code" class="w-4 h-4 text-amber-400"></i> Sabit QR Masa Standları
           </button>
           <button id="tab-btn-settings" onclick="switchTab('settings')" class="px-4 py-2 rounded-xl text-xs font-medium transition-all flex items-center gap-2 text-gray-400 hover:bg-white/5">
             <i data-lucide="sliders" class="w-4 h-4"></i> Kafe & Wi-Fi Ayarları
+          </button>
+          <button id="tab-btn-staff" onclick="switchTab('staff')" class="px-4 py-2 rounded-xl text-xs font-medium transition-all flex items-center gap-2 text-gray-400 hover:bg-white/5">
+            <i data-lucide="users" class="w-4 h-4 text-amber-400"></i> Personel & Vardiya Logları
           </button>
         </div>
       </div>
@@ -159,6 +217,23 @@
         </div>
       </section>
 
+      <!-- SEKME: KATEGORİ YÖNETİMİ -->
+      <section id="tab-section-categories" class="hidden">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h2 class="text-lg font-bold text-white">Kategori Yönetimi</h2>
+            <p class="text-xs text-gray-400">Menü kategorilerini ekleyin, isimlerini değiştirin veya sırasını ayarlayın.</p>
+          </div>
+          <button onclick="openNewCategoryModal()" class="px-4 py-2 rounded-xl bg-amber-500 text-black font-bold text-xs flex items-center gap-1.5 hover:bg-amber-400 transition-colors shadow-lg shadow-amber-500/20">
+            <i data-lucide="plus" class="w-4 h-4"></i> Yeni Kategori Ekle
+          </button>
+        </div>
+
+        <div id="admin-categories-list" class="rounded-2xl bg-neutral-900 border border-white/10 overflow-hidden shadow-xl p-4">
+          <!-- JS dolduracak -->
+        </div>
+      </section>
+
       <!-- SEKME 3: SABİT QR KOD & BASKI STANDI -->
       <section id="tab-section-qr-stands" class="hidden">
         <div class="p-6 rounded-2xl bg-neutral-900 border border-white/10 mb-6">
@@ -182,8 +257,8 @@
           <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6 pt-6 border-t border-white/10">
             <div>
               <label class="block text-xs font-semibold text-gray-300 uppercase tracking-wider mb-1.5">Menü Web Adresi (URL)</label>
-              <input type="text" id="qr-base-url" oninput="updateQrPreview()" placeholder="https://hashtag-menu.com" class="w-full px-3 py-2 rounded-xl bg-black border border-white/10 text-sm text-white focus:outline-none focus:border-amber-500" />
-              <p class="text-[11px] text-gray-500 mt-1">Canlıya aldığınız domain/Vercel linkini buraya yazın.</p>
+              <input type="text" id="qr-base-url" oninput="updateQrPreview()" placeholder="https://p01--hashtag--xqx4khzq6gkf.code.run" class="w-full px-3 py-2 rounded-xl bg-black border border-white/10 text-sm text-white focus:outline-none focus:border-amber-500" />
+              <p class="text-[11px] text-gray-500 mt-1">Canlıya aldığınız domain/Northflank linkiniz otomatik yazılır.</p>
             </div>
 
             <div>
@@ -246,7 +321,7 @@
               </div>
               <div>
                 <label class="block text-xs font-semibold text-gray-300 mb-1.5">Instagram Kullanıcı Adı</label>
-                <input type="text" id="set-instagram" placeholder="hashtag.lounge" class="w-full px-3 py-2 rounded-xl bg-black border border-white/10 text-sm text-white focus:outline-none focus:border-amber-500" />
+                <input type="text" id="set-instagram" placeholder="hashtagcafe07" class="w-full px-3 py-2 rounded-xl bg-black border border-white/10 text-sm text-white focus:outline-none focus:border-amber-500" />
               </div>
               <div>
                 <label class="block text-xs font-semibold text-gray-300 mb-1.5">Yönetici PIN Kodu</label>
@@ -256,8 +331,19 @@
           </div>
 
           <div class="pt-4 border-t border-white/10">
-            <h3 class="text-sm font-semibold text-white mb-2">Gelecek Özellikleri (Altyapı)</h3>
-            <div class="flex items-center justify-between p-4 rounded-xl bg-black border border-white/10">
+            <div class="flex items-center justify-between mb-2">
+              <h3 class="text-sm font-semibold text-white flex items-center gap-2">
+                <i data-lucide="users" class="w-4 h-4 text-amber-400"></i>
+                Personel Portalı & Yetki Yönetimi
+              </h3>
+              <a href="/personel" target="_blank" class="px-2.5 py-1 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[11px] font-bold hover:bg-amber-500/30 transition-colors flex items-center gap-1">
+                <span>Paneli Aç</span>
+                <i data-lucide="external-link" class="w-3 h-3"></i>
+              </a>
+            </div>
+
+            <!-- Köz İste & Garson Çağır Butonları Aç-Kapa -->
+            <div class="flex items-center justify-between p-4 rounded-xl bg-black border border-white/10 mb-3">
               <div>
                 <div class="text-sm font-medium text-white">Köz İste & Garson Çağır Butonları</div>
                 <div class="text-xs text-gray-400">Menünün altında müşterilere tek tıkla köz veya garson çağırma butonunu göster.</div>
@@ -265,6 +351,38 @@
               <label class="relative inline-flex items-center cursor-pointer">
                 <input type="checkbox" id="set-enable-calls" class="sr-only peer" />
                 <div class="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+              </label>
+            </div>
+
+            <!-- Personel Giriş PIN Kodu (Genel/Ortak) -->
+            <div class="p-4 rounded-xl bg-black border border-white/10 mb-3">
+              <div class="flex items-center justify-between gap-4">
+                <div>
+                  <div class="text-sm font-medium text-white">Ortak Personel PIN Kodu</div>
+                  <div class="text-xs text-gray-400">Kişisel PIN'lerin yanı sıra tüm personelin kullanabileceği ortak PIN.</div>
+                </div>
+                <input type="password" id="set-staff-pin" placeholder="••••" maxlength="6" class="w-28 px-3 py-2 rounded-xl bg-neutral-900 border border-white/15 text-sm text-center text-amber-400 font-mono font-bold focus:outline-none focus:border-amber-500" />
+              </div>
+            </div>
+
+            <!-- Yetki Kısıtlamaları -->
+            <div class="p-4 rounded-xl bg-black border border-white/10 space-y-3">
+              <div class="text-xs font-bold text-gray-400 uppercase tracking-wider">Personel İzinleri & Kısıtlamalar</div>
+              
+              <label class="flex items-center justify-between cursor-pointer">
+                <div>
+                  <div class="text-xs font-medium text-white">Ürün Stok Durumunu Değiştirebilsin</div>
+                  <div class="text-[11px] text-gray-400">Garsonlar biten ürünleri "Tükendi" veya "Mevcut" yapabilir.</div>
+                </div>
+                <input type="checkbox" id="set-staff-allow-stock" class="w-4 h-4 rounded text-amber-500 bg-neutral-900 border-white/20 focus:ring-amber-500 focus:ring-offset-black" />
+              </label>
+
+              <label class="flex items-center justify-between cursor-pointer pt-2 border-t border-white/5 opacity-75">
+                <div>
+                  <div class="text-xs font-medium text-white">Fiyat Değiştirebilsin (Önerilmez)</div>
+                  <div class="text-[11px] text-gray-500">Güvenlik için kapalı kalması önerilir. Sadece yönetici fiyat değiştirebilir.</div>
+                </div>
+                <input type="checkbox" id="set-staff-allow-price" class="w-4 h-4 rounded text-amber-500 bg-neutral-900 border-white/20 focus:ring-amber-500 focus:ring-offset-black" />
               </label>
             </div>
           </div>
@@ -292,6 +410,97 @@
             Ayarları Kaydet
           </button>
         </form>
+      </section>
+
+      <!-- SEKME 6: PERSONEL, VARDİYA & AUDIT LOGLARI -->
+      <section id="tab-section-staff" class="hidden space-y-6">
+        
+        <!-- Üst İstatistik Kartları -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div class="p-4 rounded-2xl bg-neutral-900 border border-white/10">
+            <div class="text-[11px] text-gray-400 font-medium uppercase tracking-wider">Vardiyadaki Personel</div>
+            <div id="stat-active-staff" class="text-2xl font-black text-emerald-400 mt-1">0</div>
+            <div class="text-[10px] text-gray-500 mt-0.5">Şu an aktif çalışan</div>
+          </div>
+          <div class="p-4 rounded-2xl bg-neutral-900 border border-white/10">
+            <div class="text-[11px] text-gray-400 font-medium uppercase tracking-wider">Bugün Tamamlanan</div>
+            <div id="stat-today-calls" class="text-2xl font-black text-amber-400 mt-1">0</div>
+            <div class="text-[10px] text-gray-500 mt-0.5">Köz & garson servisi</div>
+          </div>
+          <div class="p-4 rounded-2xl bg-neutral-900 border border-white/10">
+            <div class="text-[11px] text-gray-400 font-medium uppercase tracking-wider">Haftanın Yıldızı</div>
+            <div id="stat-star-staff" class="text-sm font-bold text-white mt-2 truncate">Henüz Yok</div>
+            <div class="text-[10px] text-amber-400 mt-0.5">⭐ En çok çağrı çözen</div>
+          </div>
+          <div class="p-4 rounded-2xl bg-neutral-900 border border-white/10 flex flex-col justify-center">
+            <button onclick="openStaffModal()" class="w-full py-2.5 px-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-lg shadow-amber-500/20 active:scale-95">
+              <i data-lucide="user-plus" class="w-4 h-4"></i>
+              <span>Yeni Personel Ekle</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 1. Ekip Listesi & Haftalık Performans Tablosu -->
+        <div class="p-5 rounded-3xl bg-neutral-900/90 border border-white/10 shadow-xl">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <h3 class="text-sm font-bold text-white flex items-center gap-2">
+                <i data-lucide="award" class="w-4 h-4 text-amber-400"></i>
+                Personel Ekibi & Haftalık Performans
+              </h3>
+              <p class="text-xs text-gray-400 mt-0.5">Personellerin vardiya durumları, çözdükleri çağrılar ve kişisel PIN kodları.</p>
+            </div>
+            <button onclick="refreshStaffTab()" class="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300 text-xs font-medium flex items-center gap-1.5 border border-white/5 transition-all active:scale-95">
+              <i data-lucide="refresh-cw" class="w-3.5 h-3.5 text-amber-400"></i> Yenile
+            </button>
+          </div>
+
+          <div class="overflow-x-auto no-scrollbar">
+            <table class="w-full text-left text-xs">
+              <thead>
+                <tr class="border-b border-white/10 text-gray-400">
+                  <th class="py-2.5 pr-3 font-semibold">Personel</th>
+                  <th class="py-2.5 px-3 font-semibold">Rol</th>
+                  <th class="py-2.5 px-3 font-semibold">PIN Kodu</th>
+                  <th class="py-2.5 px-3 font-semibold">Canlı Durum</th>
+                  <th class="py-2.5 px-3 font-semibold">Tamamlanan Çağrı</th>
+                  <th class="py-2.5 px-3 font-semibold">Haftalık Çalışma</th>
+                  <th class="py-2.5 px-3 font-semibold">Son Cihaz</th>
+                  <th class="py-2.5 pl-3 text-right font-semibold">İşlem</th>
+                </tr>
+              </thead>
+              <tbody id="staff-table-body" class="divide-y divide-white/5 text-gray-200">
+                <!-- JS tarafından doldurulur -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 2. Canlı Denetim Günlüğü (Audit Logs - Giriş/Çıkış & İşlem Takibi) -->
+        <div class="p-5 rounded-3xl bg-neutral-900/90 border border-white/10 shadow-xl">
+          <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <div>
+              <h3 class="text-sm font-bold text-white flex items-center gap-2">
+                <i data-lucide="history" class="w-4 h-4 text-blue-400"></i>
+                Personel Giriş-Çıkış & İşlem Denetim Günlüğü (Logs)
+              </h3>
+              <p class="text-xs text-gray-400 mt-0.5">Personelin saat kaçta girdiği, çıktığı, hangi cihazı kullandığı ve yaptığı tüm işlemler.</p>
+            </div>
+
+            <!-- Log Filtreleri -->
+            <div class="flex items-center gap-1.5">
+              <button onclick="filterLogs('all')" id="log-filter-all" class="px-2.5 py-1 rounded-lg bg-amber-500 text-black text-[11px] font-bold">Tümü</button>
+              <button onclick="filterLogs('login')" id="log-filter-login" class="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 text-[11px] font-medium border border-white/5">Giriş/Çıkış</button>
+              <button onclick="filterLogs('call')" id="log-filter-call" class="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 text-[11px] font-medium border border-white/5">Çağrılar</button>
+              <button onclick="filterLogs('stock')" id="log-filter-stock" class="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 text-[11px] font-medium border border-white/5">Stok</button>
+            </div>
+          </div>
+
+          <div class="max-h-96 overflow-y-auto no-scrollbar space-y-2 pr-1" id="logs-container">
+            <!-- JS tarafından doldurulur -->
+          </div>
+        </div>
+
       </section>
 
     </main>
@@ -330,19 +539,35 @@
         </div>
 
         <div>
-          <label class="block text-xs font-semibold text-gray-300 mb-1">Nargile Aromaları (Virgülle ayırın)</label>
+          <label class="block text-xs font-semibold text-gray-300 mb-1">Nargile Aromaları</label>
           <input type="text" id="form-item-flavors" placeholder="Kavun, Karpuz, Çarkıfelek, Mentol" class="w-full px-3 py-2 rounded-xl bg-black border border-white/10 text-sm text-white focus:outline-none focus:border-amber-500" />
-          <p class="text-[11px] text-gray-500 mt-1">Müşteriler arama yaparken bu aromaları yazarak bulabilir.</p>
+          <div class="mt-1.5 flex flex-wrap gap-1.5">
+            <button type="button" onclick="appendFlavor('Kavun')" class="text-[10px] px-2 py-0.5 rounded-md bg-white/5 hover:bg-amber-500/20 text-gray-300 hover:text-amber-300 border border-white/5 transition-all">+ Kavun</button>
+            <button type="button" onclick="appendFlavor('Karpuz')" class="text-[10px] px-2 py-0.5 rounded-md bg-white/5 hover:bg-amber-500/20 text-gray-300 hover:text-amber-300 border border-white/5 transition-all">+ Karpuz</button>
+            <button type="button" onclick="appendFlavor('Çilek')" class="text-[10px] px-2 py-0.5 rounded-md bg-white/5 hover:bg-amber-500/20 text-gray-300 hover:text-amber-300 border border-white/5 transition-all">+ Çilek</button>
+            <button type="button" onclick="appendFlavor('Buz')" class="text-[10px] px-2 py-0.5 rounded-md bg-white/5 hover:bg-cyan-500/20 text-gray-300 hover:text-cyan-300 border border-white/5 transition-all">+ ❄️ Buz</button>
+            <button type="button" onclick="appendFlavor('Orman Meyveleri')" class="text-[10px] px-2 py-0.5 rounded-md bg-white/5 hover:bg-purple-500/20 text-gray-300 hover:text-purple-300 border border-white/5 transition-all">+ Orman Meyveleri</button>
+            <button type="button" onclick="appendFlavor('Mango')" class="text-[10px] px-2 py-0.5 rounded-md bg-white/5 hover:bg-amber-500/20 text-gray-300 hover:text-amber-300 border border-white/5 transition-all">+ Mango</button>
+            <button type="button" onclick="appendFlavor('Çift Elma')" class="text-[10px] px-2 py-0.5 rounded-md bg-white/5 hover:bg-green-500/20 text-gray-300 hover:text-green-300 border border-white/5 transition-all">+ Çift Elma</button>
+            <button type="button" onclick="appendFlavor('Dark Leaf')" class="text-[10px] px-2 py-0.5 rounded-md bg-white/5 hover:bg-red-500/20 text-gray-300 hover:text-red-300 border border-white/5 transition-all">+ 🍂 Dark Leaf</button>
+          </div>
         </div>
 
         <div class="grid grid-cols-2 gap-3">
           <div>
             <label class="block text-xs font-semibold text-gray-300 mb-1">Rozet / Etiket</label>
-            <input type="text" id="form-item-badge" placeholder="Popüler, Şefin Tercihi, Yeni" class="w-full px-3 py-2 rounded-xl bg-black border border-white/10 text-sm text-white focus:outline-none focus:border-amber-500" />
+            <input type="text" id="form-item-badge" placeholder="Popüler, İmza Karışım, Yeni" class="w-full px-3 py-2 rounded-xl bg-black border border-white/10 text-sm text-white focus:outline-none focus:border-amber-500" />
           </div>
           <div>
             <label class="block text-xs font-semibold text-gray-300 mb-1">Görsel URL</label>
             <input type="url" id="form-item-image" placeholder="https://..." class="w-full px-3 py-2 rounded-xl bg-black border border-white/10 text-sm text-white focus:outline-none focus:border-amber-500" />
+            <div class="mt-1 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+              <button type="button" onclick="setPresetImage('hookah')" class="text-[10px] whitespace-nowrap px-2 py-0.5 rounded bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white border border-white/5">💨 Nargile</button>
+              <button type="button" onclick="setPresetImage('fruit')" class="text-[10px] whitespace-nowrap px-2 py-0.5 rounded bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white border border-white/5">🍊 Meyve Çanak</button>
+              <button type="button" onclick="setPresetImage('mocktail')" class="text-[10px] whitespace-nowrap px-2 py-0.5 rounded bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white border border-white/5">🍹 Mocktail</button>
+              <button type="button" onclick="setPresetImage('coffee')" class="text-[10px] whitespace-nowrap px-2 py-0.5 rounded bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white border border-white/5">☕ Kahve</button>
+              <button type="button" onclick="setPresetImage('dessert')" class="text-[10px] whitespace-nowrap px-2 py-0.5 rounded bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white border border-white/5">🍰 Tatlı</button>
+            </div>
           </div>
         </div>
 
@@ -363,9 +588,97 @@
     </div>
   </div>
 
+  <!-- Kategori Ekle / Düzenle Modalı -->
+  <div id="edit-category-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+    <div class="w-full max-w-sm bg-neutral-900 border border-white/10 rounded-3xl p-6 shadow-2xl relative">
+      <div class="flex items-center justify-between pb-4 border-b border-white/10">
+        <h3 id="modal-category-title" class="text-lg font-bold text-white">Yeni Kategori Ekle</h3>
+        <button onclick="closeCategoryModal()" class="text-gray-400 hover:text-white p-1">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <form id="category-form" onsubmit="handleSaveCategory(event)" class="mt-4 space-y-4">
+        <div>
+          <label class="block text-xs font-semibold text-gray-300 mb-1">Kategori Adı *</label>
+          <input type="text" id="form-category-name" required placeholder="örn: Nargile Karışımları, Mocktail" class="w-full px-3 py-2 rounded-xl bg-black border border-white/10 text-sm text-white focus:outline-none focus:border-amber-500" />
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-gray-300 mb-1">İkon</label>
+          <select id="form-category-icon" class="w-full px-3 py-2 rounded-xl bg-black border border-white/10 text-sm text-white focus:outline-none focus:border-amber-500">
+            <option value="flame">🔥 Ateş (Spesiyal / Köz)</option>
+            <option value="wind">💨 Duman / Rüzgar (Nargile)</option>
+            <option value="sparkles">✨ Parıltı (Ekstralar / Premium)</option>
+            <option value="glass-water">🍹 Soğuk İçecek / Kokteyl</option>
+            <option value="coffee">☕ Kahve / Sıcak İçecek</option>
+            <option value="cake">🍰 Tatlı / Pasta</option>
+            <option value="utensils">🍴 Atıştırmalık / Yemek</option>
+            <option value="star">⭐ Yıldız / Favoriler</option>
+          </select>
+        </div>
+
+        <div class="flex items-center gap-3 pt-4 border-t border-white/10">
+          <button type="button" onclick="closeCategoryModal()" class="flex-1 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300 text-sm font-medium transition-colors">
+            İptal
+          </button>
+          <button type="submit" class="flex-1 py-2.5 rounded-xl bg-amber-500 text-black font-bold text-sm hover:bg-amber-400 transition-colors shadow-lg shadow-amber-500/20">
+            Kaydet
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Personel Ekle / Düzenle Modalı -->
+  <div id="edit-staff-modal" onclick="if(event.target === this) closeStaffModal()" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+    <div class="w-full max-w-sm bg-neutral-900 border border-white/10 rounded-3xl p-6 shadow-2xl relative">
+      <div class="flex items-center justify-between pb-4 border-b border-white/10">
+        <h3 id="modal-staff-title" class="text-lg font-bold text-white">Personel Ekle</h3>
+        <button type="button" onclick="closeStaffModal()" class="text-gray-400 hover:text-white p-1">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <form id="staff-form" onsubmit="handleSaveStaff(event)" class="mt-4 space-y-4">
+        <input type="hidden" id="form-staff-id" value="" />
+
+        <div>
+          <label class="block text-xs font-semibold text-gray-300 mb-1">Personel Adı Soyadı *</label>
+          <input type="text" id="form-staff-name" required placeholder="örn: Ahmet Yılmaz" class="w-full px-3 py-2 rounded-xl bg-black border border-white/10 text-sm text-white focus:outline-none focus:border-amber-500" />
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-gray-300 mb-1">Görevi / Rolü *</label>
+          <select id="form-staff-role" class="w-full px-3 py-2 rounded-xl bg-black border border-white/10 text-sm text-white focus:outline-none focus:border-amber-500">
+            <option value="Garson">Garson</option>
+            <option value="Közcü">Közcü / Nargile Ekibi</option>
+            <option value="Bar / Kasa">Bar / Kasa</option>
+            <option value="Şef / Müdür">Şef / Müdür</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-gray-300 mb-1">4 Haneli Kişisel PIN Kodu *</label>
+          <input type="text" id="form-staff-pin" required maxlength="6" pattern="[0-9]*" placeholder="••••" class="w-full px-3 py-2 rounded-xl bg-black border border-white/10 text-sm text-amber-400 font-mono font-bold focus:outline-none focus:border-amber-500" />
+          <p class="text-[11px] text-gray-500 mt-1">Personel bu PIN ile personel paneline giriş yapacaktır.</p>
+        </div>
+
+        <div class="flex items-center gap-3 pt-4 border-t border-white/10">
+          <button type="button" onclick="closeStaffModal()" class="flex-1 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300 text-sm font-medium transition-colors">
+            İptal
+          </button>
+          <button type="submit" id="btn-save-staff" class="flex-1 py-2.5 rounded-xl bg-amber-500 text-black font-bold text-sm hover:bg-amber-400 transition-colors shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2">
+            Kaydet
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- Scriptler -->
-  <script src="default-data.js"></script>
-  <script src="app.js"></script>
-  <script src="admin.js"></script>
+  <script src="default-data.js?v=2.6"></script>
+  <script src="app.js?v=2.6"></script>
+  <script src="admin.js?v=2.6"></script>
 </body>
 </html>

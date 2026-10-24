@@ -6,12 +6,18 @@
     "adminPin": "1234",
     "wifiName": "HASHTAG_GUEST",
     "wifiPassword": "hashtaghookah",
-    "instagram": "hashtag.lounge",
+    "instagram": "hashtagcafe07",
     "phone": "+90 (555) 000 00 00",
     "address": "Lounge Caddesi No: 42, İstanbul",
-    "enableServiceCalls": false,
+    "enableServiceCalls": true,
     "tableCount": 24,
-    "baseUrl": "https://hashtag-menu.com"
+    "staffPin": "5555",
+    "staffPermissions": {
+      "allowStockToggle": true,
+      "allowPriceEdit": false,
+      "allowCallsView": true
+    },
+    "baseUrl": ""
   },
   "categories": [
     {
@@ -59,9 +65,15 @@
       "description": "Gizli nargile ustası reçetesi: Taze kırmızı orman meyveleri, soğuk kavun ve mentol esintisi.",
       "price": 460,
       "badge": "İmza Karışım",
-      "flavors": ["Kavun", "Böğürtlen", "Buz", "Çilek"],
+      "flavors": [
+        "Kavun",
+        "Böğürtlen",
+        "Buz",
+        "Çilek"
+      ],
       "inStock": true,
-      "image": "https://images.unsplash.com/photo-1527661591475-527312dd65f5?auto=format&fit=crop&w=600&q=80"
+      "image": "https://images.unsplash.com/photo-1527661591475-527312dd65f5?auto=format&fit=crop&w=600&q=80",
+      "isAvailable": true
     },
     {
       "id": "h-2",
@@ -70,7 +82,11 @@
       "description": "Otantik Rus sert tütünü (Dark Leaf). Güçlü gövde, puro notaları ve karadut esansı.",
       "price": 540,
       "badge": "Sert / Dark Leaf",
-      "flavors": ["Karadut", "Puro Tütünü", "Hafif Nane"],
+      "flavors": [
+        "Karadut",
+        "Puro Tütünü",
+        "Hafif Nane"
+      ],
       "inStock": true,
       "image": "https://images.unsplash.com/photo-1511632765486-a01980e01a18?auto=format&fit=crop&w=600&q=80"
     },
@@ -81,7 +97,11 @@
       "description": "Taze pembe greyfurt meyvesinin oyularak lüle yapıldığı narenciye ferahlığı sunan özel sunum.",
       "price": 590,
       "badge": "Meyve Çanak",
-      "flavors": ["Greyfurt", "Çift Elma", "Buz"],
+      "flavors": [
+        "Greyfurt",
+        "Çift Elma",
+        "Buz"
+      ],
       "inStock": true,
       "image": "https://images.unsplash.com/photo-1544816155-12df9643f363?auto=format&fit=crop&w=600&q=80"
     },
@@ -92,7 +112,12 @@
       "description": "Dünyanın en popüler nargile harmanı: Tatlı kavun, taze karpuz, çarkıfelek meyvesi ve nane serinliği.",
       "price": 400,
       "badge": "En Çok Satan",
-      "flavors": ["Kavun", "Karpuz", "Çarkıfelek", "Buz"],
+      "flavors": [
+        "Kavun",
+        "Karpuz",
+        "Çarkıfelek",
+        "Buz"
+      ],
       "inStock": true,
       "image": "https://images.unsplash.com/photo-1527661591475-527312dd65f5?auto=format&fit=crop&w=600&q=80"
     },
@@ -103,7 +128,12 @@
       "description": "Egzotik kavun, sulu mango ve tatlı çileğin narin mentol ile buluşması.",
       "price": 400,
       "badge": "Popüler",
-      "flavors": ["Mango", "Kavun", "Çilek", "Hafif Mentol"],
+      "flavors": [
+        "Mango",
+        "Kavun",
+        "Çilek",
+        "Hafif Mentol"
+      ],
       "inStock": true,
       "image": "https://images.unsplash.com/photo-1527661591475-527312dd65f5?auto=format&fit=crop&w=600&q=80"
     },
@@ -114,7 +144,11 @@
       "description": "Tropikal ananas, olgun muz ve serinletici nane buharı.",
       "price": 400,
       "badge": "",
-      "flavors": ["Muz", "Ananas", "Buz"],
+      "flavors": [
+        "Muz",
+        "Ananas",
+        "Buz"
+      ],
       "inStock": true,
       "image": "https://images.unsplash.com/photo-1527661591475-527312dd65f5?auto=format&fit=crop&w=600&q=80"
     },
@@ -125,7 +159,11 @@
       "description": "Klasik nargile tutkunlarına: Bahreyn / Al Fakher anasonlu kırmızı & yeşil elma harmanı.",
       "price": 380,
       "badge": "Klasik",
-      "flavors": ["Kırmızı Elma", "Yeşil Elma", "Anason"],
+      "flavors": [
+        "Kırmızı Elma",
+        "Yeşil Elma",
+        "Anason"
+      ],
       "inStock": true,
       "image": "https://images.unsplash.com/photo-1511632765486-a01980e01a18?auto=format&fit=crop&w=600&q=80"
     },
@@ -136,7 +174,9 @@
       "description": "Dumanı kristalize soğuklukta çekmeniz için dondurulmuş jel kasetli özel marpuç.",
       "price": 80,
       "badge": "Ekstra",
-      "flavors": ["Ekstra Soğuk Duman"],
+      "flavors": [
+        "Ekstra Soğuk Duman"
+      ],
       "inStock": true,
       "image": "https://images.unsplash.com/photo-1527661591475-527312dd65f5?auto=format&fit=crop&w=600&q=80"
     },
@@ -147,7 +187,9 @@
       "description": "İstediğiniz nargile tütününü taze içi oyulmuş tropikal ananas lülesi üzerinde deneyimleyin.",
       "price": 190,
       "badge": "Ekstra",
-      "flavors": ["Tropikal Sunum"],
+      "flavors": [
+        "Tropikal Sunum"
+      ],
       "inStock": true,
       "image": "https://images.unsplash.com/photo-1544816155-12df9643f363?auto=format&fit=crop&w=600&q=80"
     },

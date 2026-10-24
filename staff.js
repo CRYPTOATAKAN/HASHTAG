@@ -40,13 +40,21 @@ function detectDevice() {
   return 'Mobil / Web Cihaz';
 }
 
+function getApiBaseUrl() {
+  if (typeof window !== 'undefined' && window.location.protocol.startsWith('http')) {
+    return '';
+  }
+  return 'https://p01--hashtag--xqx4khzq6gkf.code.run';
+}
+
 // =========================================================================
 // 2. PERSONEL SEÇİMİ & PIN DOĞRULAMA (VARDİYA GİRİŞİ)
 // =========================================================================
 
 async function fetchStaffList() {
   try {
-    const res = await fetch('/api/staff/list', { cache: 'no-store' });
+    const apiBase = getApiBaseUrl();
+    const res = await fetch(apiBase + '/api/staff/list', { cache: 'no-store' });
     if (res.ok) {
       const data = await res.json();
       staffList = data.staff || [];
@@ -172,7 +180,8 @@ async function handleStaffPinSubmit(e) {
   unlockAudio();
 
   try {
-    const res = await fetch('/api/staff/login', {
+    const apiBase = getApiBaseUrl();
+    const res = await fetch(apiBase + '/api/staff/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -220,7 +229,8 @@ async function staffLogout() {
 
   try {
     if (currentStaff) {
-      await fetch('/api/staff/logout', {
+      const apiBase = getApiBaseUrl();
+      await fetch(apiBase + '/api/staff/logout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -284,8 +294,8 @@ async function enableWebPushNotifications() {
 
     const reg = await navigator.serviceWorker.ready;
     
-    // Sunucudan VAPID Public Key al
-    const vapidRes = await fetch('/api/push/vapid-public-key');
+    const apiBase = getApiBaseUrl();
+    const vapidRes = await fetch(apiBase + '/api/push/vapid-public-key');
     const vapidData = await vapidRes.json();
     const publicKey = vapidData.publicKey;
 
@@ -301,7 +311,7 @@ async function enableWebPushNotifications() {
     });
 
     // Aboneliği sunucumuza kaydet
-    await fetch('/api/push/subscribe', {
+    await fetch(apiBase + '/api/push/subscribe', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -326,7 +336,8 @@ async function autoRegisterWebPush() {
       const reg = await navigator.serviceWorker.ready;
       const sub = await reg.pushManager.getSubscription();
       if (sub && currentStaff) {
-        await fetch('/api/push/subscribe', {
+        const apiBase = getApiBaseUrl();
+        await fetch(apiBase + '/api/push/subscribe', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -452,7 +463,8 @@ function triggerInAppAlert(call) {
 
 async function fetchCalls() {
   try {
-    const res = await fetch('/api/calls', { cache: 'no-store' });
+    const apiBase = getApiBaseUrl();
+    const res = await fetch(apiBase + '/api/calls', { cache: 'no-store' });
     if (!res.ok) throw new Error("Fetch calls failed");
     const data = await res.json();
     return data.calls || [];
@@ -615,8 +627,9 @@ async function updateCallStatus(callId, newStatus) {
   try {
     const handlerName = currentStaff ? currentStaff.name : 'Personel';
     const handlerId = currentStaff ? currentStaff.id : '';
+    const apiBase = getApiBaseUrl();
 
-    const res = await fetch('/api/calls/status', {
+    const res = await fetch(apiBase + '/api/calls/status', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -638,7 +651,8 @@ async function updateCallStatus(callId, newStatus) {
 async function clearCompletedCalls() {
   if (!confirm("Tamamlanan çağrı geçmişi temizlensin mi?")) return;
   try {
-    await fetch('/api/calls/clear', { method: 'POST' });
+    const apiBase = getApiBaseUrl();
+    await fetch(apiBase + '/api/calls/clear', { method: 'POST' });
     await updateCallsLoop();
   } catch (e) {
     console.error("Clear calls error:", e);
@@ -666,7 +680,8 @@ function filterCalls(type) {
 
 async function loadMenuData() {
   try {
-    const res = await fetch('/api/menu', { cache: 'no-store' });
+    const apiBase = getApiBaseUrl();
+    const res = await fetch(apiBase + '/api/menu', { cache: 'no-store' });
     if (res.ok) {
       menuData = await res.json();
       return;
@@ -776,7 +791,8 @@ async function toggleItemStock(itemId, newAvailable) {
   }
 
   try {
-    const res = await fetch('/api/staff/toggle-stock', {
+    const apiBase = getApiBaseUrl();
+    const res = await fetch(apiBase + '/api/staff/toggle-stock', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

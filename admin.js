@@ -111,6 +111,13 @@ function getAdminPin() {
   return pin || '1234';
 }
 
+function getApiBaseUrl() {
+  if (typeof window !== 'undefined' && window.location.protocol.startsWith('http')) {
+    return '';
+  }
+  return 'https://p01--hashtag--xqx4khzq6gkf.code.run';
+}
+
 /* ==========================================================================
    SEKME GEÇİŞLERİ
    ========================================================================== */
@@ -940,8 +947,9 @@ async function refreshStaffTab() {
 }
 
 async function loadStaffAdminData() {
+  const apiBase = getApiBaseUrl();
   try {
-    const res = await fetch('/api/staff/list', { cache: 'no-store' });
+    const res = await fetch(apiBase + '/api/staff/list', { cache: 'no-store' });
     if (res.ok) {
       const data = await res.json();
       if (!adminStaffList || adminStaffList.length === 0) {
@@ -956,8 +964,9 @@ async function loadStaffAdminData() {
 
 async function loadStaffPerformanceData(silent = false) {
   const adminPin = getAdminPin();
+  const apiBase = getApiBaseUrl();
   try {
-    const res = await fetch('/api/staff/performance', {
+    const res = await fetch(apiBase + '/api/staff/performance', {
       headers: { 'X-Admin-PIN': adminPin },
       cache: 'no-store'
     });
@@ -1070,8 +1079,9 @@ function renderAdminStaffTable() {
 
 async function loadStaffLogsData(silent = false) {
   const adminPin = getAdminPin();
+  const apiBase = getApiBaseUrl();
   try {
-    const res = await fetch('/api/staff/logs', {
+    const res = await fetch(apiBase + '/api/staff/logs', {
       headers: { 'X-Admin-PIN': adminPin },
       cache: 'no-store'
     });
@@ -1234,8 +1244,10 @@ async function handleSaveStaff(e) {
     saveBtn.innerText = 'Kaydediliyor...';
   }
 
+  let saveSuccess = false;
   try {
-    const res = await fetch('/api/admin/staff/save', {
+    const apiBase = getApiBaseUrl();
+    const res = await fetch(apiBase + '/api/admin/staff/save', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -1244,18 +1256,25 @@ async function handleSaveStaff(e) {
       body: JSON.stringify({ id, name, role, pin })
     });
     if (res.ok) {
+      saveSuccess = true;
       closeStaffModal();
       showToast('✅ Personel başarıyla kaydedildi!', 'success');
-      await loadStaffPerformanceData();
-      await loadStaffAdminData();
-      await loadStaffLogsData();
+      try {
+        await loadStaffPerformanceData(true);
+        await loadStaffAdminData();
+        await loadStaffLogsData(true);
+      } catch (refreshErr) {
+        console.warn("Background refresh warning:", refreshErr);
+      }
     } else {
       const data = await res.json().catch(() => ({}));
-      alert("Personel kaydedilemedi: " + (data.message || "Yetkisiz işlem veya sunucu hatası."));
+      alert("Personel kaydedilemedi: " + (data.message || `Sunucu yanıtı: ${res.status}`));
     }
   } catch (err) {
     console.error("Save staff error:", err);
-    alert("Bağlantı hatası: Personel kaydedilemedi.");
+    if (!saveSuccess) {
+      alert("Sunucuya bağlanılamadı. Sunucu yeniden başlıyor olabilir veya internet bağlantınızı kontrol ediniz.\n\nDetay: " + (err.message || 'Bağlantı hatası'));
+    }
   } finally {
     if (saveBtn) {
       saveBtn.disabled = false;
@@ -1269,7 +1288,8 @@ async function deleteStaffMember(staffId) {
   if (!confirm("Bu personeli silmek istediğinize emin misiniz?")) return;
   const adminPin = getAdminPin();
   try {
-    const res = await fetch('/api/admin/staff/delete', {
+    const apiBase = getApiBaseUrl();
+    const res = await fetch(apiBase + '/api/admin/staff/delete', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -1279,15 +1299,17 @@ async function deleteStaffMember(staffId) {
     });
     if (res.ok) {
       showToast('🗑️ Personel silindi.', 'info');
-      await loadStaffPerformanceData();
-      await loadStaffAdminData();
-      await loadStaffLogsData();
+      try {
+        await loadStaffPerformanceData(true);
+        await loadStaffAdminData();
+        await loadStaffLogsData(true);
+      } catch (e) {}
     } else {
       const data = await res.json().catch(() => ({}));
       alert("Personel silinemedi: " + (data.message || "Yetkisiz işlem."));
     }
   } catch (err) {
     console.error("Delete staff error:", err);
-    alert("Bağlantı hatası: Personel silinemedi.");
+    alert("Bağlantı hatası: " + (err.message || "Sunucuya ulaşılamadı."));
   }
 }
