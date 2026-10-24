@@ -723,6 +723,8 @@ function renderStockItems() {
   const container = document.getElementById('stock-items-container');
   if (!container || !menuData) return;
 
+  const canToggleStock = menuData.settings?.staffPermissions?.allowStockToggle !== false;
+
   let items = menuData.items || [];
 
   if (currentStockCategory !== 'all') {
@@ -741,7 +743,16 @@ function renderStockItems() {
     return;
   }
 
-  container.innerHTML = items.map(item => {
+  const permissionNotice = !canToggleStock 
+    ? `<div class="col-span-full p-3.5 rounded-xl bg-red-500/10 border border-red-500/25 text-red-300 text-xs flex items-center gap-2.5 mb-2">
+         <i data-lucide="shield-alert" class="w-4 h-4 text-red-400 flex-shrink-0"></i>
+         <div>
+           <b class="text-white">Yetki Kısıtlaması:</b> Stok durumu değiştirme yetkisi yönetici tarafından kapatılmıştır. Ürünler yalnızca görüntülenebilir.
+         </div>
+       </div>`
+    : '';
+
+  container.innerHTML = permissionNotice + items.map(item => {
     const isAvailable = (item.isAvailable !== false) && (item.inStock !== false);
     return `
       <div class="flex items-center justify-between p-3.5 rounded-2xl bg-neutral-900/80 border border-white/10 transition-colors ${!isAvailable ? 'opacity-60 bg-red-950/10 border-red-500/20' : ''}">
@@ -765,13 +776,24 @@ function renderStockItems() {
           </div>
         </div>
 
-        <button 
-          onclick="toggleItemStock('${item.id}', ${!isAvailable})" 
-          class="px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all active:scale-95 flex-shrink-0 ${isAvailable ? 'bg-red-500/15 hover:bg-red-500/25 text-red-400 border border-red-500/30' : 'bg-emerald-500 hover:bg-emerald-400 text-black shadow-md shadow-emerald-500/20'}"
-        >
-          <i data-lucide="${isAvailable ? 'slash' : 'check'}" class="w-3.5 h-3.5"></i>
-          <span>${isAvailable ? 'Tükendi Yap' : 'Stokta Var'}</span>
-        </button>
+        ${canToggleStock ? `
+          <button 
+            onclick="toggleItemStock('${item.id}', ${!isAvailable})" 
+            class="px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all active:scale-95 flex-shrink-0 ${isAvailable ? 'bg-red-500/15 hover:bg-red-500/25 text-red-400 border border-red-500/30' : 'bg-emerald-500 hover:bg-emerald-400 text-black shadow-md shadow-emerald-500/20'}"
+          >
+            <i data-lucide="${isAvailable ? 'slash' : 'check'}" class="w-3.5 h-3.5"></i>
+            <span>${isAvailable ? 'Tükendi Yap' : 'Stokta Var'}</span>
+          </button>
+        ` : `
+          <button 
+            disabled 
+            class="px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 opacity-50 cursor-not-allowed bg-neutral-800 text-gray-400 border border-white/10 flex-shrink-0"
+            title="Yönetici stok durumu değiştirme yetkisini kapattı"
+          >
+            <i data-lucide="lock" class="w-3.5 h-3.5"></i>
+            <span>Yetki Kapalı</span>
+          </button>
+        `}
 
       </div>
     `;
@@ -781,6 +803,12 @@ function renderStockItems() {
 }
 
 async function toggleItemStock(itemId, newAvailable) {
+  const canToggleStock = menuData?.settings?.staffPermissions?.allowStockToggle !== false;
+  if (!canToggleStock) {
+    alert("⚠️ Ürün stok durumu değiştirme yetkisi yönetici tarafından kapatılmıştır.");
+    return;
+  }
+
   if (menuData && menuData.items) {
     const item = menuData.items.find(i => i.id === itemId);
     if (item) {
@@ -804,7 +832,8 @@ async function toggleItemStock(itemId, newAvailable) {
       })
     });
     if (!res.ok) {
-      alert("Stok durumu güncellenemedi veya yetkiniz yok.");
+      const errData = await res.json().catch(() => ({}));
+      alert(errData.message || "Stok durumu güncellenemedi veya yetkiniz yok.");
       await loadMenuData();
       renderStockItems();
     }
@@ -894,6 +923,10 @@ function switchTab(tabId) {
   if (tabId === 'stock') {
     renderStockCategories();
     renderStockItems();
+    loadMenuData().then(() => {
+      renderStockCategories();
+      renderStockItems();
+    });
   } else if (tabId === 'tables') {
     renderTablesGrid();
   }
