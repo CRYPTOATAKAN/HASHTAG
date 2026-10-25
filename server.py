@@ -957,6 +957,12 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
                         if not clean_ig or clean_ig.lower() == "hashtag.lounge":
                             settings_obj["instagram"] = "hashtagcafe07"
                             atomic_save_json(DATA_FILE, data)
+
+                    if isinstance(data.get("items"), list):
+                        orig_len = len(data["items"])
+                        data["items"] = [it for it in data["items"] if it.get("id") != "item-1792885224555" and "satılık" not in str(it.get("name", "")).lower()]
+                        if len(data["items"]) != orig_len:
+                            atomic_save_json(DATA_FILE, data)
                     try:
                         data["_version"] = int(os.stat(DATA_FILE).st_mtime_ns)
                     except Exception:
@@ -1805,6 +1811,9 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
                         settings_obj["instagram"] = "hashtagcafe07"
                     else:
                         settings_obj["instagram"] = clean_ig
+
+                if isinstance(payload.get("items"), list):
+                    payload["items"] = [it for it in payload["items"] if it.get("id") != "item-1792885224555" and "satılık" not in str(it.get("name", "")).lower()]
 
                 payload["updatedAt"] = int(time.time() * 1000)
                 atomic_save_json(DATA_FILE, payload)

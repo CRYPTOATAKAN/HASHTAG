@@ -635,9 +635,73 @@ function renderAdminCategories() {
     }
   }
 
-  if (categories.length === 0) {
+  if (categories.length === 0 && items.length === 0) {
     container.innerHTML = `<div class="p-6 text-center text-gray-400">Henüz kategori bulunmuyor.</div>`;
     return;
+  }
+
+  // Kategorisi silinmiş veya eşleşmeyen sahipsiz ürünler (Diğer Ürünler)
+  const validCatIds = new Set(categories.map(c => c.id));
+  const orphanItems = items.filter(it => !validCatIds.has(it.categoryId));
+  let orphanHtml = '';
+  if (orphanItems.length > 0) {
+    orphanHtml = `
+      <div class="mt-5 rounded-2xl bg-neutral-950/90 border border-amber-500/30 overflow-hidden shadow-xl">
+        <div class="flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 p-3.5 bg-amber-500/10 border-b border-amber-500/20">
+          <div class="flex items-center gap-3 min-w-0">
+            <div class="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/30 text-amber-300 flex items-center justify-center flex-shrink-0">
+              <i data-lucide="layers" class="w-4 h-4"></i>
+            </div>
+            <div class="min-w-0">
+              <div class="flex items-center gap-2">
+                <span class="font-bold text-white text-sm">Sahipsiz / Silinmiş Kategoriden Kalan Ürünler</span>
+                <span class="text-[10px] px-2 py-0.5 rounded-full bg-red-500/20 text-red-300 border border-red-500/30 font-medium">
+                  ${orphanItems.length} Ürün (Diğer Ürünler)
+                </span>
+              </div>
+              <p class="text-[11px] text-gray-400 mt-0.5">Bu ürünlerin kategorisi silinmiş olduğu için müşteri menüsünde "Diğer Ürünler" altında çıkmaktadır.</p>
+            </div>
+          </div>
+          <button type="button" onclick="cleanAllOrphanItems()" class="px-3 py-1.5 rounded-xl bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-300 text-xs font-semibold flex items-center gap-1.5 transition-colors">
+            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+            <span>Tüm Sahipsizleri Sil</span>
+          </button>
+        </div>
+        <div class="p-3 space-y-2 bg-neutral-900/60">
+          ${orphanItems.map(item => {
+            const thumbFallback = 'https://images.unsplash.com/photo-1527661591475-527312dd65f5?auto=format&fit=crop&w=100&q=80';
+            const thumbSrc = resolveAdminImageUrl(item.image, thumbFallback);
+            const thumbFit = item.imageFit === 'contain' ? 'object-contain' : (item.imageFit === 'top' ? 'object-cover object-top' : 'object-cover');
+            const safeItemId = String(item.id || '').replace(/'/g, "\\'");
+
+            return `
+              <div class="flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 p-2.5 sm:p-3 rounded-xl bg-black/75 border border-white/5 hover:border-amber-500/30 transition-all">
+                <div class="flex items-center gap-3 min-w-0 flex-1">
+                  <img src="${thumbSrc}" alt="" class="w-11 h-11 rounded-lg ${thumbFit} bg-neutral-900 border border-white/10 flex-shrink-0" onerror="this.src='${thumbFallback}'" />
+                  <div class="min-w-0 flex-1">
+                    <div class="font-bold text-white text-xs sm:text-sm flex items-center gap-1.5 truncate">
+                      <span>${escapeHtml(item.name)}</span>
+                      <span class="text-[9px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-300 border border-red-500/30 font-medium">Kategorisiz</span>
+                    </div>
+                    <div class="text-[10px] text-gray-500 truncate mt-0.5">${escapeHtml(item.description || '')}</div>
+                  </div>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="font-bold text-amber-400 font-mono text-xs">${item.price} ${currency}</span>
+                  <button type="button" onclick="openEditItemModal('${safeItemId}')" class="px-2.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs flex items-center gap-1 transition-colors">
+                    <i data-lucide="edit-3" class="w-3.5 h-3.5"></i>
+                    <span>Düzenle / Kategori Seç</span>
+                  </button>
+                  <button type="button" onclick="deleteItem('${safeItemId}')" class="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 transition-colors" title="Sil">
+                    <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                  </button>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
   }
 
   container.innerHTML = `
@@ -801,9 +865,27 @@ function renderAdminCategories() {
         `;
       }).join('')}
     </div>
+    ${orphanHtml}
   `;
 
   if (window.lucide) lucide.createIcons();
+}
+
+async function cleanAllOrphanItems() {
+  const validCatIds = new Set((menuData.categories || []).map(c => c.id));
+  const orphans = (menuData.items || []).filter(it => !validCatIds.has(it.categoryId));
+  if (orphans.length === 0) {
+    showToast('Sahipsiz ürün bulunamadı.', 'info');
+    return;
+  }
+  if (typeof confirm === 'function' && !confirm(`Kategorisi bulunmayan ${orphans.length} adet sahipsiz ürünü menüden tamamen silmek istediğinize emin misiniz?`)) {
+    return;
+  }
+  menuData.items = (menuData.items || []).filter(it => validCatIds.has(it.categoryId));
+  await saveMenuData(menuData);
+  renderAdminCategories();
+  renderAdminProductTable();
+  showToast('✅ Sahipsiz ürünler başarıyla temizlendi!', 'success');
 }
 
 function openNewItemModalForCategory(catId) {

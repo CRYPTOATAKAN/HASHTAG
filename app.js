@@ -117,6 +117,11 @@ function sanitizeMenuDataSettings(data) {
   ) {
     data.settings.baseUrl = '';
   }
+
+  // Silinmiş kategoriden kalan 'satılık' sahipsiz test ürününü önbellekten ve tüm görünümlerden anında temizle
+  if (Array.isArray(data.items)) {
+    data.items = data.items.filter(it => it && it.id !== 'item-1792885224555' && !String(it.name || '').toLowerCase().includes('satılık'));
+  }
   return data;
 }
 
