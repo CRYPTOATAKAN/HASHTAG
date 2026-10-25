@@ -123,18 +123,23 @@ function renderStaffSelectionGrid() {
     'Kasa': 'credit-card'
   };
 
-  container.innerHTML = staffList.map(s => `
+  container.innerHTML = staffList.map(s => {
+    const safeId = escapeHtml(String(s.id || '')).replace(/'/g, "\\'");
+    const safeName = escapeHtml(s.name || 'Personel');
+    const safeRole = escapeHtml(s.role || 'Garson');
+    const safeIcon = escapeHtml(roleIcons[s.role] || 'user');
+    return `
     <button 
-      onclick="selectStaffMember('${s.id}')"
+      onclick="selectStaffMember('${safeId}')"
       class="w-full p-3 rounded-2xl bg-black border border-white/10 hover:border-amber-500/60 hover:bg-neutral-900 flex items-center justify-between text-left transition-all active:scale-98 group shadow-sm"
     >
       <div class="flex items-center gap-3">
         <div class="w-10 h-10 rounded-xl bg-amber-500/10 group-hover:bg-amber-500/20 border border-amber-500/20 flex items-center justify-center text-amber-400 font-bold transition-colors">
-          <i data-lucide="${roleIcons[s.role] || 'user'}" class="w-5 h-5"></i>
+          <i data-lucide="${safeIcon}" class="w-5 h-5"></i>
         </div>
         <div>
-          <h4 class="text-sm font-bold text-white group-hover:text-amber-300 transition-colors">${s.name}</h4>
-          <p class="text-[11px] text-gray-400">${s.role}</p>
+          <h4 class="text-sm font-bold text-white group-hover:text-amber-300 transition-colors">${safeName}</h4>
+          <p class="text-[11px] text-gray-400">${safeRole}</p>
         </div>
       </div>
       <div class="flex items-center gap-2">
@@ -146,7 +151,7 @@ function renderStaffSelectionGrid() {
         <i data-lucide="chevron-right" class="w-4 h-4 text-gray-500 group-hover:text-amber-400 transition-colors"></i>
       </div>
     </button>
-  `).join('');
+  `}).join('');
 
   if (typeof lucide !== 'undefined') lucide.createIcons();
 }
@@ -299,7 +304,7 @@ function updateHeaderStaffInfo() {
   const devEl = document.getElementById('header-device-text');
 
   if (nameEl) nameEl.textContent = currentStaff.name;
-  if (roleEl) roleEl.innerHTML = `${currentStaff.role} • <span class="text-gray-500">${currentDevice}</span>`;
+  if (roleEl) roleEl.innerHTML = `${escapeHtml(currentStaff.role)} • <span class="text-gray-500">${escapeHtml(currentDevice)}</span>`;
   if (devEl) devEl.textContent = currentDevice;
 }
 
@@ -653,6 +658,8 @@ function renderCallCard(call) {
     : (isBill ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' : 'bg-cyan-500/15 text-cyan-400 border-cyan-500/30');
 
   const elapsed = getElapsedText(call.createdTimestamp);
+  const safeCallId = escapeHtml(String(call.id || '')).replace(/'/g, "\\'");
+  const safeIcon = escapeHtml(call.icon || 'bell');
 
   return `
     <div class="relative rounded-2xl bg-neutral-900/90 border border-white/10 p-4 shadow-xl transition-all ${!isInProgress ? pulseClass : 'border-blue-500/40 bg-blue-950/20'}">
@@ -667,7 +674,7 @@ function renderCallCard(call) {
           <div>
             <div class="flex items-center gap-2">
               <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl border text-xs font-bold tracking-wide uppercase ${typeBg}">
-                <i data-lucide="${call.icon || 'bell'}" class="w-3.5 h-3.5 ${isCoal ? 'flame-anim text-amber-400' : ''}"></i>
+                <i data-lucide="${safeIcon}" class="w-3.5 h-3.5 ${isCoal ? 'flame-anim text-amber-400' : ''}"></i>
                 ${escapeHtml(call.typeName || (isCoal ? 'Köz Değişimi' : 'Garson Çağrısı'))}
               </span>
               
@@ -692,7 +699,7 @@ function renderCallCard(call) {
         <div class="flex items-center gap-2">
           ${!isInProgress ? `
             <button 
-              onclick="updateCallStatus('${call.id}', 'in_progress')" 
+              onclick="updateCallStatus('${safeCallId}', 'in_progress')" 
               class="px-3.5 py-2.5 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/30 text-xs font-bold flex items-center gap-1.5 active:scale-95 transition-all shadow-md"
             >
               <i data-lucide="footprints" class="w-4 h-4 text-blue-400"></i>
@@ -701,7 +708,7 @@ function renderCallCard(call) {
           ` : ''}
 
           <button 
-            onclick="updateCallStatus('${call.id}', 'completed')" 
+            onclick="updateCallStatus('${safeCallId}', 'completed')" 
             class="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-bold flex items-center gap-1.5 active:scale-95 transition-all shadow-lg shadow-emerald-500/20"
           >
             <i data-lucide="check" class="w-4 h-4"></i>
@@ -788,11 +795,29 @@ async function loadMenuData() {
     const res = await fetch(apiBase + '/api/menu?_t=' + Date.now(), { cache: 'no-store' });
     if (res.ok) {
       menuData = await res.json();
+      if (menuData && Array.isArray(menuData.items)) {
+        menuData.items = menuData.items.filter(it => it && it.id !== 'item-1792885224555' && !String(it.name || '').toLowerCase().includes('satılık'));
+      }
       if (menuData && (menuData._version || menuData.updatedAt)) {
         lastStaffMenuVersion = menuData._version || menuData.updatedAt;
       }
+      try {
+        localStorage.setItem('hashtag_menu_cache', JSON.stringify(menuData));
+      } catch (e) {}
       applyStaffBrandLogo();
       return;
+    }
+  } catch (e) {}
+
+  try {
+    const cached = localStorage.getItem('hashtag_menu_cache');
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      if (parsed && Array.isArray(parsed.categories) && Array.isArray(parsed.items)) {
+        menuData = parsed;
+        applyStaffBrandLogo();
+        return;
+      }
     }
   } catch (e) {}
 
@@ -807,14 +832,16 @@ function renderStockCategories() {
   if (!container || !menuData) return;
 
   const cats = [{ id: 'all', name: 'Tüm Ürünler' }, ...(menuData.categories || [])];
-  container.innerHTML = cats.map(c => `
+  container.innerHTML = cats.map(c => {
+    const safeId = escapeHtml(String(c.id || '')).replace(/'/g, "\\'");
+    return `
     <button 
-      onclick="filterStockCategory('${c.id}')" 
+      onclick="filterStockCategory('${safeId}')" 
       class="px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${currentStockCategory === c.id ? 'bg-amber-500 text-black font-bold' : 'bg-neutral-900 border border-white/10 text-gray-300 hover:text-white'}"
     >
-      ${c.name}
+      ${escapeHtml(c.name || '')}
     </button>
-  `).join('');
+  `}).join('');
 }
 
 function filterStockCategory(catId) {

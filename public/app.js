@@ -117,6 +117,11 @@ function sanitizeMenuDataSettings(data) {
   ) {
     data.settings.baseUrl = '';
   }
+
+  // Silinmiş kategoriden kalan 'satılık' sahipsiz test ürününü önbellekten ve tüm görünümlerden anında temizle
+  if (Array.isArray(data.items)) {
+    data.items = data.items.filter(it => it && it.id !== 'item-1792885224555' && !String(it.name || '').toLowerCase().includes('satılık'));
+  }
   return data;
 }
 
@@ -160,18 +165,17 @@ if (typeof window !== 'undefined' && window.addEventListener) {
 
 // Menü Verisini Yükleme (CORS preflight engeline takılmayan önbellek atlatmalı canlı sunucu kontrolü)
 async function loadMenuData() {
+  let loadedFromServer = false;
+  let serverData = null;
+
   try {
     const apiBase = getApiBaseUrl();
     const res = await fetch(apiBase + '/api/menu?_t=' + Date.now(), {
       cache: 'no-store'
     });
     if (res.ok) {
-      menuData = sanitizeMenuDataSettings(await res.json());
-      if (menuData && (menuData._version || menuData.updatedAt)) {
-        lastKnownMenuVersion = menuData._version || menuData.updatedAt;
-      }
-      safeSetStorage('hashtag_menu_cache', JSON.stringify(menuData));
-      return menuData;
+      serverData = sanitizeMenuDataSettings(await res.json());
+      loadedFromServer = true;
     }
   } catch (err) {
     console.warn("Canlı sunucudan çekilemedi, önbelleğe bakılıyor:", err);
@@ -179,23 +183,61 @@ async function loadMenuData() {
 
   // Önbellek kontrolü (Eski 'hashtag.lounge' kalıntısı varsa anında temizle ve düzelt)
   const cached = safeGetStorage('hashtag_menu_cache');
+  let cachedData = null;
   if (cached) {
     try {
       const parsedCache = JSON.parse(cached);
       const prevInsta = parsedCache && parsedCache.settings && parsedCache.settings.instagram;
-      menuData = sanitizeMenuDataSettings(parsedCache);
-      if (prevInsta !== menuData.settings.instagram) {
-        safeSetStorage('hashtag_menu_cache', JSON.stringify(menuData));
+      cachedData = sanitizeMenuDataSettings(parsedCache);
+      if (prevInsta !== cachedData.settings.instagram) {
+        safeSetStorage('hashtag_menu_cache', JSON.stringify(cachedData));
       }
-      return menuData;
     } catch (e) {
       console.error(e);
     }
   }
 
+  if (loadedFromServer && serverData) {
+    // Eğer yerel önbellekte daha yeni bir düzenleme varsa (örneğin çevrimdışı/masaüstü panelden eklenen/silinen kategori),
+    // sunucudaki eski verinin yerel son değişiklikleri ezmesine izin verme!
+    if (cachedData && cachedData.updatedAt && serverData.updatedAt && cachedData.updatedAt > serverData.updatedAt) {
+      menuData = cachedData;
+      // Arka planda sunucuyu son verimizle senkronize etmeyi dene
+      try {
+        let pin = '';
+        try { pin = sessionStorage.getItem('hashtag_admin_pin') || ''; } catch (e) {}
+        if (!pin) pin = (menuData.settings && menuData.settings.adminPin) || '1234';
+        const apiBase = getApiBaseUrl();
+        fetch(apiBase + '/api/menu/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Admin-PIN': pin },
+          body: JSON.stringify(menuData)
+        }).catch(() => {});
+      } catch (e) {}
+    } else {
+      menuData = serverData;
+    }
+
+    if (menuData && (menuData._version || menuData.updatedAt)) {
+      lastKnownMenuVersion = menuData._version || menuData.updatedAt;
+    }
+    safeSetStorage('hashtag_menu_cache', JSON.stringify(menuData));
+    return menuData;
+  }
+
+  // Sunucuya ulaşılamadıysa önbellek varsa onu kullan
+  if (cachedData) {
+    menuData = cachedData;
+    if (menuData && (menuData._version || menuData.updatedAt)) {
+      lastKnownMenuVersion = menuData._version || menuData.updatedAt;
+    }
+    return menuData;
+  }
+
   // Varsayılan zengin veri
   if (window.DEFAULT_MENU_DATA) {
     menuData = sanitizeMenuDataSettings(JSON.parse(JSON.stringify(window.DEFAULT_MENU_DATA)));
+    safeSetStorage('hashtag_menu_cache', JSON.stringify(menuData));
     return menuData;
   }
 
@@ -215,14 +257,19 @@ async function loadMenuData() {
     categories: [],
     items: []
   });
+  safeSetStorage('hashtag_menu_cache', JSON.stringify(menuData));
   return menuData;
 }
 
-// Menüyü Kaydetme (Önce Sunucuya POST, doğrulandıktan sonra tüm sekmelere/cihazlara yay)
+// Menüyü Kaydetme (Önce Yerel Önbellek, Doğrulanmış Sunucu POST ve Sekmeler Arası Eşitleme)
 async function saveMenuData(updatedData) {
   sanitizeMenuDataSettings(updatedData);
   updatedData.updatedAt = Date.now();
   menuData = updatedData;
+
+  // 1. ANINDA YEREL ÖNBELLEK: Masaüstü file:// veya çevrimdışı durumlarda veri kaybını engelle
+  safeSetStorage('hashtag_menu_cache', JSON.stringify(updatedData));
+  lastKnownMenuVersion = updatedData.updatedAt;
 
   // Giriş yapılmış PIN'i header ile gönder (Güvenlik)
   let pin = '';
@@ -246,15 +293,18 @@ async function saveMenuData(updatedData) {
       try {
         const verifyRes = await fetch(apiBase + '/api/menu?_t=' + Date.now(), { cache: 'no-store' });
         if (verifyRes.ok) {
-          menuData = sanitizeMenuDataSettings(await verifyRes.json());
+          const freshData = sanitizeMenuDataSettings(await verifyRes.json());
+          if (freshData) {
+            menuData = freshData;
+            if (menuData._version || menuData.updatedAt) {
+              lastKnownMenuVersion = menuData._version || menuData.updatedAt;
+            }
+            safeSetStorage('hashtag_menu_cache', JSON.stringify(menuData));
+          }
         }
       } catch (e) {}
 
-      if (menuData && (menuData._version || menuData.updatedAt)) {
-        lastKnownMenuVersion = menuData._version || menuData.updatedAt;
-      }
-      safeSetStorage('hashtag_menu_cache', JSON.stringify(menuData));
-
+      // Race condition koruması: postMessage('sync') mutlaka sunucu kaydı tamamlandıktan sonra çağrılır
       if (syncChannel) {
         try { syncChannel.postMessage('sync'); } catch (e) {}
       }
@@ -262,15 +312,24 @@ async function saveMenuData(updatedData) {
     } else {
       const errJson = await res.json().catch(() => ({}));
       const msg = errJson.message || `Sunucu hatası (${res.status})`;
-      showToast('⚠️ Kaydedilemedi: ' + msg, 'error');
-      alert('⚠️ Kaydedilemedi!\nSunucu yanıtı: ' + msg);
-      return false;
+      if (res.status === 401) {
+        showToast('⚠️ Yetki hatası: Yönetici PIN kodu geçersiz!', 'error');
+        alert('⚠️ Yetki hatası!\nYönetici PIN kodu uyuşmuyor veya oturum süresi doldu.');
+        return false;
+      }
+      if (syncChannel) {
+        try { syncChannel.postMessage('sync'); } catch (e) {}
+      }
+      showToast('ℹ️ Değişiklikler yerel menüye kaydedildi (Sunucu yanıtı: ' + msg + ')', 'success');
+      return true;
     }
   } catch (err) {
-    console.error("Sunucuya yazılamadı:", err);
-    showToast('⚠️ İnternet bağlantı hatası, sunucuya ulaşılamadı.', 'error');
-    alert('⚠️ Sunucuya ulaşılamadı!\nLütfen internet bağlantınızı kontrol edin.\nDetay: ' + err.message);
-    return false;
+    console.warn("Sunucuya ulaşılamadı, ancak yerel menüye başarıyla kaydedildi:", err);
+    if (syncChannel) {
+      try { syncChannel.postMessage('sync'); } catch (e) {}
+    }
+    showToast('ℹ️ Değişiklikler yerel olarak kaydedildi (Sunucu çevrimdışı)', 'success');
+    return true;
   }
 }
 
@@ -316,11 +375,34 @@ function applyLiveCustomerMenuRefresh(forceHero = false) {
   }
 }
 
-// Farklı Cihazlar (Telefon / Tablet / Bilgisayar) Arası Hafif Canlı Senkronizasyon (4 sn)
+// Farklı Cihazlar & Yerel Sekmeler Arası Canlı Senkronizasyon (2.5 sn)
 function startCustomerLiveMenuSync() {
   if (customerMenuSyncTimer) clearInterval(customerMenuSyncTimer);
   customerMenuSyncTimer = setInterval(async () => {
-    if (document.visibilityState !== 'visible' || !document.getElementById('menu-app')) return;
+    if (!document.getElementById('menu-app')) return;
+
+    // 1. Önce yerel önbellek (localStorage) kontrolü yap:
+    // Masaüstü file:// veya aynı tarayıcıda yönetici panelinden eklenen / silinen kategoriler anında yansısın
+    try {
+      const cached = safeGetStorage('hashtag_menu_cache');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        const cachedVer = parsed._version || parsed.updatedAt;
+        const currentVer = menuData ? (menuData._version || menuData.updatedAt) : null;
+        const cachedCatCount = Array.isArray(parsed.categories) ? parsed.categories.length : -1;
+        const currentCatCount = (menuData && Array.isArray(menuData.categories)) ? menuData.categories.length : -1;
+
+        if ((cachedVer && cachedVer !== currentVer) || cachedCatCount !== currentCatCount) {
+          menuData = sanitizeMenuDataSettings(parsed);
+          if (cachedVer) lastKnownMenuVersion = cachedVer;
+          applyLiveCustomerMenuRefresh(false);
+          return;
+        }
+      }
+    } catch (e) {}
+
+    // 2. Ağ/Sunucu kontrolü (Eğer sekme görünür durumdaysa)
+    if (document.visibilityState !== 'visible') return;
     try {
       const apiBase = getApiBaseUrl();
       const res = await fetch(apiBase + '/api/menu/version?_t=' + Date.now(), { cache: 'no-store' });
@@ -336,7 +418,7 @@ function startCustomerLiveMenuSync() {
         }
       }
     } catch (e) {}
-  }, 4000);
+  }, 2500);
 }
 
 window.refreshCustomerMenu = async function(btn) {
@@ -349,16 +431,45 @@ window.refreshCustomerMenu = async function(btn) {
   }
 };
 
-// Sekme veya telefon ekranı tekrar açıldığında menüyü otomatik yenile
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') {
-    loadMenuData().then(() => {
-      if (document.getElementById('menu-app')) {
-        applyLiveCustomerMenuRefresh(false);
+// Sekme veya telefon ekranı tekrar açıldığında veya pencereye odaklanıldığında menüyü otomatik yenile
+function handleCustomerMenuVisibilityOrFocus() {
+  if (document.getElementById('menu-app')) {
+    // Önce hızlıca yerel önbelleğe bak
+    try {
+      const cached = safeGetStorage('hashtag_menu_cache');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        const cachedVer = parsed._version || parsed.updatedAt;
+        const currentVer = menuData ? (menuData._version || menuData.updatedAt) : null;
+        const cachedCatCount = Array.isArray(parsed.categories) ? parsed.categories.length : -1;
+        const currentCatCount = (menuData && Array.isArray(menuData.categories)) ? menuData.categories.length : -1;
+
+        if ((cachedVer && cachedVer !== currentVer) || cachedCatCount !== currentCatCount) {
+          menuData = sanitizeMenuDataSettings(parsed);
+          if (cachedVer) lastKnownMenuVersion = cachedVer;
+          applyLiveCustomerMenuRefresh(false);
+          return;
+        }
       }
+    } catch (e) {}
+
+    loadMenuData().then(() => {
+      applyLiveCustomerMenuRefresh(false);
     });
   }
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    handleCustomerMenuVisibilityOrFocus();
+  }
 });
+
+if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+  window.addEventListener('focus', () => {
+    handleCustomerMenuVisibilityOrFocus();
+  });
+}
 
 // DOM Hazır Olduğunda Menüyü Başlat
 document.addEventListener('DOMContentLoaded', async () => {
@@ -406,10 +517,154 @@ function initCustomerMenu() {
 }
 
 /* ==========================================================================
-   GERÇEKÇİ & AKICI NARGİLE DUMANI SİMÜLASYON MOTORU (GPU HIZLANDIRMALI)
-   Sayfa yukarı/aşağı kaydırıldıkça dumanlar akıcı bir şekilde kıvrılır,
-   hızlanır ve sinematik nargile atmosferi yaratır.
+   GERÇEKÇİ & AKICI ÇOKLU ATMOSFER / NARGİLE DUMANI SİMÜLASYON MOTORU (GPU HIZLANDIRMALI)
+   Yönetici panelinden seçilen efekte göre (Klasik Nargile Dumanı, Altın Köz Kıvılcımları,
+   Hibrit Duman+Köz, Neon Lounge Sisi, Lüks Bokeh & Yıldız Parıltısı veya Kapalı)
+   sayfa yukarı/aşağı kaydırıldıkça canlı ve sinematik atmosfer yaratır.
    ========================================================================== */
+function getActiveAmbientSettings() {
+  const bm = (typeof menuData !== 'undefined' && menuData && menuData.settings && menuData.settings.brandMedia)
+    ? menuData.settings.brandMedia
+    : {};
+  const validEffects = ['smoke', 'gold-embers', 'ember-smoke', 'neon-mist', 'starlight', 'none'];
+  const rawEffect = String(bm.ambientEffect || 'smoke').trim();
+  const effect = validEffects.includes(rawEffect) ? rawEffect : 'smoke';
+
+  const validIntensities = ['low', 'medium', 'high'];
+  const rawInt = String(bm.ambientIntensity || 'medium').trim();
+  const intensity = validIntensities.includes(rawInt) ? rawInt : 'medium';
+
+  const intensityMultiplier = intensity === 'low' ? 0.55 : (intensity === 'high' ? 1.42 : 1.0);
+  return { effect, intensity, intensityMultiplier };
+}
+
+function applyCustomerBackgroundAndEffects() {
+  if (typeof document === 'undefined' || !menuData || !menuData.settings) return;
+  const bm = menuData.settings.brandMedia || {};
+
+  // 1. Tam Ekran Arka Plan Fotoğrafı (Özel Arka Plan seçilmişse onu, yoksa 1. Slayt Kapağını, yoksa varsayılanı kullan)
+  const ambientImgEl = document.getElementById('ambient-photo-img');
+  if (ambientImgEl) {
+    const customBg = bm.backgroundImage && String(bm.backgroundImage).trim();
+    const customHero = bm.heroBannerImage && String(bm.heroBannerImage).trim();
+    const chosenRawUrl = customBg || customHero || '';
+    const ambientSrc = chosenRawUrl
+      ? resolveImageUrl(chosenRawUrl, 'hashtag-banner.jpg?v=2.7')
+      : 'hashtag-banner.jpg?v=2.7';
+
+    ambientImgEl.src = ambientSrc;
+
+    const bgFit = customBg
+      ? (bm.backgroundFit || 'cover')
+      : (bm.backgroundFit || bm.heroBannerFit || 'cover');
+
+    const rawOpacity = Number(bm.backgroundOpacity);
+    const opacityPct = Number.isFinite(rawOpacity) && bm.backgroundOpacity !== '' && bm.backgroundOpacity !== null && bm.backgroundOpacity !== undefined
+      ? Math.max(5, Math.min(95, rawOpacity))
+      : 36;
+
+    const rawBlur = Number(bm.backgroundBlur);
+    const blurPx = Number.isFinite(rawBlur) && bm.backgroundBlur !== '' && bm.backgroundBlur !== null && bm.backgroundBlur !== undefined
+      ? Math.max(0, Math.min(24, rawBlur))
+      : 0;
+
+    ambientImgEl.setAttribute('data-bg-fit', bgFit);
+    ambientImgEl.setAttribute('data-bg-opacity', String(opacityPct));
+    ambientImgEl.setAttribute('data-bg-blur', String(blurPx));
+
+    if (ambientImgEl.style) {
+      ambientImgEl.style.objectFit = bgFit === 'contain' ? 'contain' : 'cover';
+      ambientImgEl.style.objectPosition = bgFit === 'top'
+        ? 'center top'
+        : (bgFit === 'contain' ? 'center center' : 'center 22%');
+      ambientImgEl.style.opacity = String((opacityPct / 100).toFixed(2));
+      ambientImgEl.style.filter = blurPx > 0
+        ? `blur(${blurPx}px) contrast(1.15) brightness(0.88) saturate(1.1)`
+        : 'contrast(1.15) brightness(0.88) saturate(1.1)';
+    }
+  }
+
+  // 2. Ön Plan Duman / Parçacık Efekti ve Yoğunluğu
+  const { effect, intensity, intensityMultiplier } = getActiveAmbientSettings();
+  const canvas = document.getElementById('hookah-smoke-canvas');
+  if (canvas) {
+    canvas.setAttribute('data-ambient-effect', effect);
+    canvas.setAttribute('data-ambient-intensity', intensity);
+    if (canvas.style) {
+      if (effect === 'none') {
+        canvas.style.display = 'none';
+        canvas.style.opacity = '0';
+      } else {
+        canvas.style.display = 'block';
+        const baseCanvasAlpha = intensity === 'low' ? 0.58 : (intensity === 'high' ? 1.0 : 0.92);
+        canvas.style.opacity = String(baseCanvasAlpha);
+        if (effect === 'gold-embers') {
+          canvas.style.filter = 'blur(0.5px)';
+        } else if (effect === 'starlight') {
+          canvas.style.filter = 'blur(1.5px)';
+        } else if (effect === 'ember-smoke') {
+          canvas.style.filter = 'blur(4px)';
+        } else if (effect === 'neon-mist') {
+          canvas.style.filter = 'blur(14px)';
+        } else {
+          canvas.style.filter = 'blur(12px)';
+        }
+      }
+    }
+  }
+
+  // 3. Hacimli Bulut Katmanlarını (Volumetric Clouds) Seçilen Efekt Rengine Göre Güncelle
+  if (typeof document.querySelectorAll === 'function') {
+    const clouds = document.querySelectorAll('.volumetric-smoke-cloud');
+    const cloudThemes = {
+      'smoke': [
+        'radial-gradient(circle, rgba(255, 255, 255, 0.35) 0%, rgba(215, 240, 255, 0.22) 36%, rgba(6, 182, 212, 0.10) 62%, transparent 75%)',
+        'radial-gradient(circle, rgba(255, 255, 255, 0.30) 0%, rgba(254, 243, 199, 0.18) 38%, rgba(245, 158, 11, 0.10) 62%, transparent 75%)',
+        'radial-gradient(circle, rgba(255, 255, 255, 0.28) 0%, rgba(225, 235, 255, 0.16) 40%, rgba(139, 92, 246, 0.08) 65%, transparent 75%)'
+      ],
+      'gold-embers': [
+        'radial-gradient(circle, rgba(251, 191, 36, 0.28) 0%, rgba(245, 158, 11, 0.18) 38%, rgba(234, 88, 12, 0.10) 64%, transparent 75%)',
+        'radial-gradient(circle, rgba(245, 158, 11, 0.26) 0%, rgba(217, 119, 6, 0.16) 40%, rgba(180, 83, 9, 0.08) 65%, transparent 75%)',
+        'radial-gradient(circle, rgba(253, 224, 71, 0.22) 0%, rgba(245, 158, 11, 0.14) 42%, rgba(239, 68, 68, 0.07) 66%, transparent 75%)'
+      ],
+      'ember-smoke': [
+        'radial-gradient(circle, rgba(255, 255, 255, 0.34) 0%, rgba(254, 243, 199, 0.22) 38%, rgba(245, 158, 11, 0.12) 64%, transparent 75%)',
+        'radial-gradient(circle, rgba(251, 191, 36, 0.30) 0%, rgba(245, 158, 11, 0.20) 40%, rgba(234, 88, 12, 0.10) 65%, transparent 75%)',
+        'radial-gradient(circle, rgba(255, 255, 255, 0.28) 0%, rgba(215, 240, 255, 0.16) 40%, rgba(6, 182, 212, 0.09) 65%, transparent 75%)'
+      ],
+      'neon-mist': [
+        'radial-gradient(circle, rgba(217, 70, 239, 0.36) 0%, rgba(168, 85, 247, 0.24) 38%, rgba(6, 182, 212, 0.14) 65%, transparent 75%)',
+        'radial-gradient(circle, rgba(34, 211, 238, 0.34) 0%, rgba(6, 182, 212, 0.22) 40%, rgba(139, 92, 246, 0.12) 65%, transparent 75%)',
+        'radial-gradient(circle, rgba(236, 72, 153, 0.32) 0%, rgba(168, 85, 247, 0.20) 42%, rgba(59, 130, 246, 0.10) 66%, transparent 75%)'
+      ],
+      'starlight': [
+        'radial-gradient(circle, rgba(254, 249, 195, 0.24) 0%, rgba(253, 224, 71, 0.14) 38%, rgba(245, 158, 11, 0.06) 64%, transparent 75%)',
+        'radial-gradient(circle, rgba(255, 255, 255, 0.22) 0%, rgba(224, 242, 254, 0.12) 40%, rgba(56, 189, 248, 0.06) 65%, transparent 75%)',
+        'radial-gradient(circle, rgba(254, 240, 138, 0.20) 0%, rgba(251, 191, 36, 0.12) 42%, transparent 72%)'
+      ]
+    };
+
+    if (clouds && clouds.length > 0) {
+      for (let idx = 0; idx < clouds.length; idx++) {
+        const cloudEl = clouds[idx];
+        if (!cloudEl || !cloudEl.style) continue;
+        if (effect === 'none') {
+          cloudEl.style.display = 'none';
+        } else {
+          cloudEl.style.display = 'block';
+          const palette = cloudThemes[effect] || cloudThemes['smoke'];
+          cloudEl.style.background = palette[idx % palette.length];
+        }
+      }
+    }
+  }
+
+  // 4. Aktif parçacık motoru çalışıyorsa efekt değişimini anında bildir
+  if (typeof window !== 'undefined' && typeof window.__syncAmbientEngineMode === 'function') {
+    window.__syncAmbientEngineMode(effect, intensity, intensityMultiplier);
+  }
+}
+
 function initHookahSmokeEngine() {
   if (typeof window === 'undefined' || typeof document === 'undefined') return;
 
@@ -425,8 +680,8 @@ function initHookahSmokeEngine() {
 
   function resizeCanvas() {
     dpr = Math.min(window.devicePixelRatio || 1, 1.5);
-    width = window.innerWidth;
-    height = window.innerHeight;
+    width = window.innerWidth || 390;
+    height = window.innerHeight || 844;
     canvas.width = Math.floor(width * dpr);
     canvas.height = Math.floor(height * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -435,13 +690,14 @@ function initHookahSmokeEngine() {
   resizeCanvas();
   window.addEventListener('resize', resizeCanvas, { passive: true });
 
-  // 1. GPU Hızlandırması için Hazır Önceden Hesaplanmış Duman Dokuları (Offscreen Sprites)
+  // 1. GPU Hızlandırması için Hazır Önceden Hesaplanmış Dokular (Offscreen Sprites)
   function createVaporSprite(colorStops) {
     const sCanvas = document.createElement('canvas');
     const size = 160;
     sCanvas.width = size;
     sCanvas.height = size;
     const sCtx = sCanvas.getContext('2d');
+    if (!sCtx) return sCanvas;
     const half = size / 2;
     const grad = sCtx.createRadialGradient(half, half, 0, half, half, half);
     colorStops.forEach(st => grad.addColorStop(st[0], st[1]));
@@ -452,7 +708,7 @@ function initHookahSmokeEngine() {
     return sCanvas;
   }
 
-  // Saf beyaz/gümüş nargile buharı
+  // A) Klasik Nargile Dumanı Dokuları
   const spriteWhite = createVaporSprite([
     [0, 'rgba(255, 255, 255, 0.90)'],
     [0.25, 'rgba(240, 248, 255, 0.68)'],
@@ -461,7 +717,6 @@ function initHookahSmokeEngine() {
     [1, 'rgba(200, 220, 250, 0)']
   ]);
 
-  // Neon turkuaz yansımalı nargile buharı
   const spriteCyan = createVaporSprite([
     [0, 'rgba(255, 255, 255, 0.88)'],
     [0.28, 'rgba(165, 243, 252, 0.60)'],
@@ -470,7 +725,6 @@ function initHookahSmokeEngine() {
     [1, 'rgba(6, 182, 212, 0)']
   ]);
 
-  // Neon amber/altın yansımalı nargile buharı
   const spriteAmber = createVaporSprite([
     [0, 'rgba(255, 255, 255, 0.88)'],
     [0.28, 'rgba(254, 240, 138, 0.58)'],
@@ -479,78 +733,181 @@ function initHookahSmokeEngine() {
     [1, 'rgba(245, 158, 11, 0)']
   ]);
 
-  const sprites = [spriteWhite, spriteWhite, spriteWhite, spriteCyan, spriteAmber];
+  // B) Altın Köz Kıvılcımları & Sıcak Kor Dokuları (Ember Sparks)
+  const spriteEmberGold = createVaporSprite([
+    [0, 'rgba(255, 255, 240, 1.0)'],
+    [0.18, 'rgba(253, 224, 71, 0.95)'],
+    [0.45, 'rgba(245, 158, 11, 0.65)'],
+    [0.75, 'rgba(234, 88, 12, 0.22)'],
+    [1, 'rgba(234, 88, 12, 0)']
+  ]);
 
-  // 2. Parçacık Modeli
+  const spriteEmberFire = createVaporSprite([
+    [0, 'rgba(255, 250, 220, 1.0)'],
+    [0.20, 'rgba(251, 146, 60, 0.92)'],
+    [0.48, 'rgba(239, 68, 68, 0.55)'],
+    [0.78, 'rgba(185, 28, 28, 0.18)'],
+    [1, 'rgba(185, 28, 28, 0)']
+  ]);
+
+  // C) Neon Lounge Sisi Dokuları (Mor, Fuşya & Turkuaz)
+  const spriteNeonPurple = createVaporSprite([
+    [0, 'rgba(245, 208, 254, 0.90)'],
+    [0.28, 'rgba(217, 70, 239, 0.65)'],
+    [0.58, 'rgba(147, 51, 234, 0.28)'],
+    [0.82, 'rgba(147, 51, 234, 0.08)'],
+    [1, 'rgba(147, 51, 234, 0)']
+  ]);
+
+  const spriteNeonCyan = createVaporSprite([
+    [0, 'rgba(207, 250, 254, 0.90)'],
+    [0.28, 'rgba(34, 211, 238, 0.64)'],
+    [0.58, 'rgba(6, 182, 212, 0.26)'],
+    [0.82, 'rgba(6, 182, 212, 0.07)'],
+    [1, 'rgba(6, 182, 212, 0)']
+  ]);
+
+  // D) Lüks Bokeh & Yıldız Parıltısı Dokuları
+  const spriteBokehGold = createVaporSprite([
+    [0, 'rgba(255, 255, 255, 0.96)'],
+    [0.35, 'rgba(254, 240, 138, 0.78)'],
+    [0.68, 'rgba(251, 191, 36, 0.42)'],
+    [0.88, 'rgba(245, 158, 11, 0.12)'],
+    [1, 'rgba(245, 158, 11, 0)']
+  ]);
+
+  const spriteBokehDiamond = createVaporSprite([
+    [0, 'rgba(255, 255, 255, 0.98)'],
+    [0.32, 'rgba(224, 242, 254, 0.80)'],
+    [0.65, 'rgba(186, 230, 253, 0.38)'],
+    [0.88, 'rgba(125, 211, 252, 0.10)'],
+    [1, 'rgba(125, 211, 252, 0)']
+  ]);
+
+  const smokeSprites = [spriteWhite, spriteWhite, spriteWhite, spriteCyan, spriteAmber];
+  const emberSprites = [spriteEmberGold, spriteEmberGold, spriteEmberFire];
+  const neonSprites = [spriteNeonPurple, spriteNeonCyan, spriteNeonPurple, spriteCyan];
+  const starlightSprites = [spriteBokehGold, spriteBokehDiamond, spriteBokehGold];
+
+  let activeModeInfo = getActiveAmbientSettings();
   const particles = [];
-  const MAX_PARTICLES = 42;
+  const MAX_PARTICLES = 46;
 
   function createParticle(initialScatter = false, edgeSpawn = null) {
-    const sprite = sprites[Math.floor(Math.random() * sprites.length)];
-    const size = 110 + Math.random() * 110;
-    
+    const mode = activeModeInfo.effect;
+    const isHybridSpark = mode === 'ember-smoke' && Math.random() < 0.38;
+    const isEmber = mode === 'gold-embers' || isHybridSpark;
+    const isStarlight = mode === 'starlight';
+    const isNeon = mode === 'neon-mist';
+
+    let spritePool = smokeSprites;
+    if (isEmber) spritePool = emberSprites;
+    else if (isNeon) spritePool = neonSprites;
+    else if (isStarlight) spritePool = starlightSprites;
+
+    const sprite = spritePool[Math.floor(Math.random() * spritePool.length)];
+
+    let size;
+    if (isEmber) {
+      size = 12 + Math.random() * 28;
+    } else if (isStarlight) {
+      size = 18 + Math.random() * 54;
+    } else if (isNeon) {
+      size = 125 + Math.random() * 125;
+    } else {
+      size = 110 + Math.random() * 110;
+    }
+
     let x, y;
-    if (initialScatter) {
+    if (initialScatter || isStarlight) {
       x = Math.random() * width;
       y = Math.random() * height;
     } else if (edgeSpawn === 'top') {
       x = Math.random() * width;
       y = -size * 0.4;
     } else {
-      // Bottom spawn (default)
       x = -size * 0.2 + Math.random() * (width + size * 0.4);
       y = height + Math.random() * 60;
     }
 
     return {
+      kind: isEmber ? 'ember' : (isStarlight ? 'starlight' : 'vapor'),
       x,
       y,
-      vx: (Math.random() - 0.5) * 0.45,
-      vy: -(0.45 + Math.random() * 0.85), // Duman yukarı doğru süzülür
+      vx: isEmber
+        ? (Math.random() - 0.5) * 0.95
+        : (isStarlight ? (Math.random() - 0.5) * 0.28 : (Math.random() - 0.5) * 0.45),
+      vy: isEmber
+        ? -(0.85 + Math.random() * 1.65)
+        : (isStarlight ? -(0.15 + Math.random() * 0.35) : -(0.45 + Math.random() * 0.85)),
       size,
-      growthRate: 0.22 + Math.random() * 0.35,
+      growthRate: isEmber
+        ? -(0.01 + Math.random() * 0.03)
+        : (isStarlight ? 0.02 : (0.22 + Math.random() * 0.35)),
       alpha: 0,
-      maxAlpha: 0.38 + Math.random() * 0.35,
+      maxAlpha: isEmber
+        ? (0.65 + Math.random() * 0.34)
+        : (isStarlight ? (0.45 + Math.random() * 0.45) : (0.38 + Math.random() * 0.35)),
       rotation: Math.random() * Math.PI * 2,
       rotationSpeed: (Math.random() - 0.5) * 0.007,
       swirlPhase: Math.random() * Math.PI * 2,
-      swirlSpeed: 0.015 + Math.random() * 0.02,
-      swirlAmp: 0.6 + Math.random() * 1.0,
+      swirlSpeed: isEmber ? (0.04 + Math.random() * 0.05) : (0.015 + Math.random() * 0.02),
+      swirlAmp: isEmber ? (0.8 + Math.random() * 1.4) : (0.6 + Math.random() * 1.0),
       life: initialScatter ? Math.floor(Math.random() * 180) : 0,
-      maxLife: 240 + Math.floor(Math.random() * 220),
+      maxLife: isEmber ? (150 + Math.floor(Math.random() * 150)) : (240 + Math.floor(Math.random() * 220)),
       sprite
     };
   }
 
-  // İlk açılışta ekranın boş kalmaması için dağınık parçacıklar
-  for (let i = 0; i < MAX_PARTICLES; i++) {
-    particles.push(createParticle(true));
+  function rebuildParticlesForCurrentMode() {
+    particles.length = 0;
+    if (activeModeInfo.effect === 'none') {
+      ctx.clearRect(0, 0, width, height);
+      return;
+    }
+    const targetCount = activeModeInfo.intensity === 'low'
+      ? 26
+      : (activeModeInfo.intensity === 'high' ? 56 : MAX_PARTICLES);
+    for (let i = 0; i < targetCount; i++) {
+      particles.push(createParticle(true));
+    }
   }
 
+  window.__syncAmbientEngineMode = function(effect, intensity, intensityMultiplier) {
+    const changedEffect = activeModeInfo.effect !== effect;
+    const changedIntensity = activeModeInfo.intensity !== intensity;
+    activeModeInfo = { effect, intensity, intensityMultiplier };
+    if (changedEffect || changedIntensity) {
+      rebuildParticlesForCurrentMode();
+    }
+  };
+
+  rebuildParticlesForCurrentMode();
+  applyCustomerBackgroundAndEffects();
+
   // 3. Sayfa Kaydırma Hızı & İvme Takibi (Scroll Coupling)
-  let lastScrollY = window.pageYOffset || document.documentElement.scrollTop || 0;
+  let lastScrollY = window.pageYOffset || (document.documentElement && document.documentElement.scrollTop) || 0;
   let scrollVelocity = 0;
   let targetVelocity = 0;
 
   function onScroll() {
-    const curY = window.pageYOffset || document.documentElement.scrollTop || 0;
+    const curY = window.pageYOffset || (document.documentElement && document.documentElement.scrollTop) || 0;
     const deltaY = curY - lastScrollY;
     lastScrollY = curY;
 
-    // Hedef ivmeyi güncelle (Aşağı kaydırmada pozitif, yukarıda negatif)
+    if (activeModeInfo.effect === 'none') return;
+
     targetVelocity += deltaY * 0.65;
     if (targetVelocity > 40) targetVelocity = 40;
     if (targetVelocity < -40) targetVelocity = -40;
 
-    // Hızlı kaydırmada ekstra duman püskürmesi tetikle
-    if (Math.abs(deltaY) > 12 && particles.length < 55) {
+    if (Math.abs(deltaY) > 12 && particles.length < 62) {
       particles.push(createParticle(false, deltaY > 0 ? 'bottom' : 'top'));
     }
   }
 
   window.addEventListener('scroll', onScroll, { passive: true });
 
-  // Sekme arka plana atıldığında CPU harcamayı durdur
   let isTabVisible = true;
   document.addEventListener('visibilitychange', () => {
     isTabVisible = !document.hidden;
@@ -563,47 +920,52 @@ function initHookahSmokeEngine() {
       return;
     }
 
-    // İvmeli yumuşatma (Damping & Inertia)
     scrollVelocity += (targetVelocity - scrollVelocity) * 0.16;
     targetVelocity *= 0.88;
 
-    // CSS Değişkenlerini senkronize güncelle (Parallax ve CSS Dumanlar için)
-    document.documentElement.style.setProperty('--scroll-y', `${lastScrollY}px`);
-    document.documentElement.style.setProperty('--bg-parallax-y', `${lastScrollY * -0.08}px`);
+    if (document.documentElement && document.documentElement.style) {
+      document.documentElement.style.setProperty('--scroll-y', `${lastScrollY}px`);
+      document.documentElement.style.setProperty('--bg-parallax-y', `${lastScrollY * -0.08}px`);
+    }
 
-    // Ekranı temizle
+    if (activeModeInfo.effect === 'none') {
+      window.requestAnimationFrame(render);
+      return;
+    }
+
     ctx.clearRect(0, 0, width, height);
+    const mult = activeModeInfo.intensityMultiplier || 1.0;
 
     for (let i = particles.length - 1; i >= 0; i--) {
       const p = particles[i];
 
-      // Fizik: Kaydırma yönünde rüzgar & girdap etkisi
-      // Kullanıcı aşağı kaydırdıkça nargile dumanı yukarı doğru ivmelenir
-      p.y += p.vy - (scrollVelocity * 0.35);
+      p.y += p.vy - (scrollVelocity * (p.kind === 'ember' ? 0.50 : 0.35));
 
-      // Yatay dalgalanma ve duman kıvrımı
       p.swirlPhase += p.swirlSpeed + (Math.abs(scrollVelocity) * 0.003);
       p.x += p.vx + Math.sin(p.swirlPhase) * p.swirlAmp + (scrollVelocity * 0.06);
 
-      // Kendi etrafında hafifçe dönme
       p.rotation += p.rotationSpeed + (scrollVelocity * 0.001);
+      p.size = Math.max(4, p.size + p.growthRate);
 
-      // Duman yükseldikçe doğal olarak genleşir
-      p.size += p.growthRate;
-
-      // Opaklık zarfı (Doğal beliriş ve sönümleme)
       p.life++;
       const progress = p.life / p.maxLife;
+      let baseAlpha;
       if (progress < 0.20) {
-        p.alpha = (progress / 0.20) * p.maxAlpha;
+        baseAlpha = (progress / 0.20) * p.maxAlpha;
       } else if (progress > 0.72) {
-        p.alpha = ((1 - progress) / 0.28) * p.maxAlpha;
+        baseAlpha = ((1 - progress) / 0.28) * p.maxAlpha;
       } else {
-        p.alpha = p.maxAlpha;
+        baseAlpha = p.maxAlpha;
       }
 
-      // Çizim
-      if (p.alpha > 0.01 && p.size > 10) {
+      // Köz kıvılcımı ve yıldız parıltısında doğal titreşim (flicker/twinkle)
+      if (p.kind === 'ember' || p.kind === 'starlight') {
+        baseAlpha *= 0.72 + 0.28 * Math.sin(p.life * 0.22 + p.swirlPhase);
+      }
+
+      p.alpha = Math.min(1, baseAlpha * mult);
+
+      if (p.alpha > 0.01 && p.size > 4) {
         ctx.save();
         ctx.globalAlpha = p.alpha;
         ctx.translate(p.x, p.y);
@@ -613,10 +975,12 @@ function initHookahSmokeEngine() {
         ctx.restore();
       }
 
-      // Ömür bittiğinde veya ekrandan tamamen çıktığında yenile
-      const isDead = p.life >= p.maxLife || p.y < -p.size || p.y > height + p.size * 1.5;
+      const isDead = p.life >= p.maxLife || p.y < -p.size * 1.5 || p.y > height + p.size * 1.5;
       if (isDead) {
-        if (particles.length > MAX_PARTICLES) {
+        const targetMax = activeModeInfo.intensity === 'low'
+          ? 26
+          : (activeModeInfo.intensity === 'high' ? 56 : MAX_PARTICLES);
+        if (particles.length > targetMax) {
           particles.splice(i, 1);
         } else {
           particles[i] = createParticle(false);
@@ -1022,13 +1386,8 @@ function renderHeaderInfo() {
     footerLogoEl.className = logoFitClass;
   }
 
-  const ambientImgEl = document.getElementById('ambient-photo-img');
-  if (ambientImgEl) {
-    const ambientSrc = (bm.heroBannerImage && String(bm.heroBannerImage).trim())
-      ? resolveImageUrl(bm.heroBannerImage, 'hashtag-banner.jpg?v=2.7')
-      : 'hashtag-banner.jpg?v=2.7';
-    ambientImgEl.src = ambientSrc;
-  }
+  // Tam Ekran Müşteri Menüsü Arka Plan Fotoğrafını ve Ön Plan Duman/Parçacık Efektini Güncelle
+  applyCustomerBackgroundAndEffects();
 
   // Wi-Fi Bilgilerini Anında Güncelle
   if (wifiTitleEl) wifiTitleEl.textContent = `${cafeName} Misafir Wi-Fi`;
@@ -1141,10 +1500,12 @@ function selectCategory(catId) {
 
   // Scroll to menu list smoothly
   const listEl = document.getElementById('menu-items-list');
-  if (listEl) {
+  if (listEl && typeof listEl.getBoundingClientRect === 'function') {
     const yOffset = -140;
-    const y = listEl.getBoundingClientRect().top + window.pageYOffset + yOffset;
-    window.scrollTo({ top: y, behavior: 'smooth' });
+    const y = listEl.getBoundingClientRect().top + (window.pageYOffset || 0) + yOffset;
+    if (typeof window.scrollTo === 'function') {
+      window.scrollTo({ top: y, behavior: 'smooth' });
+    }
   }
 }
 
@@ -1180,6 +1541,15 @@ function renderMenuItems() {
   const allItems = Array.isArray(menuData?.items) ? menuData.items : [];
   const categories = Array.isArray(menuData?.categories) ? menuData.categories : [];
   const currency = (menuData?.settings && menuData.settings.currency) || '₺';
+
+  // Eğer seçili kategori silinmişse, otomatik 'all' (Tüm Menü) moduna dön ve hapları güncelle
+  if (currentCategory !== 'all') {
+    const catExists = categories.some(c => c.id === currentCategory);
+    if (!catExists) {
+      currentCategory = 'all';
+      renderCategoryPills();
+    }
+  }
 
   let items = allItems;
 
@@ -1360,14 +1730,20 @@ function renderItemCard(item, currency) {
   const isOutOfStock = (item.inStock === false) || (item.isAvailable === false);
   const isHookah = item.categoryId && item.categoryId.includes('hookah');
   const fallbackThumb = 'https://images.unsplash.com/photo-1527661591475-527312dd65f5?auto=format&fit=crop&w=300&q=80';
-  const imgSrc = resolveImageUrl(item.image, fallbackThumb);
+  const imgSrc = escapeHtml(resolveImageUrl(item.image, fallbackThumb));
   const fitMode = item.imageFit || 'cover';
   const imgFitClasses = fitMode === 'contain'
     ? 'relative z-10 w-full h-full object-contain'
     : (fitMode === 'top' ? 'w-full h-full object-cover object-top' : 'w-full h-full object-cover object-center');
+  const safeId = escapeHtml(String(item.id || '')).replace(/'/g, "\\'");
+  const safeName = escapeHtml(item.name || '');
+  const safeBadge = escapeHtml(item.badge || '');
+  const safeDesc = escapeHtml(item.description || '');
+  const safePrice = escapeHtml(item.price ?? 0);
+  const safeCurrency = escapeHtml(currency || '₺');
 
   return `
-    <div onclick="openItemDetails('${item.id}')" 
+    <div onclick="openItemDetails('${safeId}')" 
          class="menu-card glass-panel rounded-2xl p-4 flex gap-4 cursor-pointer relative overflow-hidden transition-all duration-300 hover:border-amber-500/30 group ${
            isOutOfStock ? 'opacity-55 grayscale-[40%]' : ''
          }">
@@ -1380,7 +1756,7 @@ function renderItemCard(item, currency) {
                onerror="this.style.display='none'" />
         ` : ''}
         <img src="${imgSrc}" 
-             alt="${escapeHtml(item.name)}" 
+             alt="${safeName}" 
              loading="lazy"
              class="${imgFitClasses} transition-transform duration-500 group-hover:scale-105"
              onerror="this.src='${fallbackThumb}'" />
@@ -1397,18 +1773,18 @@ function renderItemCard(item, currency) {
         <div>
           <div class="flex items-start justify-between gap-2">
             <h3 class="text-base font-semibold text-white tracking-tight group-hover:text-amber-400 transition-colors line-clamp-1">
-              ${item.name}
+              ${safeName}
             </h3>
             
-            ${item.badge ? `
+            ${safeBadge ? `
               <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 whitespace-nowrap">
-                ${item.badge}
+                ${safeBadge}
               </span>
             ` : ''}
           </div>
 
           <p class="text-xs text-gray-400 mt-1 line-clamp-2 leading-relaxed">
-            ${item.description || ''}
+            ${safeDesc}
           </p>
 
           <!-- Nargile Aroma Notları -->
@@ -1416,7 +1792,7 @@ function renderItemCard(item, currency) {
             <div class="flex flex-wrap gap-1 mt-2">
               ${item.flavors.slice(0, 3).map(f => `
                 <span class="text-[10px] px-1.5 py-0.5 rounded bg-white/5 text-gray-300 border border-white/5 flex items-center gap-1">
-                  <span class="w-1 h-1 rounded-full bg-amber-400"></span>${f}
+                  <span class="w-1 h-1 rounded-full bg-amber-400"></span>${escapeHtml(f)}
                 </span>
               `).join('')}
               ${item.flavors.length > 3 ? `<span class="text-[10px] text-gray-400">+${item.flavors.length - 3}</span>` : ''}
@@ -1427,14 +1803,14 @@ function renderItemCard(item, currency) {
         <!-- Fiyat & Detay -->
         <div class="flex items-center justify-between mt-3 pt-2 border-t border-white/5">
           <div class="lounge-price">
-            <span class="amount">${item.price}</span>
-            <span class="currency">${currency}</span>
+            <span class="amount">${safePrice}</span>
+            <span class="currency">${safeCurrency}</span>
           </div>
           <div class="flex items-center gap-2">
             ${!isOutOfStock ? `
               <button 
                 type="button"
-                onclick="event.stopPropagation(); addItemToBillEstimate('${item.id}')" 
+                onclick="event.stopPropagation(); addItemToBillEstimate('${safeId}')" 
                 class="px-2.5 py-1 rounded-xl bg-amber-500/15 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 text-xs font-bold flex items-center gap-1 transition-all active:scale-90"
                 title="Masa hesabına ekle"
               >
@@ -1460,13 +1836,18 @@ function openItemDetails(itemId) {
   const modalContent = document.getElementById('item-detail-content');
   if (!modal || !modalContent) return;
 
-  const currency = menuData.settings.currency || '₺';
+  const currency = escapeHtml(menuData.settings.currency || '₺');
   const fallbackLarge = 'https://images.unsplash.com/photo-1527661591475-527312dd65f5?auto=format&fit=crop&w=600&q=80';
-  const detailImgSrc = resolveImageUrl(item.image, fallbackLarge);
+  const detailImgSrc = escapeHtml(resolveImageUrl(item.image, fallbackLarge));
   const fitMode = item.imageFit || 'cover';
   const detailFitClasses = fitMode === 'contain'
     ? 'relative z-10 w-full h-full object-contain'
     : (fitMode === 'top' ? 'w-full h-full object-cover object-top' : 'w-full h-full object-cover object-center');
+  const safeId = escapeHtml(String(item.id || '')).replace(/'/g, "\\'");
+  const safeName = escapeHtml(item.name || '');
+  const safeBadge = escapeHtml(item.badge || '');
+  const safeDesc = escapeHtml(item.description || 'Detaylı bilgi bulunmuyor.');
+  const safePrice = escapeHtml(item.price ?? 0);
 
   modalContent.innerHTML = `
     <div class="relative h-64 w-full bg-neutral-900 overflow-hidden">
@@ -1476,7 +1857,7 @@ function openItemDetails(itemId) {
              onerror="this.style.display='none'" />
       ` : ''}
       <img src="${detailImgSrc}" 
-           alt="${escapeHtml(item.name)}" 
+           alt="${safeName}" 
            class="${detailFitClasses}"
            onerror="this.src='${fallbackLarge}'" />
       <div class="absolute inset-0 z-10 pointer-events-none bg-gradient-to-t from-neutral-950 via-neutral-950/35 to-transparent"></div>
@@ -1485,9 +1866,9 @@ function openItemDetails(itemId) {
         <i data-lucide="x" class="w-5 h-5"></i>
       </button>
 
-      ${item.badge ? `
+      ${safeBadge ? `
         <span class="absolute bottom-4 left-6 z-20 text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-500 text-black">
-          ${item.badge}
+          ${safeBadge}
         </span>
       ` : ''}
     </div>
@@ -1495,14 +1876,14 @@ function openItemDetails(itemId) {
     <div class="p-6">
       <div class="flex items-start justify-between gap-4">
         <div>
-          <h2 class="text-xl font-bold text-white tracking-tight">${item.name}</h2>
+          <h2 class="text-xl font-bold text-white tracking-tight">${safeName}</h2>
           ${(item.inStock === false || item.isAvailable === false) ? `
             <span class="inline-block mt-1 text-xs text-red-400 font-medium">Bu ürün şu anda tükendi</span>
           ` : ''}
         </div>
         <div class="text-right">
           <div class="lounge-price-lg">
-            <span class="amount">${item.price}</span>
+            <span class="amount">${safePrice}</span>
             <span class="currency">${currency}</span>
           </div>
         </div>
@@ -1510,7 +1891,7 @@ function openItemDetails(itemId) {
 
       <div class="mt-4 pt-4 border-t border-white/10">
         <h4 class="text-xs uppercase font-bold tracking-wider text-gray-400 mb-2">Açıklama</h4>
-        <p class="text-sm text-gray-300 leading-relaxed">${item.description || 'Detaylı bilgi bulunmuyor.'}</p>
+        <p class="text-sm text-gray-300 leading-relaxed">${safeDesc}</p>
       </div>
 
       ${item.flavors && item.flavors.length > 0 ? `
@@ -1519,7 +1900,7 @@ function openItemDetails(itemId) {
           <div class="flex flex-wrap gap-2">
             ${item.flavors.map(f => `
               <span class="px-3 py-1 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs font-medium flex items-center gap-1.5">
-                <i data-lucide="check" class="w-3.5 h-3.5 text-amber-400"></i> ${f}
+                <i data-lucide="check" class="w-3.5 h-3.5 text-amber-400"></i> ${escapeHtml(f)}
               </span>
             `).join('')}
           </div>
@@ -1531,7 +1912,7 @@ function openItemDetails(itemId) {
           Kapat
         </button>
         ${!(item.inStock === false || item.isAvailable === false) ? `
-          <button onclick="addItemToBillEstimate('${item.id}'); closeItemModal();" class="w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold text-sm transition-all flex items-center justify-center gap-1.5 shadow-lg active:scale-95">
+          <button onclick="addItemToBillEstimate('${safeId}'); closeItemModal();" class="w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold text-sm transition-all flex items-center justify-center gap-1.5 shadow-lg active:scale-95">
             <i data-lucide="plus" class="w-4 h-4"></i>
             <span>Hesaba Ekle</span>
           </button>
@@ -1542,7 +1923,7 @@ function openItemDetails(itemId) {
 
   modal.classList.remove('hidden');
   modal.classList.add('flex');
-  document.body.style.overflow = 'hidden';
+  if (document.body && document.body.style) document.body.style.overflow = 'hidden';
   if (window.lucide) lucide.createIcons();
 }
 
@@ -1551,7 +1932,7 @@ function closeItemModal() {
   if (modal) {
     modal.classList.add('hidden');
     modal.classList.remove('flex');
-    document.body.style.overflow = '';
+    if (document.body && document.body.style) document.body.style.overflow = '';
   }
 }
 
@@ -1868,7 +2249,7 @@ function updateCustomerCallModalInProgress(handlerName) {
     descEl.className = 'text-xs text-white mt-2 leading-relaxed p-3 rounded-2xl bg-blue-950/40 border border-blue-500/30';
     descEl.innerHTML = `
       <div class="text-amber-300 font-bold text-sm mb-1">Talebiniz Alındı!</div>
-      İlgili personelimiz <b class="text-amber-400 font-bold">${handlerName}</b> yaklaşık <b class="text-emerald-400">3 dakika içerisinde</b> masanıza ulaşacaktır.
+      İlgili personelimiz <b class="text-amber-400 font-bold">${escapeHtml(handlerName || 'Personel')}</b> yaklaşık <b class="text-emerald-400">3 dakika içerisinde</b> masanıza ulaşacaktır.
     `;
   }
 
@@ -2199,43 +2580,30 @@ function renderBillModalContent() {
     return;
   }
 
+  const safeCurrency = escapeHtml((menuData && menuData.settings && menuData.settings.currency) || '₺');
   listEl.innerHTML = items.map(({ item, count }) => {
-    const itemTotal = (parseFloat(item.price) || 0) * count;
+    const unitPrice = parseFloat(item.price) || 0;
+    const itemTotal = unitPrice * count;
+    const safeId = escapeHtml(String(item.id || '')).replace(/'/g, "\\'");
     return `
     <div class="flex items-center justify-between p-3 rounded-2xl bg-black/40 border border-white/5 hover:border-amber-500/20 transition-all font-sans">
       <div class="min-w-0 flex-1 pr-3">
         <h4 class="text-sm font-semibold text-white tracking-tight truncate">${escapeHtml(item.name)}</h4>
         <div class="flex items-center gap-2 mt-1">
           <div class="lounge-price-sm">
-            <span class="amount">${parseFloat(item.price) || 0}</span>
-            <span class="currency">₺</span>
+            <span class="amount">${unitPrice}</span>
+            <span class="currency">${safeCurrency}</span>
           </div>
-          ${count > 1 ? `<span class="text-[11px] text-gray-400 font-medium">(${count} x ${item.price} ₺ = <span class="text-amber-400 font-bold">${itemTotal.toLocaleString('tr-TR')} ₺</span>)</span>` : ''}
+          ${count > 1 ? `<span class="text-[11px] text-gray-400 font-medium">(${count} x ${unitPrice} ${safeCurrency} = <span class="text-amber-400 font-bold">${itemTotal.toLocaleString('tr-TR')} ${safeCurrency}</span>)</span>` : ''}
         </div>
       </div>
       <div class="flex items-center gap-1.5 flex-shrink-0 bg-white/5 px-2 py-1 rounded-xl border border-white/10">
-        <button onclick="changeBillItemQty('${item.id}', -1)" class="w-6 h-6 rounded-lg bg-white/10 hover:bg-white/20 active:scale-90 text-white flex items-center justify-center font-bold text-xs transition-all" aria-label="Eksilt">-</button>
+        <button onclick="changeBillItemQty('${safeId}', -1)" class="w-6 h-6 rounded-lg bg-white/10 hover:bg-white/20 active:scale-90 text-white flex items-center justify-center font-bold text-xs transition-all" aria-label="Eksilt">-</button>
         <span class="text-xs font-bold text-white w-6 text-center select-none">${count}</span>
-        <button onclick="changeBillItemQty('${item.id}', 1)" class="w-6 h-6 rounded-lg bg-amber-500/25 hover:bg-amber-500/40 active:scale-90 text-amber-300 flex items-center justify-center font-bold text-xs transition-all" aria-label="Artır">+</button>
+        <button onclick="changeBillItemQty('${safeId}', 1)" class="w-6 h-6 rounded-lg bg-amber-500/25 hover:bg-amber-500/40 active:scale-90 text-amber-300 flex items-center justify-center font-bold text-xs transition-all" aria-label="Artır">+</button>
       </div>
     </div>
   `}).join('');
 
   if (window.lucide) lucide.createIcons();
-}
-
-// Müşteri Menüsü İçin Akıllı Arka Plan Otomatik Güncelleme (3.5 sn)
-if (typeof setInterval !== 'undefined') {
-  setInterval(async () => {
-    if (typeof document !== 'undefined' && document.getElementById('menu-app') && document.visibilityState === 'visible' && menuData) {
-      const prevDataStr = JSON.stringify(menuData);
-      await loadMenuData();
-      const nextDataStr = JSON.stringify(menuData);
-      if (prevDataStr !== nextDataStr) {
-        renderHeaderInfo();
-        renderCategoryPills();
-        renderMenuItems();
-      }
-    }
-  }, 3500);
 }

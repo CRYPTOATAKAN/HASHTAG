@@ -35,7 +35,13 @@ window.DEFAULT_MENU_DATA = {
       "heroBannerDesc": "💨 Özel Nargile Karışımları • 🍹 Mocktail & Kahve",
       "moodSlideEnabled": true,
       "moodBannerImage": "",
-      "moodBannerFit": "cover"
+      "moodBannerFit": "cover",
+      "backgroundImage": "",
+      "backgroundFit": "cover",
+      "backgroundOpacity": 36,
+      "backgroundBlur": 0,
+      "ambientEffect": "smoke",
+      "ambientIntensity": "medium"
     },
     "baseUrl": ""
   },

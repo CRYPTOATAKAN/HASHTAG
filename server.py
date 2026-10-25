@@ -778,11 +778,12 @@ def save_push_subs(subs):
         atomic_save_json(PUSH_SUBS_FILE, {"subscriptions": subs})
     except Exception as e:
         print("Error saving push_subs:", e)
-        os.makedirs(DATA_DIR, exist_ok=True)
-        with open(PUSH_SUBS_FILE, "w", encoding="utf-8") as f:
-            json.dump({"subscriptions": subs}, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        print("Error saving push subs:", e)
+        try:
+            os.makedirs(DATA_DIR, exist_ok=True)
+            with open(PUSH_SUBS_FILE, "w", encoding="utf-8") as f:
+                json.dump({"subscriptions": subs}, f, ensure_ascii=False, indent=2)
+        except Exception as e2:
+            print("Error saving push subs fallback:", e2)
 
 def broadcast_web_push(call_obj):
     subs = load_push_subs()
@@ -824,11 +825,61 @@ def broadcast_web_push(call_obj):
         save_push_subs(active_subs)
 
 class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
+    BLOCKED_FILENAMES = {
+        "server.py", "dockerfile", "start-menu.command", ".env", ".gitignore", ".ds_store",
+        "staff_members.json", "vapid.json", "push_subscriptions.json", "staff_logs.json",
+        "calls.json", "feedback.json", "weekly_archives.json", "hookah_timers.json"
+    }
+    BLOCKED_EXTENSIONS = {".py", ".pyc", ".pyo", ".env", ".command", ".sh", ".bak", ".tmp", ".log"}
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=BASE_DIR, **kwargs)
 
+    def _get_client_ip(self):
+        return self.headers.get("X-Forwarded-For", "").split(",")[0].strip() or self.client_address[0]
+
+    def _verify_admin_pin(self, parsed_url=None, allow_query=False):
+        client_ip = self._get_client_ip()
+        if not check_pin_rate_limit(client_ip):
+            self._send_json({"status": "error", "message": "Çok fazla hatalı deneme! Lütfen 60 saniye bekleyin."}, status=429)
+            return False
+
+        admin_pin, _, _ = get_auth_info()
+        client_pin = self.headers.get("X-Admin-PIN", "").strip()
+        if not client_pin and allow_query and parsed_url is not None:
+            client_pin = urllib.parse.parse_qs(parsed_url.query).get("pin", [""])[0].strip()
+
+        if not client_pin or (client_pin != admin_pin and client_pin != "1234"):
+            if client_pin:
+                record_pin_failure(client_ip)
+                time.sleep(0.15)
+            self._send_json({"status": "error", "message": "Yetkisiz erişim"}, status=401)
+            return False
+
+        reset_pin_failures(client_ip)
+        return True
+
+    @classmethod
+    def _is_blocked_rel_path(cls, rel_path):
+        norm = rel_path.replace("\\", "/").lstrip("/")
+        parts = [p for p in norm.split("/") if p]
+        for p in parts:
+            low_p = p.lower()
+            if p in (".", "..") or p.startswith("."):
+                return True
+            if low_p in ("data", "__pycache__"):
+                return True
+            if low_p in cls.BLOCKED_FILENAMES:
+                return True
+        if parts:
+            _, ext = os.path.splitext(parts[-1].lower())
+            if ext in cls.BLOCKED_EXTENSIONS:
+                return True
+        return False
+
     def translate_path(self, path):
-        clean_path = urllib.parse.unquote(urllib.parse.urlparse(path).path).lstrip('/')
+        raw_unquoted = urllib.parse.unquote(urllib.parse.urlparse(path).path).replace("\x00", "")
+        clean_path = raw_unquoted.replace("\\", "/").lstrip("/")
         if clean_path == "" or clean_path == "index.html":
             clean_path = "index.html"
         elif clean_path in ["admin", "admin.html"]:
@@ -836,10 +887,19 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
         elif clean_path in ["staff", "staff.html", "personel", "personel.html"]:
             clean_path = "staff.html"
 
+        if self._is_blocked_rel_path(clean_path) or ".." in raw_unquoted.split("/"):
+            return os.path.join(BASE_DIR, "__forbidden_nonexistent_file__")
+
         filename = os.path.basename(clean_path)
+        if self._is_blocked_rel_path(filename):
+            return os.path.join(BASE_DIR, "__forbidden_nonexistent_file__")
+
+        base_real = os.path.realpath(BASE_DIR)
+        uploads_real = os.path.realpath(UPLOADS_DIR)
+
         if clean_path.startswith("uploads/"):
-            up_cand = os.path.join(UPLOADS_DIR, filename)
-            if os.path.isfile(up_cand):
+            up_cand = os.path.realpath(os.path.join(UPLOADS_DIR, filename))
+            if (up_cand.startswith(uploads_real + os.sep) or up_cand == uploads_real) and os.path.isfile(up_cand):
                 return up_cand
 
         candidates = [
@@ -853,10 +913,13 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
         ]
 
         for cand in candidates:
-            if os.path.isfile(cand):
-                return cand
+            real_cand = os.path.realpath(cand)
+            if not (real_cand.startswith(base_real + os.sep) or real_cand.startswith(uploads_real + os.sep)):
+                continue
+            if os.path.isfile(real_cand):
+                return real_cand
 
-        return os.path.join(PUBLIC_DIR, clean_path)
+        return os.path.join(BASE_DIR, "__not_found_nonexistent_file__")
 
     def end_headers(self):
         if getattr(self, "_is_immutable_asset", False):
@@ -865,6 +928,9 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
             self.send_header("Cache-Control", "no-cache, no-store, must-revalidate, max-age=0")
             self.send_header("Pragma", "no-cache")
             self.send_header("Expires", "0")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "SAMEORIGIN")
+        self.send_header("Referrer-Policy", "strict-origin-when-cross-origin")
         self.send_header("Access-Control-Allow-Origin", "*")
         super().end_headers()
 
@@ -1043,10 +1109,7 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
 
         # Personel Denetim Günlüğü (Audit Logs - Sadece Yönetici)
         if path == "/api/staff/logs":
-            admin_pin, _, _ = get_auth_info()
-            client_pin = self.headers.get("X-Admin-PIN", "").strip()
-            if client_pin != admin_pin and client_pin != "1234":
-                self._send_json({"status": "error", "message": "Yetkisiz erişim"}, status=401)
+            if not self._verify_admin_pin(parsed, allow_query=False):
                 return
             logs = load_logs()
             self._send_json({"status": "success", "logs": logs})
@@ -1054,10 +1117,7 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
 
         # Personel Performans İstatistikleri (Sadece Yönetici)
         if path == "/api/staff/performance":
-            admin_pin, _, _ = get_auth_info()
-            client_pin = self.headers.get("X-Admin-PIN", "").strip()
-            if client_pin != admin_pin and client_pin != "1234":
-                self._send_json({"status": "error", "message": "Yetkisiz erişim"}, status=401)
+            if not self._verify_admin_pin(parsed, allow_query=False):
                 return
 
             members = load_staff_members()
@@ -1109,13 +1169,7 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
 
         # Müşteri Geri Bildirimleri & Memnuniyet Puanları (Sadece Yönetici)
         if path == "/api/admin/feedback":
-            admin_pin, _, _ = get_auth_info()
-            client_pin = self.headers.get("X-Admin-PIN", "").strip()
-            query_pin = urllib.parse.parse_qs(parsed.query).get("pin", [""])[0].strip()
-            effective_pin = client_pin or query_pin
-
-            if effective_pin != admin_pin and effective_pin != "1234":
-                self._send_json({"status": "error", "message": "Yetkisiz erişim"}, status=401)
+            if not self._verify_admin_pin(parsed, allow_query=True):
                 return
 
             archives_data = check_and_run_weekly_reset()
@@ -1138,13 +1192,7 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
 
         # Haftalık Rapor Arşivleri (Sadece Yönetici)
         if path == "/api/admin/weekly-reports":
-            admin_pin, _, _ = get_auth_info()
-            client_pin = self.headers.get("X-Admin-PIN", "").strip()
-            query_pin = urllib.parse.parse_qs(parsed.query).get("pin", [""])[0].strip()
-            effective_pin = client_pin or query_pin
-
-            if effective_pin != admin_pin and effective_pin != "1234":
-                self._send_json({"status": "error", "message": "Yetkisiz erişim"}, status=401)
+            if not self._verify_admin_pin(parsed, allow_query=True):
                 return
 
             archives_data = check_and_run_weekly_reset()
@@ -1294,11 +1342,11 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
                 payload = json.loads(post_body.decode("utf-8"))
 
                 subscription = payload.get("subscription")
-                staff_id = payload.get("staffId", "")
-                staff_name = payload.get("staffName", "")
-                device = payload.get("device", "")
+                staff_id = sanitize_input(payload.get("staffId", ""), max_len=50)
+                staff_name = sanitize_input(payload.get("staffName", ""), max_len=50)
+                device = sanitize_input(payload.get("device", ""), max_len=50)
 
-                if not subscription or not subscription.get("endpoint"):
+                if not isinstance(subscription, dict) or not subscription.get("endpoint"):
                     self._send_json({"status": "error", "message": "Geçersiz abonelik"}, status=400)
                     return
 
@@ -1312,6 +1360,8 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
                     "device": device,
                     "subscribedAt": int(time.time())
                 })
+                if len(subs) > 200:
+                    subs = subs[-200:]
                 save_push_subs(subs)
 
                 self._send_json({"status": "success", "message": "Bildirim aboneliği başarıyla kaydedildi."})
@@ -1330,9 +1380,9 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
                 post_body = self.rfile.read(content_length)
                 payload = json.loads(post_body.decode("utf-8"))
 
-                staff_id = payload.get("staffId")
+                staff_id = sanitize_input(payload.get("staffId"), max_len=50)
                 pin = str(payload.get("pin", "")).strip()
-                device = str(payload.get("device", "Bilinmeyen Cihaz")).strip()
+                device = sanitize_input(payload.get("device", "Bilinmeyen Cihaz"), max_len=60) or "Bilinmeyen Cihaz"
 
                 admin_pin, general_staff_pin, _ = get_auth_info()
                 members = load_staff_members()
@@ -1405,8 +1455,8 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
                 post_body = self.rfile.read(content_length)
                 payload = json.loads(post_body.decode("utf-8"))
 
-                staff_id = payload.get("staffId")
-                device = str(payload.get("device", "Bilinmeyen Cihaz")).strip()
+                staff_id = sanitize_input(payload.get("staffId"), max_len=50)
+                device = sanitize_input(payload.get("device", "Bilinmeyen Cihaz"), max_len=60) or "Bilinmeyen Cihaz"
 
                 members = load_staff_members()
                 current_time = int(time.time())
@@ -1452,11 +1502,14 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
                 post_body = self.rfile.read(content_length)
                 payload = json.loads(post_body.decode("utf-8"))
 
-                call_id = payload.get("callId")
-                new_status = payload.get("status")
-                handler = payload.get("handler", "Personel")
-                handler_id = payload.get("handlerId", "")
-                device = payload.get("device", "")
+                call_id = sanitize_input(payload.get("callId"), max_len=60)
+                new_status = sanitize_input(payload.get("status"), max_len=20)
+                if new_status not in ("pending", "in_progress", "completed"):
+                    self._send_json({"status": "error", "message": "Geçersiz çağrı durumu"}, status=400)
+                    return
+                handler = sanitize_input(payload.get("handler", "Personel"), max_len=50) or "Personel"
+                handler_id = sanitize_input(payload.get("handlerId", ""), max_len=50)
+                device = sanitize_input(payload.get("device", ""), max_len=60)
 
                 calls_data = load_calls()
                 updated = False
@@ -1519,17 +1572,23 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
                 post_body = self.rfile.read(content_length)
                 payload = json.loads(post_body.decode("utf-8"))
 
-                table = sanitize_input(payload.get("table", "Masa"), max_len=30)
-                rating = int(payload.get("rating", 5))
+                table = sanitize_input(payload.get("table", "Masa"), max_len=30) or "Masa"
+                try:
+                    rating = int(payload.get("rating", 5))
+                except (TypeError, ValueError):
+                    rating = 5
                 rating = max(1, min(5, rating))
-                tags = [sanitize_input(t, max_len=30) for t in payload.get("tags", [])][:5]
+                raw_tags = payload.get("tags", [])
+                if not isinstance(raw_tags, list):
+                    raw_tags = []
+                tags = [sanitize_input(t, max_len=30) for t in raw_tags][:5]
                 comment = sanitize_input(payload.get("comment", ""), max_len=250)
                 call_id = sanitize_input(payload.get("callId", ""), max_len=50)
 
                 feedbacks = load_feedback()
                 current_time = int(time.time())
                 tr_time = current_time + (3 * 3600)
-                time_str = time.strftime("%d.%m.%Y %H:%M:%S", t_struct if 't_struct' in locals() else time.gmtime(tr_time))
+                time_str = time.strftime("%d.%m.%Y %H:%M:%S", time.gmtime(tr_time))
 
                 new_fb = {
                     "id": f"fb-{current_time}-{int(time.time() * 1000) % 10000}",
@@ -1589,7 +1648,7 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
                 post_body = self.rfile.read(content_length)
                 payload = json.loads(post_body.decode("utf-8"))
 
-                item_id = payload.get("itemId")
+                item_id = sanitize_input(payload.get("itemId"), max_len=80)
                 is_available = payload.get("isAvailable")
                 staff_name = sanitize_input(payload.get("staffName", "Personel"), max_len=50)
                 staff_id = sanitize_input(payload.get("staffId", ""), max_len=50)
@@ -1622,6 +1681,12 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
                 if found_item:
                     menu_obj["updatedAt"] = int(time.time() * 1000)
                     atomic_save_json(DATA_FILE, menu_obj)
+                    public_menu_file = os.path.join(PUBLIC_DIR, "data", "menu.json")
+                    if os.path.exists(os.path.dirname(public_menu_file)):
+                        try:
+                            atomic_save_json(public_menu_file, menu_obj)
+                        except Exception:
+                            pass
 
                     # Log kaydet
                     st_text = "Stokta Var" if is_available else "Tükendi"
@@ -1648,7 +1713,7 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
                 post_body = self.rfile.read(content_length)
                 payload = json.loads(post_body.decode("utf-8"))
 
-                item_id = payload.get("itemId")
+                item_id = sanitize_input(payload.get("itemId"), max_len=80)
                 raw_price = payload.get("price")
                 staff_name = sanitize_input(payload.get("staffName", "Personel"), max_len=50)
                 staff_id = sanitize_input(payload.get("staffId", ""), max_len=50)
@@ -1695,6 +1760,12 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
                 if found_item:
                     menu_obj["updatedAt"] = int(time.time() * 1000)
                     atomic_save_json(DATA_FILE, menu_obj)
+                    public_menu_file = os.path.join(PUBLIC_DIR, "data", "menu.json")
+                    if os.path.exists(os.path.dirname(public_menu_file)):
+                        try:
+                            atomic_save_json(public_menu_file, menu_obj)
+                        except Exception:
+                            pass
 
                     append_log(
                         staff_id=staff_id or "staff",
@@ -1715,10 +1786,7 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
         # 8. Personel Yönetimi (Yönetici Tarafından Personel Ekleme / Güncelleme)
         if path == "/api/admin/staff/save":
             try:
-                admin_pin, _, _ = get_auth_info()
-                client_pin = self.headers.get("X-Admin-PIN", "").strip()
-                if client_pin != admin_pin and client_pin != "1234":
-                    self._send_json({"status": "error", "message": "Yetkisiz erişim"}, status=401)
+                if not self._verify_admin_pin(parsed, allow_query=False):
                     return
 
                 content_length = int(self.headers.get("Content-Length", 0))
@@ -1767,16 +1835,13 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
         # 9. Personel Silme (Yönetici)
         if path == "/api/admin/staff/delete":
             try:
-                admin_pin, _, _ = get_auth_info()
-                client_pin = self.headers.get("X-Admin-PIN", "").strip()
-                if client_pin != admin_pin and client_pin != "1234":
-                    self._send_json({"status": "error", "message": "Yetkisiz erişim"}, status=401)
+                if not self._verify_admin_pin(parsed, allow_query=False):
                     return
 
                 content_length = int(self.headers.get("Content-Length", 0))
                 post_body = self.rfile.read(content_length)
                 payload = json.loads(post_body.decode("utf-8"))
-                staff_id = payload.get("id")
+                staff_id = sanitize_input(payload.get("id"), max_len=50)
 
                 members = load_staff_members()
                 members = [m for m in members if m["id"] != staff_id]
@@ -1790,10 +1855,7 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
         # 10. Yönetici Menü Güncelleme
         if path in ["/api/menu/update", "/api/settings/update"]:
             try:
-                admin_pin, _, _ = get_auth_info()
-                client_pin = self.headers.get("X-Admin-PIN", "").strip()
-                if client_pin != admin_pin and client_pin != "1234":
-                    self._send_json({"status": "error", "message": "Yetkisiz erişim"}, status=401)
+                if not self._verify_admin_pin(parsed, allow_query=False):
                     return
 
                 content_length = int(self.headers.get("Content-Length", 0))
@@ -1834,10 +1896,7 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
         # 11. Tüm Bildirimleri Sıfırla & Haftalık Rapora Arşivle (Yönetici)
         if path == "/api/admin/notifications/reset":
             try:
-                admin_pin, _, _ = get_auth_info()
-                client_pin = self.headers.get("X-Admin-PIN", "").strip()
-                if client_pin != admin_pin and client_pin != "1234":
-                    self._send_json({"status": "error", "message": "Yetkisiz erişim"}, status=401)
+                if not self._verify_admin_pin(parsed, allow_query=False):
                     return
 
                 archive_before = True
@@ -1865,15 +1924,12 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
         # 12. Geçmiş Hafta Raporunu Sil (Yönetici)
         if path == "/api/admin/weekly-reports/delete":
             try:
-                admin_pin, _, _ = get_auth_info()
-                client_pin = self.headers.get("X-Admin-PIN", "").strip()
-                if client_pin != admin_pin and client_pin != "1234":
-                    self._send_json({"status": "error", "message": "Yetkisiz erişim"}, status=401)
+                if not self._verify_admin_pin(parsed, allow_query=False):
                     return
 
                 post_body = self.rfile.read(content_length)
                 payload = json.loads(post_body.decode("utf-8"))
-                report_id = payload.get("id", "")
+                report_id = sanitize_input(payload.get("id", ""), max_len=80)
 
                 archives_data = load_weekly_archives()
                 archives_data["archives"] = [r for r in archives_data.get("archives", []) if r.get("id") != report_id]
@@ -1891,10 +1947,7 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
         # 13. Evrensel Fotoğraf Yükleme & Dönüştürme (Yönetici - Telefon & Bilgisayar, Tüm Boyut ve Dosya Türleri)
         if path == "/api/admin/upload-image":
             try:
-                admin_pin, _, _ = get_auth_info()
-                client_pin = self.headers.get("X-Admin-PIN", "").strip()
-                if client_pin != admin_pin and client_pin != "1234":
-                    self._send_json({"status": "error", "message": "Yetkisiz erişim"}, status=401)
+                if not self._verify_admin_pin(parsed, allow_query=False):
                     return
 
                 post_body = self.rfile.read(content_length)

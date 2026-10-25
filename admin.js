@@ -226,8 +226,14 @@ function renderAdminProductTable() {
             const cat = menuData.categories.find(c => c.id === item.categoryId);
             const isOut = item.inStock === false || item.isAvailable === false;
             const thumbFallback = 'https://images.unsplash.com/photo-1527661591475-527312dd65f5?auto=format&fit=crop&w=100&q=80';
-            const thumbSrc = resolveAdminImageUrl(item.image, thumbFallback);
+            const thumbSrc = escapeHtml(resolveAdminImageUrl(item.image, thumbFallback));
             const thumbFit = item.imageFit === 'contain' ? 'object-contain' : (item.imageFit === 'top' ? 'object-cover object-top' : 'object-cover');
+            const safeId = escapeHtml(String(item.id || '')).replace(/'/g, "\\'");
+            const safeName = escapeHtml(item.name || '');
+            const safeBadge = escapeHtml(item.badge || '');
+            const safeCatName = escapeHtml(cat ? cat.name : (item.categoryId || ''));
+            const safePrice = escapeHtml(item.price ?? 0);
+            const safeCurrency = escapeHtml(currency || '₺');
 
             return `
               <tr class="hover:bg-white/5 transition-colors">
@@ -238,25 +244,25 @@ function renderAdminProductTable() {
                          onerror="this.src='${thumbFallback}'" />
                     <div>
                       <div class="font-semibold text-white flex items-center gap-2">
-                        ${item.name}
-                        ${item.badge ? `<span class="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">${item.badge}</span>` : ''}
+                        ${safeName}
+                        ${safeBadge ? `<span class="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">${safeBadge}</span>` : ''}
                       </div>
                       ${item.flavors && item.flavors.length > 0 ? `
-                        <div class="text-[11px] text-gray-400 mt-0.5">${item.flavors.join(' • ')}</div>
+                        <div class="text-[11px] text-gray-400 mt-0.5">${item.flavors.map(f => escapeHtml(f)).join(' • ')}</div>
                       ` : ''}
                     </div>
                   </div>
                 </td>
                 <td class="py-3 px-4">
                   <span class="text-xs px-2.5 py-1 rounded-full bg-white/5 border border-white/10">
-                    ${cat ? cat.name : item.categoryId}
+                    ${safeCatName}
                   </span>
                 </td>
                 <td class="py-3 px-4">
-                  <span class="font-bold text-amber-400 font-mono text-base">${item.price} ${currency}</span>
+                  <span class="font-bold text-amber-400 font-mono text-base">${safePrice} ${safeCurrency}</span>
                 </td>
                 <td class="py-3 px-4">
-                  <button onclick="toggleStockStatus('${item.id}')" 
+                  <button onclick="toggleStockStatus('${safeId}')" 
                           class="px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1.5 transition-colors ${
                             isOut 
                               ? 'bg-red-500/20 text-red-300 border border-red-500/30' 
@@ -268,10 +274,10 @@ function renderAdminProductTable() {
                 </td>
                 <td class="py-3 px-4 text-right">
                   <div class="flex items-center justify-end gap-2">
-                    <button onclick="openEditItemModal('${item.id}')" class="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white transition-colors" title="Düzenle">
+                    <button onclick="openEditItemModal('${safeId}')" class="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white transition-colors" title="Düzenle">
                       <i data-lucide="edit-3" class="w-4 h-4"></i>
                     </button>
-                    <button onclick="deleteItem('${item.id}')" class="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 transition-colors" title="Sil">
+                    <button onclick="deleteItem('${safeId}')" class="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 transition-colors" title="Sil">
                       <i data-lucide="trash-2" class="w-4 h-4"></i>
                     </button>
                   </div>
@@ -328,26 +334,28 @@ function renderQuickPriceTable() {
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
-        ${items.map(item => `
+        ${items.map(item => {
+          const safeId = escapeHtml(String(item.id || '')).replace(/'/g, "\\'");
+          return `
           <div class="flex items-center justify-between p-3 rounded-xl bg-neutral-900 border border-white/5 hover:border-white/10 transition-colors">
             <div class="min-w-0 pr-3">
-              <div class="font-medium text-white text-sm truncate">${item.name}</div>
-              <div class="text-xs text-gray-400">${item.badge || 'Standart'}</div>
+              <div class="font-medium text-white text-sm truncate">${escapeHtml(item.name || '')}</div>
+              <div class="text-xs text-gray-400">${escapeHtml(item.badge || 'Standart')}</div>
             </div>
             <div class="flex items-center gap-2 flex-shrink-0">
-              <span id="quick-status-${item.id}" class="text-[11px] font-semibold text-emerald-400 opacity-0 transition-opacity duration-300">✓ Kaydedildi</span>
+              <span id="quick-status-${escapeHtml(item.id || '')}" class="text-[11px] font-semibold text-emerald-400 opacity-0 transition-opacity duration-300">✓ Kaydedildi</span>
               <input 
                 type="number" 
-                id="quick-price-${item.id}" 
-                value="${item.price}" 
-                onchange="saveSingleQuickPrice('${item.id}', this.value)"
+                id="quick-price-${escapeHtml(item.id || '')}" 
+                value="${escapeHtml(item.price ?? 0)}" 
+                onchange="saveSingleQuickPrice('${safeId}', this.value)"
                 onkeydown="if(event.key==='Enter'){ this.blur(); }"
                 class="w-24 px-3 py-1.5 rounded-lg bg-black border border-white/20 text-right font-mono font-bold text-amber-400 focus:outline-none focus:border-amber-400 text-sm"
               />
-              <span class="text-xs text-gray-400 font-semibold">${currency}</span>
+              <span class="text-xs text-gray-400 font-semibold">${escapeHtml(currency)}</span>
             </div>
           </div>
-        `).join('')}
+        `}).join('')}
       </div>
     </div>
   `;
@@ -461,7 +469,7 @@ function fillCategorySelect(selectedCatId = null) {
   const sel = document.getElementById('form-item-category');
   if (!sel) return;
   sel.innerHTML = menuData.categories.map(cat => `
-    <option value="${cat.id}" ${cat.id === selectedCatId ? 'selected' : ''}>${cat.name}</option>
+    <option value="${escapeHtml(cat.id)}" ${cat.id === selectedCatId ? 'selected' : ''}>${escapeHtml(cat.name)}</option>
   `).join('');
 }
 
@@ -1101,20 +1109,20 @@ function updateQrPreview() {
         <div class="mb-4">
           <div class="w-14 h-14 rounded-2xl overflow-hidden border border-amber-500/40 mx-auto mb-2 shadow-lg shadow-amber-500/20 bg-black flex items-center justify-center">
             <img 
-              src="${qrLogoSrc}" 
+              src="${escapeHtml(qrLogoSrc)}" 
               onerror="if(!this.src.includes('hashtag-logo.jpg')) { this.src='hashtag-logo.jpg?v=2.3'; } else if(!this.src.includes('images/')) { this.src='images/hashtag-logo.jpg?v=2.3'; }"
               alt="HASHTAG" 
               class="${qrLogoFitClass}" 
             />
           </div>
-          <h2 class="text-2xl font-black tracking-tight text-white uppercase">${menuData.settings.cafeName || 'HASHTAG'}</h2>
+          <h2 class="text-2xl font-black tracking-tight text-white uppercase">${escapeHtml(menuData.settings.cafeName || 'HASHTAG')}</h2>
           <p class="text-xs text-amber-400 font-semibold tracking-widest uppercase mt-0.5">Lounge & Hookah</p>
         </div>
 
         <!-- Masa Numarası -->
         ${tableNum ? `
           <div class="my-3 py-1.5 px-4 rounded-full bg-amber-500/15 border border-amber-500/30 inline-block">
-            <span class="text-sm font-bold text-amber-300 uppercase tracking-wider">MASA ${tableNum}</span>
+            <span class="text-sm font-bold text-amber-300 uppercase tracking-wider">MASA ${escapeHtml(tableNum)}</span>
           </div>
         ` : `
           <div class="my-3 py-1.5 px-4 rounded-full bg-white/5 border border-white/10 inline-block">
@@ -1137,8 +1145,8 @@ function updateQrPreview() {
 
         <!-- Wi-Fi Kutusu -->
         <div class="mt-4 pt-4 border-t border-white/10 flex items-center justify-center gap-4 text-[11px] text-gray-400">
-          <div><span class="text-gray-500">Wi-Fi:</span> <strong class="text-white">${menuData.settings.wifiName || 'HASHTAG'}</strong></div>
-          <div><span class="text-gray-500">Şifre:</span> <strong class="text-amber-400">${menuData.settings.wifiPassword || ''}</strong></div>
+          <div><span class="text-gray-500">Wi-Fi:</span> <strong class="text-white">${escapeHtml(menuData.settings.wifiName || 'HASHTAG')}</strong></div>
+          <div><span class="text-gray-500">Şifre:</span> <strong class="text-amber-400">${escapeHtml(menuData.settings.wifiPassword || '')}</strong></div>
         </div>
       </div>
     `;
@@ -1236,6 +1244,12 @@ function fillSettingsForm() {
   setVal('set-hero-banner-desc', bm.heroBannerDesc !== undefined ? bm.heroBannerDesc : '💨 Özel Nargile Karışımları • 🍹 Mocktail & Kahve');
   setVal('set-brand-mood-image', bm.moodBannerImage || '');
   setVal('set-brand-mood-fit', bm.moodBannerFit || 'cover');
+  setVal('set-brand-bg-image', bm.backgroundImage || '');
+  setVal('set-brand-bg-fit', bm.backgroundFit || 'cover');
+  setVal('set-brand-bg-opacity', bm.backgroundOpacity !== undefined && bm.backgroundOpacity !== null && bm.backgroundOpacity !== '' ? bm.backgroundOpacity : 36);
+  setVal('set-brand-bg-blur', bm.backgroundBlur !== undefined && bm.backgroundBlur !== null && bm.backgroundBlur !== '' ? bm.backgroundBlur : 0);
+  setVal('set-ambient-effect', bm.ambientEffect || 'smoke');
+  setVal('set-ambient-intensity', bm.ambientIntensity || 'medium');
 
   const isMoodEnabled = bm.moodSlideEnabled !== false;
   const moodEnabledEl = document.getElementById('set-mood-slide-enabled');
@@ -1248,6 +1262,13 @@ function fillSettingsForm() {
     setBrandMediaSlotFit('logo', bm.logoFit || 'cover', false);
     setBrandMediaSlotFit('hero', bm.heroBannerFit || 'cover', false);
     setBrandMediaSlotFit('mood', bm.moodBannerFit || 'cover', false);
+    setBrandMediaSlotFit('bg', bm.backgroundFit || 'cover', false);
+  }
+  if (typeof updateAmbientEffectSelectorUI === 'function') {
+    updateAmbientEffectSelectorUI(bm.ambientEffect || 'smoke', bm.ambientIntensity || 'medium');
+  }
+  if (typeof previewBackgroundStyleSliders === 'function') {
+    previewBackgroundStyleSliders();
   }
   if (typeof updateMoodSlideToggleUI === 'function') {
     updateMoodSlideToggleUI(isMoodEnabled);
@@ -1506,7 +1527,8 @@ function renderAdminStaffTable() {
   tbody.innerHTML = adminStaffList.map(s => {
     const isOnline = !!s.isOnline;
     const name = s.name || 'Personel';
-    const firstChar = name.charAt(0) || 'P';
+    const firstChar = escapeHtml(name.charAt(0) || 'P');
+    const safeStaffId = escapeHtml(String(s.id || '')).replace(/'/g, "\\'");
     return `
       <tr class="hover:bg-white/5 transition-colors">
         <td class="py-3 pr-3">
@@ -1552,10 +1574,10 @@ function renderAdminStaffTable() {
         </td>
         <td class="py-3 pl-3 text-right">
           <div class="flex items-center justify-end gap-1.5">
-            <button onclick="editStaffMember('${s.id}')" class="p-1.5 rounded-lg bg-white/5 hover:bg-amber-500/20 text-gray-300 hover:text-amber-400 transition-colors" title="Düzenle">
+            <button onclick="editStaffMember('${safeStaffId}')" class="p-1.5 rounded-lg bg-white/5 hover:bg-amber-500/20 text-gray-300 hover:text-amber-400 transition-colors" title="Düzenle">
               <i data-lucide="edit-2" class="w-3.5 h-3.5"></i>
             </button>
-            <button onclick="deleteStaffMember('${s.id}')" class="p-1.5 rounded-lg bg-white/5 hover:bg-red-500/20 text-gray-300 hover:text-red-400 transition-colors" title="Sil">
+            <button onclick="deleteStaffMember('${safeStaffId}')" class="p-1.5 rounded-lg bg-white/5 hover:bg-red-500/20 text-gray-300 hover:text-red-400 transition-colors" title="Sil">
               <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
             </button>
           </div>
@@ -3276,7 +3298,8 @@ function setupUniversalImageDropAndPaste() {
     'announcement-image-dropzone',
     'brand-logo-dropzone',
     'brand-hero-dropzone',
-    'brand-mood-dropzone'
+    'brand-mood-dropzone',
+    'brand-bg-dropzone'
   ];
 
   document.addEventListener('dragover', (e) => {
@@ -3305,6 +3328,7 @@ function setupUniversalImageDropAndPaste() {
     const logoZone = document.getElementById('brand-logo-dropzone');
     const heroZone = document.getElementById('brand-hero-dropzone');
     const moodZone = document.getElementById('brand-mood-dropzone');
+    const bgZone = document.getElementById('brand-bg-dropzone');
 
     if (itemZone && itemZone.contains(e.target)) {
       e.preventDefault();
@@ -3346,6 +3370,17 @@ function setupUniversalImageDropAndPaste() {
       if (files && files.length > 0) {
         brandMediaUploadState.mood.manualFit = false;
         await applyUploadedBrandMediaFile('mood', files[0], 0, true);
+      }
+      return;
+    }
+
+    if (bgZone && bgZone.contains(e.target)) {
+      e.preventDefault();
+      bgZone.classList.remove('border-amber-400', 'bg-amber-500/10');
+      const files = e.dataTransfer && e.dataTransfer.files;
+      if (files && files.length > 0) {
+        brandMediaUploadState.bg.manualFit = false;
+        await applyUploadedBrandMediaFile('bg', files[0], 0, true);
       }
       return;
     }
@@ -3730,15 +3765,21 @@ const DEFAULT_BRAND_MOOD_IMG = 'https://images.unsplash.com/photo-1517248135467-
 const brandMediaUploadState = {
   logo: { file: null, rotation: 0, busy: false, manualFit: false },
   hero: { file: null, rotation: 0, busy: false, manualFit: false },
-  mood: { file: null, rotation: 0, busy: false, manualFit: false }
+  mood: { file: null, rotation: 0, busy: false, manualFit: false },
+  bg: { file: null, rotation: 0, busy: false, manualFit: false }
 };
 
 function isAnyBrandMediaUploading() {
-  return !!(brandMediaUploadState.logo.busy || brandMediaUploadState.hero.busy || brandMediaUploadState.mood.busy);
+  return !!(
+    brandMediaUploadState.logo.busy ||
+    brandMediaUploadState.hero.busy ||
+    brandMediaUploadState.mood.busy ||
+    brandMediaUploadState.bg.busy
+  );
 }
 
 function resetBrandMediaUploadState() {
-  ['logo', 'hero', 'mood'].forEach(slot => {
+  ['logo', 'hero', 'mood', 'bg'].forEach(slot => {
     brandMediaUploadState[slot].file = null;
     brandMediaUploadState[slot].rotation = 0;
     brandMediaUploadState[slot].busy = false;
@@ -3755,6 +3796,18 @@ function openBrandMediaSection() {
       section.scrollIntoView({ behavior: 'smooth', block: 'start' });
       section.classList.add('ring-2', 'ring-amber-400');
       setTimeout(() => section.classList.remove('ring-2', 'ring-amber-400'), 1800);
+    }
+  }, 60);
+}
+
+function openAmbientBackgroundSection() {
+  switchTab('settings');
+  setTimeout(() => {
+    const section = document.getElementById('ambient-background-plugin-section') || document.getElementById('brand-media-manager-section');
+    if (section) {
+      section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      section.classList.add('ring-2', 'ring-cyan-400');
+      setTimeout(() => section.classList.remove('ring-2', 'ring-cyan-400'), 1800);
     }
   }, 60);
 }
@@ -3785,6 +3838,30 @@ function readBrandMediaFormObject() {
   const moodEnEl = document.getElementById('set-mood-slide-enabled');
   const moodImgEl = document.getElementById('set-brand-mood-image');
   const moodFitEl = document.getElementById('set-brand-mood-fit');
+  const bgImgEl = document.getElementById('set-brand-bg-image');
+  const bgFitEl = document.getElementById('set-brand-bg-fit');
+  const bgOpacityEl = document.getElementById('set-brand-bg-opacity');
+  const bgBlurEl = document.getElementById('set-brand-bg-blur');
+  const ambientEffectEl = document.getElementById('set-ambient-effect');
+  const ambientIntensityEl = document.getElementById('set-ambient-intensity');
+
+  const rawOpacity = bgOpacityEl ? Number(bgOpacityEl.value) : Number(cur.backgroundOpacity);
+  const backgroundOpacity = Number.isFinite(rawOpacity) && rawOpacity >= 5
+    ? Math.max(5, Math.min(95, rawOpacity))
+    : 36;
+
+  const rawBlur = bgBlurEl ? Number(bgBlurEl.value) : Number(cur.backgroundBlur);
+  const backgroundBlur = Number.isFinite(rawBlur) && rawBlur >= 0
+    ? Math.max(0, Math.min(24, rawBlur))
+    : 0;
+
+  const validEffects = ['smoke', 'gold-embers', 'ember-smoke', 'neon-mist', 'starlight', 'none'];
+  const rawEff = ambientEffectEl ? ambientEffectEl.value.trim() : (cur.ambientEffect || 'smoke');
+  const ambientEffect = validEffects.includes(rawEff) ? rawEff : 'smoke';
+
+  const validIntensities = ['low', 'medium', 'high'];
+  const rawInt = ambientIntensityEl ? ambientIntensityEl.value.trim() : (cur.ambientIntensity || 'medium');
+  const ambientIntensity = validIntensities.includes(rawInt) ? rawInt : 'medium';
 
   return {
     ...cur,
@@ -3801,7 +3878,13 @@ function readBrandMediaFormObject() {
       : (cur.heroBannerDesc ?? '💨 Özel Nargile Karışımları • 🍹 Mocktail & Kahve'),
     moodSlideEnabled: moodEnEl ? moodEnEl.checked : (cur.moodSlideEnabled !== false),
     moodBannerImage: moodImgEl ? moodImgEl.value.trim() : (cur.moodBannerImage || ''),
-    moodBannerFit: moodFitEl ? (moodFitEl.value || 'cover') : (cur.moodBannerFit || 'cover')
+    moodBannerFit: moodFitEl ? (moodFitEl.value || 'cover') : (cur.moodBannerFit || 'cover'),
+    backgroundImage: bgImgEl ? bgImgEl.value.trim() : (cur.backgroundImage || ''),
+    backgroundFit: bgFitEl ? (bgFitEl.value || 'cover') : (cur.backgroundFit || 'cover'),
+    backgroundOpacity,
+    backgroundBlur,
+    ambientEffect,
+    ambientIntensity
   };
 }
 
@@ -3854,7 +3937,7 @@ function syncHeroPreviewTexts() {
 }
 
 function setBrandMediaSlotFit(slot, fitMode, isManual = true) {
-  if (!['logo', 'hero', 'mood'].includes(slot)) return;
+  if (!['logo', 'hero', 'mood', 'bg'].includes(slot)) return;
   const allowedModes = slot === 'logo' ? ['cover', 'contain'] : ['cover', 'top', 'contain'];
   const validMode = allowedModes.includes(fitMode) ? fitMode : 'cover';
 
@@ -3937,6 +4020,67 @@ function updateBrandMediaPreviewUI(slot, fitMode = null) {
     return;
   }
 
+  if (slot === 'bg') {
+    const heroCleanUrl = (document.getElementById('set-brand-hero-image')?.value || '').trim();
+    const effectiveUrl = cleanUrl || heroCleanUrl;
+    const resolved = effectiveUrl
+      ? resolveAdminImageUrl(effectiveUrl, DEFAULT_BRAND_HERO_IMG)
+      : DEFAULT_BRAND_HERO_IMG;
+    const previewImg = document.getElementById('brand-bg-preview');
+    const blurBg = document.getElementById('brand-bg-blur-bg');
+    const captionEl = document.getElementById('brand-bg-caption');
+
+    if (previewImg) {
+      previewImg.src = resolved;
+      previewImg.onerror = () => {
+        if (!previewImg.src.includes('hashtag-banner.jpg')) previewImg.src = DEFAULT_BRAND_HERO_IMG;
+        else if (!previewImg.src.includes('images/')) previewImg.src = 'images/hashtag-banner.jpg?v=3.0';
+      };
+
+      if (mode === 'contain' && effectiveUrl) {
+        previewImg.className = 'relative z-10 w-full h-full object-contain transition-all duration-300';
+        if (blurBg) {
+          blurBg.src = resolved;
+          blurBg.classList.remove('hidden');
+        }
+      } else if (mode === 'top') {
+        previewImg.className = 'relative z-10 w-full h-full object-cover object-top transition-all duration-300';
+        if (blurBg) blurBg.classList.add('hidden');
+      } else {
+        previewImg.className = 'relative z-10 w-full h-full object-cover object-center transition-all duration-300';
+        if (blurBg) blurBg.classList.add('hidden');
+      }
+    }
+
+    if (clearBtn) {
+      if (hasCustom) clearBtn.classList.remove('hidden');
+      else clearBtn.classList.add('hidden');
+    }
+
+    if (captionEl) {
+      captionEl.textContent = hasCustom
+        ? 'Özel tam ekran arka plan fotoğrafı aktif'
+        : (heroCleanUrl ? 'Anasayfa 1. slayt fotoğrafı arka plan olarak kullanılıyor' : 'Varsayılan orijinal neon tuğla arka plan aktif');
+    }
+
+    if (statusEl && !brandMediaUploadState.bg.busy) {
+      if (hasCustom) {
+        if (!statusEl.textContent.startsWith('✓')) {
+          statusEl.textContent = '✓ Özel Arka Plan Aktif';
+          statusEl.className = 'text-[10px] px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-mono';
+        }
+      } else {
+        statusEl.textContent = heroCleanUrl ? '1. Slayt Görseli Aktif' : 'Varsayılan Arka Plan Aktif';
+        statusEl.className = 'text-[10px] px-2.5 py-0.5 rounded-full bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 font-mono';
+      }
+    }
+
+    if (typeof previewBackgroundStyleSliders === 'function') {
+      previewBackgroundStyleSliders();
+    }
+    return;
+  }
+
   // Hero (1. Slayt) veya Mood (3. Slayt)
   const fallbackImg = slot === 'hero' ? DEFAULT_BRAND_HERO_IMG : DEFAULT_BRAND_MOOD_IMG;
   const previewImg = document.getElementById(`brand-${slot}-preview`);
@@ -3997,6 +4141,175 @@ function updateBrandMediaPreviewUI(slot, fitMode = null) {
       statusEl.textContent = slot === 'hero' ? 'Varsayılan Kapak Aktif' : 'Saat Bazlı Otomatik Görsel';
       statusEl.className = 'text-[10px] px-2.5 py-1 rounded-full bg-white/5 text-amber-300 border border-white/10 font-mono';
     }
+  }
+
+  // Hero değiştiğinde eğer özel bg seçilmemişse bg önizlemesini de senkronize et
+  if (slot === 'hero') {
+    const bgFit = document.getElementById('set-brand-bg-fit')?.value || 'cover';
+    updateBrandMediaPreviewUI('bg', bgFit);
+  }
+}
+
+const AMBIENT_EFFECT_META = {
+  'smoke': {
+    label: '💨 Klasik Nargile Dumanı',
+    overlayBg: 'radial-gradient(circle at 25% 75%, rgba(255,255,255,0.28) 0%, rgba(6,182,212,0.16) 45%, transparent 70%), radial-gradient(circle at 80% 30%, rgba(245,158,11,0.18) 0%, transparent 65%)'
+  },
+  'gold-embers': {
+    label: '🔥 Altın Köz Kıvılcımları',
+    overlayBg: 'radial-gradient(circle at 30% 80%, rgba(251,191,36,0.34) 0%, rgba(234,88,12,0.22) 42%, transparent 70%), radial-gradient(circle at 75% 40%, rgba(253,224,71,0.28) 0%, rgba(245,158,11,0.14) 50%, transparent 70%)'
+  },
+  'ember-smoke': {
+    label: '🔥💨 Duman + Köz Ateşi',
+    overlayBg: 'radial-gradient(circle at 25% 75%, rgba(255,255,255,0.26) 0%, rgba(245,158,11,0.22) 45%, transparent 70%), radial-gradient(circle at 78% 35%, rgba(251,191,36,0.30) 0%, rgba(234,88,12,0.16) 50%, transparent 70%)'
+  },
+  'neon-mist': {
+    label: '💜 Neon Lounge Sisi',
+    overlayBg: 'radial-gradient(circle at 25% 75%, rgba(217,70,239,0.34) 0%, rgba(147,51,234,0.20) 45%, transparent 70%), radial-gradient(circle at 80% 30%, rgba(34,211,238,0.30) 0%, rgba(6,182,212,0.16) 50%, transparent 70%)'
+  },
+  'starlight': {
+    label: '✨ Lüks Bokeh & Yıldız Tozu',
+    overlayBg: 'radial-gradient(circle at 30% 65%, rgba(254,240,138,0.28) 0%, rgba(251,191,36,0.14) 40%, transparent 68%), radial-gradient(circle at 75% 35%, rgba(224,242,254,0.26) 0%, transparent 65%)'
+  },
+  'none': {
+    label: '🚫 Efekt Kapalı (Sade)',
+    overlayBg: 'none'
+  }
+};
+
+const AMBIENT_INTENSITY_LABELS = {
+  'low': 'Hafif',
+  'medium': 'Dengeli',
+  'high': 'Yoğun'
+};
+
+function previewBackgroundStyleSliders() {
+  const opacityEl = document.getElementById('set-brand-bg-opacity');
+  const blurEl = document.getElementById('set-brand-bg-blur');
+  const opacityLabel = document.getElementById('brand-bg-opacity-label');
+  const blurLabel = document.getElementById('brand-bg-blur-label');
+  const previewImg = document.getElementById('brand-bg-preview');
+
+  const rawOp = opacityEl ? Number(opacityEl.value) : 36;
+  const op = Number.isFinite(rawOp) ? Math.max(5, Math.min(95, rawOp)) : 36;
+
+  const rawBl = blurEl ? Number(blurEl.value) : 0;
+  const bl = Number.isFinite(rawBl) ? Math.max(0, Math.min(24, rawBl)) : 0;
+
+  if (opacityLabel) opacityLabel.textContent = `%${op}`;
+  if (blurLabel) blurLabel.textContent = bl > 0 ? `${bl}px` : '0px (Net)';
+
+  if (previewImg && previewImg.style) {
+    previewImg.style.opacity = String((op / 100).toFixed(2));
+    previewImg.style.filter = bl > 0
+      ? `blur(${bl}px) contrast(1.15) brightness(0.88) saturate(1.1)`
+      : 'contrast(1.15) brightness(0.88) saturate(1.1)';
+  }
+}
+
+function updateAmbientEffectSelectorUI(effectMode, intensityLevel) {
+  const validEffects = ['smoke', 'gold-embers', 'ember-smoke', 'neon-mist', 'starlight', 'none'];
+  const eff = validEffects.includes(effectMode) ? effectMode : 'smoke';
+
+  const validIntensities = ['low', 'medium', 'high'];
+  const inten = validIntensities.includes(intensityLevel) ? intensityLevel : 'medium';
+
+  const effInput = document.getElementById('set-ambient-effect');
+  if (effInput) effInput.value = eff;
+
+  const intenInput = document.getElementById('set-ambient-intensity');
+  if (intenInput) intenInput.value = inten;
+
+  validEffects.forEach(m => {
+    const btn = document.getElementById(`ambient-effect-btn-${m}`);
+    if (!btn) return;
+    if (m === eff) {
+      btn.className = 'p-2.5 rounded-xl text-left border transition-all bg-amber-500/15 border-amber-500 text-white shadow-md ring-1 ring-amber-400/50';
+    } else {
+      btn.className = 'p-2.5 rounded-xl text-left border transition-all bg-white/5 hover:bg-white/10 border-white/10 text-gray-300';
+    }
+  });
+
+  validIntensities.forEach(lvl => {
+    const btn = document.getElementById(`ambient-intensity-btn-${lvl}`);
+    if (!btn) return;
+    if (lvl === inten) {
+      btn.className = 'py-1.5 px-2.5 rounded-xl text-[10px] font-bold bg-amber-500 text-black shadow transition-all';
+    } else {
+      btn.className = 'py-1.5 px-2.5 rounded-xl text-[10px] font-medium bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10 transition-all';
+    }
+  });
+
+  const meta = AMBIENT_EFFECT_META[eff] || AMBIENT_EFFECT_META['smoke'];
+  const intLabel = AMBIENT_INTENSITY_LABELS[inten] || 'Dengeli';
+
+  const statusPill = document.getElementById('ambient-effect-status-pill');
+  if (statusPill) {
+    statusPill.textContent = eff === 'none' ? meta.label : `${meta.label} (${intLabel})`;
+    statusPill.className = eff === 'none'
+      ? 'text-[10px] px-2.5 py-1 rounded-full bg-white/10 text-gray-300 border border-white/15 font-bold'
+      : 'text-[10px] px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-bold';
+  }
+
+  const badgeEl = document.getElementById('brand-bg-effect-badge');
+  if (badgeEl) {
+    badgeEl.textContent = eff === 'none' ? meta.label : `${meta.label} • ${intLabel}`;
+  }
+
+  const overlayEl = document.getElementById('brand-bg-effect-overlay');
+  if (overlayEl && overlayEl.style) {
+    overlayEl.style.background = meta.overlayBg;
+    overlayEl.style.opacity = eff === 'none' ? '0' : (inten === 'low' ? '0.55' : (inten === 'high' ? '1' : '0.82'));
+  }
+}
+
+async function selectAmbientEffectMode(effectMode) {
+  const curInt = document.getElementById('set-ambient-intensity')?.value || 'medium';
+  updateAmbientEffectSelectorUI(effectMode, curInt);
+  const ok = await persistBrandMediaQuickly();
+  if (ok) {
+    const meta = AMBIENT_EFFECT_META[effectMode] || AMBIENT_EFFECT_META['smoke'];
+    showToast(`✅ Ön plan atmosfer efekti "${meta.label}" olarak canlı menüde güncellendi!`, 'success');
+  }
+}
+
+async function selectAmbientIntensityLevel(level) {
+  const curEff = document.getElementById('set-ambient-effect')?.value || 'smoke';
+  updateAmbientEffectSelectorUI(curEff, level);
+  const ok = await persistBrandMediaQuickly();
+  if (ok) {
+    const intLabel = AMBIENT_INTENSITY_LABELS[level] || 'Dengeli';
+    showToast(`✅ Efekt yoğunluğu "${intLabel}" olarak canlı menüde güncellendi!`, 'success');
+  }
+}
+
+async function selectPresetBackgroundImage(presetUrl) {
+  const clean = String(presetUrl || '').trim();
+  const bgInput = document.getElementById('set-brand-bg-image');
+  if (bgInput) bgInput.value = clean;
+
+  brandMediaUploadState.bg.file = null;
+  brandMediaUploadState.bg.rotation = 0;
+
+  const curFit = document.getElementById('set-brand-bg-fit')?.value || 'cover';
+  updateBrandMediaPreviewUI('bg', curFit);
+
+  const ok = await persistBrandMediaQuickly();
+  if (ok) {
+    showToast(
+      clean
+        ? '✅ Seçilen profesyonel arka plan fotoğrafı canlı müşteri menüsüne uygulandı!'
+        : 'ℹ️ Müşteri menüsü arka planı orijinal görünüme döndürüldü!',
+      'success'
+    );
+  }
+}
+
+async function saveBackgroundStyleAndEffectQuickly() {
+  previewBackgroundStyleSliders();
+  const ok = await persistBrandMediaQuickly();
+  if (ok) {
+    showToast('✅ Arka plan parlaklık ve görünüm ayarları canlı menüde güncellendi!', 'success');
   }
 }
 
@@ -4065,7 +4378,7 @@ async function saveBrandMediaTextsOnly() {
 }
 
 async function clearBrandMediaSlot(slot) {
-  if (!['logo', 'hero', 'mood'].includes(slot)) return;
+  if (!['logo', 'hero', 'mood', 'bg'].includes(slot)) return;
   brandMediaUploadState[slot].file = null;
   brandMediaUploadState[slot].rotation = 0;
   brandMediaUploadState[slot].manualFit = false;
@@ -4088,14 +4401,15 @@ async function clearBrandMediaSlot(slot) {
     const labels = {
       logo: 'Profil fotoğrafı (sol üst & sayfa altı) varsayılan logoya döndürüldü.',
       hero: 'Anasayfa 1. slayt ve arka plan varsayılan kapak görseline döndürüldü.',
-      mood: 'Anasayfa 3. slayt otomatik atmosfer görseline döndürüldü.'
+      mood: 'Anasayfa 3. slayt otomatik atmosfer görseline döndürüldü.',
+      bg: 'Müşteri menüsü arka plan fotoğrafı varsayılan görünüme döndürüldü.'
     };
     showToast(`ℹ️ ${labels[slot]}`, 'success');
   }
 }
 
 async function applyUploadedBrandMediaFile(slot, file, rotationDeg = 0, allowAutoFit = true) {
-  if (!file || !['logo', 'hero', 'mood'].includes(slot)) return;
+  if (!file || !['logo', 'hero', 'mood', 'bg'].includes(slot)) return;
   const state = brandMediaUploadState[slot];
   state.file = file;
   state.rotation = ((rotationDeg % 360) + 360) % 360;
@@ -4141,7 +4455,8 @@ async function applyUploadedBrandMediaFile(slot, file, rotationDeg = 0, allowAut
       const successLabels = {
         logo: '✅ Sol üst ve sayfa altı profil fotoğrafı yüklendi ve canlı menüde güncellendi!',
         hero: '✅ Anasayfa 1. slayt ve arka plan fotoğrafı yüklendi ve canlı menüde güncellendi!',
-        mood: '✅ Anasayfa 3. slayt fotoğrafı yüklendi ve canlı menüde güncellendi!'
+        mood: '✅ Anasayfa 3. slayt fotoğrafı yüklendi ve canlı menüde güncellendi!',
+        bg: '✅ Müşteri menüsü tam ekran arka plan fotoğrafı yüklendi ve canlı menüde güncellendi!'
       };
       showToast(successLabels[slot], 'success');
     }
@@ -4169,7 +4484,7 @@ async function handleBrandMediaUpload(slot, event) {
 }
 
 async function rotateBrandMediaSlot(slot) {
-  if (!['logo', 'hero', 'mood'].includes(slot)) return;
+  if (!['logo', 'hero', 'mood', 'bg'].includes(slot)) return;
   const state = brandMediaUploadState[slot];
   if (state.busy) return;
 

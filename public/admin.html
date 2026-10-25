@@ -149,6 +149,9 @@
           <button id="tab-btn-brand-media" type="button" onclick="openBrandMediaSection()" class="px-4 py-2 rounded-xl text-xs font-semibold transition-all flex items-center gap-2 text-amber-200 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/25 whitespace-nowrap">
             <i data-lucide="image" class="w-4 h-4 text-amber-400"></i> Profil & Kapak Görselleri
           </button>
+          <button id="tab-btn-ambient-bg" type="button" onclick="openAmbientBackgroundSection()" class="px-4 py-2 rounded-xl text-xs font-semibold transition-all flex items-center gap-2 text-cyan-200 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/25 whitespace-nowrap">
+            <i data-lucide="wind" class="w-4 h-4 text-cyan-400"></i> Arka Plan & Duman Efekti
+          </button>
           <button id="tab-btn-settings" onclick="switchTab('settings')" class="px-4 py-2 rounded-xl text-xs font-medium transition-all flex items-center gap-2 text-gray-400 hover:bg-white/5 whitespace-nowrap">
             <i data-lucide="sliders" class="w-4 h-4"></i> Kafe & Wi-Fi Ayarları
           </button>
@@ -601,6 +604,237 @@
                       <button type="button" id="mood-fit-btn-top" onclick="setBrandMediaSlotFit('mood', 'top')" class="py-1.5 px-2 rounded-xl text-[10px] font-medium bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10 transition-all">⬆️ Üst Odak</button>
                       <button type="button" id="mood-fit-btn-contain" onclick="setBrandMediaSlotFit('mood', 'contain')" class="py-1.5 px-2 rounded-xl text-[10px] font-medium bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10 transition-all">✨ Kesmeden Sığdır</button>
                     </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- KART 4 & 5: MÜŞTERİ MENÜSÜ TAM EKRAN ARKA PLAN FOTOĞRAFI VE DUMAN / ATMOSFER EFEKTİ EKLENTİSİ -->
+            <div id="ambient-background-plugin-section" class="p-4 rounded-2xl bg-gradient-to-br from-neutral-900/95 via-black to-neutral-900/90 border border-cyan-500/30 shadow-lg space-y-4 transition-all">
+              <div class="flex flex-wrap items-start justify-between gap-2 border-b border-white/10 pb-3">
+                <div>
+                  <div class="flex flex-wrap items-center gap-2">
+                    <span class="w-6 h-6 rounded-lg bg-cyan-500/20 border border-cyan-500/40 text-cyan-300 flex items-center justify-center text-xs font-black">4</span>
+                    <span class="text-xs sm:text-sm font-bold text-white">Müşteri Menüsü Tam Ekran Arka Plan Fotoğrafı & Atmosfer Efekti Eklentisi</span>
+                    <span id="brand-bg-status" class="text-[10px] px-2.5 py-0.5 rounded-full bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 font-mono">
+                      1. Slayt / Varsayılan Arka Plan
+                    </span>
+                  </div>
+                  <p class="text-[11px] text-gray-400 mt-1">
+                    Müşteri menüsünün en arkasında duran profesyonel duvar/mekan fotoğrafını bağımsız olarak değiştirebilir ve önünde süzülen nargile dumanını farklı efektlerle (Altın Köz Kıvılcımları, Neon Sis, Yıldız Tozu vb.) özelleştirebilirsiniz.
+                  </p>
+                </div>
+              </div>
+
+              <!-- 4A: Profesyonel Arka Plan Fotoğrafı Yükleme & Önizleme -->
+              <div id="brand-bg-dropzone" class="p-3.5 rounded-xl bg-black/80 border border-dashed border-white/15 hover:border-cyan-400/50 transition-all space-y-3">
+                <input type="hidden" id="set-brand-bg-image" value="" />
+                <input type="hidden" id="set-brand-bg-fit" value="cover" />
+
+                <!-- Canlı Tam Ekran Arka Plan + Efekt Simülasyon Önizlemesi -->
+                <div class="relative w-full h-44 sm:h-52 rounded-xl overflow-hidden border border-white/15 bg-[#07080c] shadow-inner">
+                  <img id="brand-bg-blur-bg" src="hashtag-banner.jpg?v=3.0" alt="" class="hidden absolute inset-0 w-full h-full object-cover scale-125 blur-xl brightness-50 pointer-events-none" />
+                  <img
+                    id="brand-bg-preview"
+                    src="hashtag-banner.jpg?v=3.0"
+                    onerror="if(!this.src.includes('hashtag-banner.jpg')) { this.src='hashtag-banner.jpg?v=3.0'; } else if(!this.src.includes('images/')) { this.src='images/hashtag-banner.jpg?v=3.0'; }"
+                    alt="Müşteri Menüsü Arka Plan Önizleme"
+                    class="relative z-10 w-full h-full object-cover object-center transition-all duration-300"
+                    style="opacity: 0.36; filter: contrast(1.15) brightness(0.88) saturate(1.1);"
+                  />
+                  <!-- Sinematik Vignette -->
+                  <div class="absolute inset-0 z-10 pointer-events-none" style="background: radial-gradient(circle at 50% 32%, rgba(10,11,16,0.35) 0%, rgba(10,11,16,0.72) 60%, rgba(7,8,12,0.92) 100%);"></div>
+                  <!-- Canlı Ön Plan Efekt Simülasyon Katmanı -->
+                  <div id="brand-bg-effect-overlay" class="absolute inset-0 z-10 pointer-events-none transition-all duration-500" style="background: radial-gradient(circle at 25% 75%, rgba(255,255,255,0.22) 0%, rgba(6,182,212,0.12) 45%, transparent 70%), radial-gradient(circle at 80% 30%, rgba(245,158,11,0.16) 0%, transparent 65%);"></div>
+
+                  <div id="brand-bg-loading" class="hidden absolute inset-0 z-30 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-center text-center p-2">
+                    <i data-lucide="loader-2" class="w-6 h-6 text-cyan-400 animate-spin mb-1"></i>
+                    <span id="brand-bg-loading-text" class="text-xs text-cyan-200 font-semibold">Arka plan optimize ediliyor...</span>
+                  </div>
+
+                  <!-- Üst Bilgi & Döndür/Sıfırla Butonları -->
+                  <div class="absolute top-2.5 left-2.5 right-2.5 z-20 flex items-center justify-between gap-2">
+                    <span id="brand-bg-effect-badge" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-black/75 border border-cyan-500/30 text-[10px] font-bold text-cyan-300 backdrop-blur-md">
+                      💨 Klasik Nargile Dumanı • Dengeli
+                    </span>
+                    <div class="flex items-center gap-1.5">
+                      <button type="button" onclick="rotateBrandMediaSlot('bg')" class="px-2 py-1 rounded-lg bg-black/75 hover:bg-amber-500 hover:text-black text-amber-300 border border-white/15 text-[10px] font-bold backdrop-blur-md flex items-center gap-1 transition-all" title="Arka Plan Fotoğrafını 90° Döndür">
+                        <i data-lucide="rotate-cw" class="w-3 h-3"></i>
+                        <span>90° Döndür</span>
+                      </button>
+                      <button type="button" id="btn-clear-brand-bg" onclick="clearBrandMediaSlot('bg')" class="hidden px-2 py-1 rounded-lg bg-black/75 hover:bg-red-500 text-white border border-white/15 text-[10px] font-bold backdrop-blur-md flex items-center gap-1 transition-all">
+                        <i data-lucide="rotate-ccw" class="w-3 h-3"></i>
+                        <span>Varsayılana Dön</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <!-- Örnek Müşteri Menü Kartı Simülasyonu (Okunabilirlik Testi İçin) -->
+                  <div class="absolute bottom-2.5 left-2.5 right-2.5 z-20 flex items-center justify-between gap-2 p-2.5 rounded-xl bg-black/65 border border-white/10 backdrop-blur-md">
+                    <div class="min-w-0">
+                      <div class="text-[11px] font-bold text-white truncate">Love 66 & Lady Killer Spesiyal</div>
+                      <div id="brand-bg-caption" class="text-[10px] text-gray-300 truncate">Varsayılan arka plan görünümü aktif</div>
+                    </div>
+                    <span class="px-2.5 py-1 rounded-lg bg-amber-500/20 border border-amber-500/40 text-amber-300 text-xs font-black flex-shrink-0">₺450</span>
+                  </div>
+                </div>
+
+                <!-- Fotoğraf Seç / Kamerayla Çek -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <label class="py-2.5 px-3 rounded-xl bg-gradient-to-r from-cyan-500 to-teal-400 hover:from-cyan-400 hover:to-teal-300 text-black text-xs font-extrabold flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-cyan-500/20 transition-all active:scale-95">
+                    <i data-lucide="image-plus" class="w-4 h-4"></i>
+                    <span>Özel Arka Plan Fotoğrafı Yükle</span>
+                    <input type="file" id="brand-bg-file-input" accept="image/*,.heic,.heif,.avif,.webp,.png,.jpg,.jpeg,.gif,.bmp,.tiff,.tif,.svg" onchange="handleBrandMediaUpload('bg', event)" class="hidden" />
+                  </label>
+                  <label class="py-2.5 px-3 rounded-xl bg-white/10 hover:bg-white/15 text-white border border-white/15 text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-95">
+                    <i data-lucide="camera" class="w-4 h-4 text-cyan-400"></i>
+                    <span>Kamerayla Profesyonel Çek</span>
+                    <input type="file" id="brand-bg-camera-input" accept="image/*" capture="environment" onchange="handleBrandMediaUpload('bg', event)" class="hidden" />
+                  </label>
+                </div>
+
+                <!-- Hazır Profesyonel Arka Plan Şablonları -->
+                <div class="pt-2 border-t border-white/10 space-y-1.5">
+                  <div class="flex items-center justify-between">
+                    <span class="text-[11px] font-semibold text-gray-300">Hazır Profesyonel Arka Plan Galerisi (Tek Tıkla Uygula):</span>
+                    <span class="text-[10px] text-gray-500">Veya kendi fotoğrafınızı yükleyin</span>
+                  </div>
+                  <div class="flex flex-wrap gap-1.5">
+                    <button type="button" onclick="selectPresetBackgroundImage('')" class="px-2.5 py-1.5 rounded-xl bg-white/5 hover:bg-cyan-500/20 text-gray-200 hover:text-cyan-200 border border-white/10 hover:border-cyan-500/40 text-[10px] font-semibold transition-all">
+                      🧱 Orijinal Neon Tuğla
+                    </button>
+                    <button type="button" onclick="selectPresetBackgroundImage('https://images.unsplash.com/photo-1527661591475-527312dd65f5?auto=format&fit=crop&w=1400&q=80')" class="px-2.5 py-1.5 rounded-xl bg-white/5 hover:bg-cyan-500/20 text-gray-200 hover:text-cyan-200 border border-white/10 hover:border-cyan-500/40 text-[10px] font-semibold transition-all">
+                      💨 VIP Nargile & Duman
+                    </button>
+                    <button type="button" onclick="selectPresetBackgroundImage('https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=1400&q=80')" class="px-2.5 py-1.5 rounded-xl bg-white/5 hover:bg-cyan-500/20 text-gray-200 hover:text-cyan-200 border border-white/10 hover:border-cyan-500/40 text-[10px] font-semibold transition-all">
+                      ✨ Lüks Lounge & Altın
+                    </button>
+                    <button type="button" onclick="selectPresetBackgroundImage('https://images.unsplash.com/photo-1514933651103-005eec06c04b?auto=format&fit=crop&w=1400&q=80')" class="px-2.5 py-1.5 rounded-xl bg-white/5 hover:bg-cyan-500/20 text-gray-200 hover:text-cyan-200 border border-white/10 hover:border-cyan-500/40 text-[10px] font-semibold transition-all">
+                      🍸 Gece Bar & Kokteyl
+                    </button>
+                    <button type="button" onclick="selectPresetBackgroundImage('https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=1400&q=80')" class="px-2.5 py-1.5 rounded-xl bg-white/5 hover:bg-cyan-500/20 text-gray-200 hover:text-cyan-200 border border-white/10 hover:border-cyan-500/40 text-[10px] font-semibold transition-all">
+                      🔥 Sıcak Loş Atmosfer
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Kadraj & Parlaklık / Bulanıklık Ayarları -->
+                <div class="pt-2.5 border-t border-white/10 space-y-3">
+                  <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <span class="text-[11px] font-semibold text-gray-300">Arka Plan Kadrajı:</span>
+                    <div class="grid grid-cols-3 gap-1.5 flex-1 sm:max-w-xs">
+                      <button type="button" id="bg-fit-btn-cover" onclick="setBrandMediaSlotFit('bg', 'cover')" class="py-1.5 px-2 rounded-xl text-[10px] font-bold bg-amber-500 text-black transition-all">🖼️ Tam Ekran Doldur</button>
+                      <button type="button" id="bg-fit-btn-top" onclick="setBrandMediaSlotFit('bg', 'top')" class="py-1.5 px-2 rounded-xl text-[10px] font-medium bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10 transition-all">⬆️ Üst Odak</button>
+                      <button type="button" id="bg-fit-btn-contain" onclick="setBrandMediaSlotFit('bg', 'contain')" class="py-1.5 px-2 rounded-xl text-[10px] font-medium bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10 transition-all">✨ Kesmeden Sığdır</button>
+                    </div>
+                  </div>
+
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    <div class="p-2.5 rounded-xl bg-white/5 border border-white/10">
+                      <div class="flex items-center justify-between text-[11px] mb-1">
+                        <span class="font-semibold text-gray-300">Arka Plan Netliği / Parlaklığı</span>
+                        <span id="brand-bg-opacity-label" class="font-mono font-bold text-cyan-300">%36</span>
+                      </div>
+                      <input type="range" id="set-brand-bg-opacity" min="10" max="85" step="2" value="36" oninput="previewBackgroundStyleSliders()" onchange="saveBackgroundStyleAndEffectQuickly()" class="w-full accent-cyan-400 cursor-pointer" />
+                      <div class="flex justify-between text-[9px] text-gray-500 mt-0.5">
+                        <span>Loş (%10)</span>
+                        <span>Dengeli (%36)</span>
+                        <span>Çok Parlak (%85)</span>
+                      </div>
+                    </div>
+
+                    <div class="p-2.5 rounded-xl bg-white/5 border border-white/10">
+                      <div class="flex items-center justify-between text-[11px] mb-1">
+                        <span class="font-semibold text-gray-300">Arka Plan Yumuşatma (Blur)</span>
+                        <span id="brand-bg-blur-label" class="font-mono font-bold text-cyan-300">0px (Net)</span>
+                      </div>
+                      <input type="range" id="set-brand-bg-blur" min="0" max="16" step="1" value="0" oninput="previewBackgroundStyleSliders()" onchange="saveBackgroundStyleAndEffectQuickly()" class="w-full accent-cyan-400 cursor-pointer" />
+                      <div class="flex justify-between text-[9px] text-gray-500 mt-0.5">
+                        <span>0px (Tam Net)</span>
+                        <span>6px (Sinematik)</span>
+                        <span>16px (Bokeh)</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 4B / KART 5: ÖN PLAN DUMAN & PARÇACIK EFEKTİ SEÇİCİ EKLENTİSİ -->
+              <div class="p-3.5 rounded-xl bg-black/80 border border-white/10 space-y-3">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <div class="flex items-center gap-2">
+                      <span class="w-5 h-5 rounded-md bg-amber-500/20 border border-amber-500/40 text-amber-300 flex items-center justify-center text-[11px] font-black">5</span>
+                      <span class="text-xs sm:text-sm font-bold text-white">Arka Plan Önündeki Duman & Atmosfer Efekti Seçimi</span>
+                    </div>
+                    <p class="text-[11px] text-gray-400 mt-0.5">Fotoğrafın önünde hareket eden dumanları farklı bir atmosfer eklentisiyle değiştirebilir veya tamamen kapatabilirsiniz.</p>
+                  </div>
+                  <span id="ambient-effect-status-pill" class="text-[10px] px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-bold">
+                    💨 Klasik Nargile Dumanı
+                  </span>
+                </div>
+
+                <input type="hidden" id="set-ambient-effect" value="smoke" />
+                <input type="hidden" id="set-ambient-intensity" value="medium" />
+
+                <!-- 6 Efekt Seçenek Kartı -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                  <button type="button" id="ambient-effect-btn-smoke" onclick="selectAmbientEffectMode('smoke')" class="p-2.5 rounded-xl text-left border transition-all bg-amber-500/15 border-amber-500 text-white shadow-md">
+                    <div class="flex items-center justify-between">
+                      <span class="text-xs font-bold">💨 Klasik Nargile Dumanı</span>
+                      <span class="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-semibold">Varsayılan</span>
+                    </div>
+                    <p class="text-[10px] text-gray-400 mt-1">Yumuşak beyaz, gümüş ve hafif turkuaz/amber nargile buharı.</p>
+                  </button>
+
+                  <button type="button" id="ambient-effect-btn-gold-embers" onclick="selectAmbientEffectMode('gold-embers')" class="p-2.5 rounded-xl text-left border transition-all bg-white/5 hover:bg-white/10 border-white/10 text-gray-300">
+                    <div class="flex items-center justify-between">
+                      <span class="text-xs font-bold">🔥 Altın Köz Kıvılcımları</span>
+                      <span class="text-[9px] px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-300 font-semibold">Popüler</span>
+                    </div>
+                    <p class="text-[10px] text-gray-400 mt-1">Yukarı doğru süzülen parlak altın ve kehribar nargile közü kıvılcımları.</p>
+                  </button>
+
+                  <button type="button" id="ambient-effect-btn-ember-smoke" onclick="selectAmbientEffectMode('ember-smoke')" class="p-2.5 rounded-xl text-left border transition-all bg-white/5 hover:bg-white/10 border-white/10 text-gray-300">
+                    <div class="flex items-center justify-between">
+                      <span class="text-xs font-bold">🔥💨 Duman + Köz Ateşi</span>
+                      <span class="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-semibold">Hibrit</span>
+                    </div>
+                    <p class="text-[10px] text-gray-400 mt-1">Hem yoğun nargile dumanı hem de içinden yükselen sıcak köz kıvılcımları.</p>
+                  </button>
+
+                  <button type="button" id="ambient-effect-btn-neon-mist" onclick="selectAmbientEffectMode('neon-mist')" class="p-2.5 rounded-xl text-left border transition-all bg-white/5 hover:bg-white/10 border-white/10 text-gray-300">
+                    <div class="flex items-center justify-between">
+                      <span class="text-xs font-bold">💜 Neon Lounge Sisi</span>
+                      <span class="text-[9px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 font-semibold">Gece Kulübü</span>
+                    </div>
+                    <p class="text-[10px] text-gray-400 mt-1">Mor, fuşya ve camgöbeği renkli akıcı siber lounge sis bulutları.</p>
+                  </button>
+
+                  <button type="button" id="ambient-effect-btn-starlight" onclick="selectAmbientEffectMode('starlight')" class="p-2.5 rounded-xl text-left border transition-all bg-white/5 hover:bg-white/10 border-white/10 text-gray-300">
+                    <div class="flex items-center justify-between">
+                      <span class="text-xs font-bold">✨ Lüks Bokeh & Yıldız Tozu</span>
+                      <span class="text-[9px] px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-200 font-semibold">VIP</span>
+                    </div>
+                    <p class="text-[10px] text-gray-400 mt-1">Duman yerine zarif altın ve kristal ışık küreleri süzülür.</p>
+                  </button>
+
+                  <button type="button" id="ambient-effect-btn-none" onclick="selectAmbientEffectMode('none')" class="p-2.5 rounded-xl text-left border transition-all bg-white/5 hover:bg-white/10 border-white/10 text-gray-300">
+                    <div class="flex items-center justify-between">
+                      <span class="text-xs font-bold">🚫 Efekt Kapalı (Sade)</span>
+                      <span class="text-[9px] px-1.5 py-0.5 rounded bg-white/10 text-gray-400 font-semibold">Sade</span>
+                    </div>
+                    <p class="text-[10px] text-gray-400 mt-1">Öndeki tüm duman ve parçacıkları kapatır, yalnızca fotoğraf görünür.</p>
+                  </button>
+                </div>
+
+                <!-- Efekt Yoğunluğu Seçimi -->
+                <div class="pt-2 border-t border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <span class="text-[11px] font-semibold text-gray-300">Efekt / Duman Yoğunluğu:</span>
+                  <div class="grid grid-cols-3 gap-1.5 flex-1 sm:max-w-sm">
+                    <button type="button" id="ambient-intensity-btn-low" onclick="selectAmbientIntensityLevel('low')" class="py-1.5 px-2.5 rounded-xl text-[10px] font-medium bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10 transition-all">🌤️ Hafif</button>
+                    <button type="button" id="ambient-intensity-btn-medium" onclick="selectAmbientIntensityLevel('medium')" class="py-1.5 px-2.5 rounded-xl text-[10px] font-bold bg-amber-500 text-black shadow transition-all">⚖️ Dengeli</button>
+                    <button type="button" id="ambient-intensity-btn-high" onclick="selectAmbientIntensityLevel('high')" class="py-1.5 px-2.5 rounded-xl text-[10px] font-medium bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10 transition-all">🌪️ Yoğun</button>
                   </div>
                 </div>
               </div>
