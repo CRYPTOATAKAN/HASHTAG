@@ -1809,6 +1809,14 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
                 payload["updatedAt"] = int(time.time() * 1000)
                 atomic_save_json(DATA_FILE, payload)
 
+                # public/data/menu.json dosyasını da senkronize tut
+                public_menu_file = os.path.join(PUBLIC_DIR, "data", "menu.json")
+                if os.path.exists(os.path.dirname(public_menu_file)):
+                    try:
+                        atomic_save_json(public_menu_file, payload)
+                    except Exception:
+                        pass
+
                 self._send_json({"status": "success", "message": "Menü başarıyla kaydedildi."})
             except Exception as e:
                 self._send_json({"status": "error", "message": str(e)}, status=500)

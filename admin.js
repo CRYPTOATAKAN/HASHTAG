@@ -898,25 +898,47 @@ async function moveCategory(catId, dir) {
 }
 
 async function deleteCategory(catId) {
-  const cat = menuData.categories.find(c => c.id === catId);
+  const cat = (menuData.categories || []).find(c => c.id === catId);
   if (!cat) return;
 
   const itemsInCat = (menuData.items || []).filter(it => it.categoryId === catId);
+  let deleteProductsToo = false;
+
   if (itemsInCat.length > 0) {
-    if (!confirm(`"${cat.name}" kategorisinde ${itemsInCat.length} adet ürün bulunuyor. Kategoriyi silerseniz bu ürünler menüde "Diğer Ürünler" altında görünmeye devam edecektir. Devam etmek istiyor musunuz?`)) {
-      return;
+    if (typeof confirm === 'function') {
+      const choice = confirm(
+        `"${cat.name}" kategorisinde ${itemsInCat.length} adet ürün bulunuyor.\n\n` +
+        `• [Tamam]: Kategoriyi VE içerisindeki tüm ürünleri (${itemsInCat.length} adet) tamamen sil.\n` +
+        `• [İptal]: Kategoriyi sil ama ürünleri "Diğer Ürünler" altına aktar.`
+      );
+      deleteProductsToo = choice;
     }
   } else {
-    if (!confirm(`"${cat.name}" kategorisini silmek istediğinize emin misiniz?`)) return;
+    if (typeof confirm === 'function' && !confirm(`"${cat.name}" kategorisini silmek istediğinize emin misiniz?`)) return;
   }
 
-  const prevCategories = [...menuData.categories];
-  menuData.categories = menuData.categories.filter(c => c.id !== catId);
+  const prevCategories = JSON.parse(JSON.stringify(menuData.categories || []));
+  const prevItems = JSON.parse(JSON.stringify(menuData.items || []));
+
+  menuData.categories = (menuData.categories || []).filter(c => c.id !== catId);
   menuData.categories.forEach((c, i) => { c.order = i + 1; });
+
+  if (deleteProductsToo) {
+    menuData.items = (menuData.items || []).filter(it => it.categoryId !== catId);
+  } else {
+    (menuData.items || []).forEach(it => {
+      if (it.categoryId === catId) it.categoryId = 'other';
+    });
+  }
+
+  if (typeof expandedCategoryIds !== 'undefined' && expandedCategoryIds && expandedCategoryIds.delete) {
+    expandedCategoryIds.delete(catId);
+  }
 
   const ok = await saveMenuData(menuData);
   if (!ok) {
     menuData.categories = prevCategories;
+    menuData.items = prevItems;
     return;
   }
   renderAdminCategories();

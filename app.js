@@ -160,18 +160,17 @@ if (typeof window !== 'undefined' && window.addEventListener) {
 
 // Menü Verisini Yükleme (CORS preflight engeline takılmayan önbellek atlatmalı canlı sunucu kontrolü)
 async function loadMenuData() {
+  let loadedFromServer = false;
+  let serverData = null;
+
   try {
     const apiBase = getApiBaseUrl();
     const res = await fetch(apiBase + '/api/menu?_t=' + Date.now(), {
       cache: 'no-store'
     });
     if (res.ok) {
-      menuData = sanitizeMenuDataSettings(await res.json());
-      if (menuData && (menuData._version || menuData.updatedAt)) {
-        lastKnownMenuVersion = menuData._version || menuData.updatedAt;
-      }
-      safeSetStorage('hashtag_menu_cache', JSON.stringify(menuData));
-      return menuData;
+      serverData = sanitizeMenuDataSettings(await res.json());
+      loadedFromServer = true;
     }
   } catch (err) {
     console.warn("Canlı sunucudan çekilemedi, önbelleğe bakılıyor:", err);
@@ -179,23 +178,61 @@ async function loadMenuData() {
 
   // Önbellek kontrolü (Eski 'hashtag.lounge' kalıntısı varsa anında temizle ve düzelt)
   const cached = safeGetStorage('hashtag_menu_cache');
+  let cachedData = null;
   if (cached) {
     try {
       const parsedCache = JSON.parse(cached);
       const prevInsta = parsedCache && parsedCache.settings && parsedCache.settings.instagram;
-      menuData = sanitizeMenuDataSettings(parsedCache);
-      if (prevInsta !== menuData.settings.instagram) {
-        safeSetStorage('hashtag_menu_cache', JSON.stringify(menuData));
+      cachedData = sanitizeMenuDataSettings(parsedCache);
+      if (prevInsta !== cachedData.settings.instagram) {
+        safeSetStorage('hashtag_menu_cache', JSON.stringify(cachedData));
       }
-      return menuData;
     } catch (e) {
       console.error(e);
     }
   }
 
+  if (loadedFromServer && serverData) {
+    // Eğer yerel önbellekte daha yeni bir düzenleme varsa (örneğin çevrimdışı/masaüstü panelden eklenen/silinen kategori),
+    // sunucudaki eski verinin yerel son değişiklikleri ezmesine izin verme!
+    if (cachedData && cachedData.updatedAt && serverData.updatedAt && cachedData.updatedAt > serverData.updatedAt) {
+      menuData = cachedData;
+      // Arka planda sunucuyu son verimizle senkronize etmeyi dene
+      try {
+        let pin = '';
+        try { pin = sessionStorage.getItem('hashtag_admin_pin') || ''; } catch (e) {}
+        if (!pin) pin = (menuData.settings && menuData.settings.adminPin) || '1234';
+        const apiBase = getApiBaseUrl();
+        fetch(apiBase + '/api/menu/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Admin-PIN': pin },
+          body: JSON.stringify(menuData)
+        }).catch(() => {});
+      } catch (e) {}
+    } else {
+      menuData = serverData;
+    }
+
+    if (menuData && (menuData._version || menuData.updatedAt)) {
+      lastKnownMenuVersion = menuData._version || menuData.updatedAt;
+    }
+    safeSetStorage('hashtag_menu_cache', JSON.stringify(menuData));
+    return menuData;
+  }
+
+  // Sunucuya ulaşılamadıysa önbellek varsa onu kullan
+  if (cachedData) {
+    menuData = cachedData;
+    if (menuData && (menuData._version || menuData.updatedAt)) {
+      lastKnownMenuVersion = menuData._version || menuData.updatedAt;
+    }
+    return menuData;
+  }
+
   // Varsayılan zengin veri
   if (window.DEFAULT_MENU_DATA) {
     menuData = sanitizeMenuDataSettings(JSON.parse(JSON.stringify(window.DEFAULT_MENU_DATA)));
+    safeSetStorage('hashtag_menu_cache', JSON.stringify(menuData));
     return menuData;
   }
 
@@ -215,14 +252,19 @@ async function loadMenuData() {
     categories: [],
     items: []
   });
+  safeSetStorage('hashtag_menu_cache', JSON.stringify(menuData));
   return menuData;
 }
 
-// Menüyü Kaydetme (Önce Sunucuya POST, doğrulandıktan sonra tüm sekmelere/cihazlara yay)
+// Menüyü Kaydetme (Önce Yerel Önbellek, Doğrulanmış Sunucu POST ve Sekmeler Arası Eşitleme)
 async function saveMenuData(updatedData) {
   sanitizeMenuDataSettings(updatedData);
   updatedData.updatedAt = Date.now();
   menuData = updatedData;
+
+  // 1. ANINDA YEREL ÖNBELLEK: Masaüstü file:// veya çevrimdışı durumlarda veri kaybını engelle
+  safeSetStorage('hashtag_menu_cache', JSON.stringify(updatedData));
+  lastKnownMenuVersion = updatedData.updatedAt;
 
   // Giriş yapılmış PIN'i header ile gönder (Güvenlik)
   let pin = '';
@@ -246,15 +288,18 @@ async function saveMenuData(updatedData) {
       try {
         const verifyRes = await fetch(apiBase + '/api/menu?_t=' + Date.now(), { cache: 'no-store' });
         if (verifyRes.ok) {
-          menuData = sanitizeMenuDataSettings(await verifyRes.json());
+          const freshData = sanitizeMenuDataSettings(await verifyRes.json());
+          if (freshData) {
+            menuData = freshData;
+            if (menuData._version || menuData.updatedAt) {
+              lastKnownMenuVersion = menuData._version || menuData.updatedAt;
+            }
+            safeSetStorage('hashtag_menu_cache', JSON.stringify(menuData));
+          }
         }
       } catch (e) {}
 
-      if (menuData && (menuData._version || menuData.updatedAt)) {
-        lastKnownMenuVersion = menuData._version || menuData.updatedAt;
-      }
-      safeSetStorage('hashtag_menu_cache', JSON.stringify(menuData));
-
+      // Race condition koruması: postMessage('sync') mutlaka sunucu kaydı tamamlandıktan sonra çağrılır
       if (syncChannel) {
         try { syncChannel.postMessage('sync'); } catch (e) {}
       }
@@ -262,15 +307,24 @@ async function saveMenuData(updatedData) {
     } else {
       const errJson = await res.json().catch(() => ({}));
       const msg = errJson.message || `Sunucu hatası (${res.status})`;
-      showToast('⚠️ Kaydedilemedi: ' + msg, 'error');
-      alert('⚠️ Kaydedilemedi!\nSunucu yanıtı: ' + msg);
-      return false;
+      if (res.status === 401) {
+        showToast('⚠️ Yetki hatası: Yönetici PIN kodu geçersiz!', 'error');
+        alert('⚠️ Yetki hatası!\nYönetici PIN kodu uyuşmuyor veya oturum süresi doldu.');
+        return false;
+      }
+      if (syncChannel) {
+        try { syncChannel.postMessage('sync'); } catch (e) {}
+      }
+      showToast('ℹ️ Değişiklikler yerel menüye kaydedildi (Sunucu yanıtı: ' + msg + ')', 'success');
+      return true;
     }
   } catch (err) {
-    console.error("Sunucuya yazılamadı:", err);
-    showToast('⚠️ İnternet bağlantı hatası, sunucuya ulaşılamadı.', 'error');
-    alert('⚠️ Sunucuya ulaşılamadı!\nLütfen internet bağlantınızı kontrol edin.\nDetay: ' + err.message);
-    return false;
+    console.warn("Sunucuya ulaşılamadı, ancak yerel menüye başarıyla kaydedildi:", err);
+    if (syncChannel) {
+      try { syncChannel.postMessage('sync'); } catch (e) {}
+    }
+    showToast('ℹ️ Değişiklikler yerel olarak kaydedildi (Sunucu çevrimdışı)', 'success');
+    return true;
   }
 }
 
@@ -316,11 +370,34 @@ function applyLiveCustomerMenuRefresh(forceHero = false) {
   }
 }
 
-// Farklı Cihazlar (Telefon / Tablet / Bilgisayar) Arası Hafif Canlı Senkronizasyon (4 sn)
+// Farklı Cihazlar & Yerel Sekmeler Arası Canlı Senkronizasyon (2.5 sn)
 function startCustomerLiveMenuSync() {
   if (customerMenuSyncTimer) clearInterval(customerMenuSyncTimer);
   customerMenuSyncTimer = setInterval(async () => {
-    if (document.visibilityState !== 'visible' || !document.getElementById('menu-app')) return;
+    if (!document.getElementById('menu-app')) return;
+
+    // 1. Önce yerel önbellek (localStorage) kontrolü yap:
+    // Masaüstü file:// veya aynı tarayıcıda yönetici panelinden eklenen / silinen kategoriler anında yansısın
+    try {
+      const cached = safeGetStorage('hashtag_menu_cache');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        const cachedVer = parsed._version || parsed.updatedAt;
+        const currentVer = menuData ? (menuData._version || menuData.updatedAt) : null;
+        const cachedCatCount = Array.isArray(parsed.categories) ? parsed.categories.length : -1;
+        const currentCatCount = (menuData && Array.isArray(menuData.categories)) ? menuData.categories.length : -1;
+
+        if ((cachedVer && cachedVer !== currentVer) || cachedCatCount !== currentCatCount) {
+          menuData = sanitizeMenuDataSettings(parsed);
+          if (cachedVer) lastKnownMenuVersion = cachedVer;
+          applyLiveCustomerMenuRefresh(false);
+          return;
+        }
+      }
+    } catch (e) {}
+
+    // 2. Ağ/Sunucu kontrolü (Eğer sekme görünür durumdaysa)
+    if (document.visibilityState !== 'visible') return;
     try {
       const apiBase = getApiBaseUrl();
       const res = await fetch(apiBase + '/api/menu/version?_t=' + Date.now(), { cache: 'no-store' });
@@ -336,7 +413,7 @@ function startCustomerLiveMenuSync() {
         }
       }
     } catch (e) {}
-  }, 4000);
+  }, 2500);
 }
 
 window.refreshCustomerMenu = async function(btn) {
@@ -349,16 +426,45 @@ window.refreshCustomerMenu = async function(btn) {
   }
 };
 
-// Sekme veya telefon ekranı tekrar açıldığında menüyü otomatik yenile
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') {
-    loadMenuData().then(() => {
-      if (document.getElementById('menu-app')) {
-        applyLiveCustomerMenuRefresh(false);
+// Sekme veya telefon ekranı tekrar açıldığında veya pencereye odaklanıldığında menüyü otomatik yenile
+function handleCustomerMenuVisibilityOrFocus() {
+  if (document.getElementById('menu-app')) {
+    // Önce hızlıca yerel önbelleğe bak
+    try {
+      const cached = safeGetStorage('hashtag_menu_cache');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        const cachedVer = parsed._version || parsed.updatedAt;
+        const currentVer = menuData ? (menuData._version || menuData.updatedAt) : null;
+        const cachedCatCount = Array.isArray(parsed.categories) ? parsed.categories.length : -1;
+        const currentCatCount = (menuData && Array.isArray(menuData.categories)) ? menuData.categories.length : -1;
+
+        if ((cachedVer && cachedVer !== currentVer) || cachedCatCount !== currentCatCount) {
+          menuData = sanitizeMenuDataSettings(parsed);
+          if (cachedVer) lastKnownMenuVersion = cachedVer;
+          applyLiveCustomerMenuRefresh(false);
+          return;
+        }
       }
+    } catch (e) {}
+
+    loadMenuData().then(() => {
+      applyLiveCustomerMenuRefresh(false);
     });
   }
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    handleCustomerMenuVisibilityOrFocus();
+  }
 });
+
+if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+  window.addEventListener('focus', () => {
+    handleCustomerMenuVisibilityOrFocus();
+  });
+}
 
 // DOM Hazır Olduğunda Menüyü Başlat
 document.addEventListener('DOMContentLoaded', async () => {
@@ -1141,10 +1247,12 @@ function selectCategory(catId) {
 
   // Scroll to menu list smoothly
   const listEl = document.getElementById('menu-items-list');
-  if (listEl) {
+  if (listEl && typeof listEl.getBoundingClientRect === 'function') {
     const yOffset = -140;
-    const y = listEl.getBoundingClientRect().top + window.pageYOffset + yOffset;
-    window.scrollTo({ top: y, behavior: 'smooth' });
+    const y = listEl.getBoundingClientRect().top + (window.pageYOffset || 0) + yOffset;
+    if (typeof window.scrollTo === 'function') {
+      window.scrollTo({ top: y, behavior: 'smooth' });
+    }
   }
 }
 
@@ -1180,6 +1288,15 @@ function renderMenuItems() {
   const allItems = Array.isArray(menuData?.items) ? menuData.items : [];
   const categories = Array.isArray(menuData?.categories) ? menuData.categories : [];
   const currency = (menuData?.settings && menuData.settings.currency) || '₺';
+
+  // Eğer seçili kategori silinmişse, otomatik 'all' (Tüm Menü) moduna dön ve hapları güncelle
+  if (currentCategory !== 'all') {
+    const catExists = categories.some(c => c.id === currentCategory);
+    if (!catExists) {
+      currentCategory = 'all';
+      renderCategoryPills();
+    }
+  }
 
   let items = allItems;
 
