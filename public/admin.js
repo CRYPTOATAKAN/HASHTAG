@@ -304,6 +304,7 @@ async function toggleStockStatus(itemId) {
   }
   updateAdminStats();
   renderAdminProductTable();
+  renderAdminCategories();
 }
 
 /* ==========================================================================
@@ -371,6 +372,7 @@ async function saveSingleQuickPrice(itemId, newPrice) {
         setTimeout(() => statusEl.classList.add('opacity-0'), 2500);
       }
       renderAdminProductTable();
+      renderAdminCategories();
     }
   }
 }
@@ -585,10 +587,30 @@ function setPresetImage(type) {
 }
 
 /* ==========================================================================
-   KATEGORİ YÖNETİMİ (Category Management CRUD & Reordering)
+   KATEGORİ YÖNETİMİ & KATEGORİ İÇİ ÜRÜN DÜZENLEME (Category & Item Management)
    ========================================================================== */
 
 let editingCategoryId = null;
+let expandedCategoryIds = new Set();
+
+function toggleCategoryProducts(catId) {
+  if (expandedCategoryIds.has(catId)) {
+    expandedCategoryIds.delete(catId);
+  } else {
+    expandedCategoryIds.add(catId);
+  }
+  renderAdminCategories();
+}
+
+function toggleAllCategoryProducts() {
+  const categories = menuData.categories || [];
+  if (expandedCategoryIds.size >= categories.length) {
+    expandedCategoryIds.clear();
+  } else {
+    categories.forEach(c => expandedCategoryIds.add(c.id));
+  }
+  renderAdminCategories();
+}
 
 function renderAdminCategories() {
   const container = document.getElementById('admin-categories-list');
@@ -596,6 +618,22 @@ function renderAdminCategories() {
 
   const categories = menuData.categories || [];
   const items = menuData.items || [];
+  const currency = menuData.settings?.currency || '₺';
+
+  // Üstteki "Tüm Ürünleri Aç / Kapat" etiketini güncelle
+  const toggleAllLabel = document.getElementById('label-toggle-all-cats');
+  const toggleAllBtn = document.getElementById('btn-toggle-all-cats');
+  if (toggleAllLabel && categories.length > 0) {
+    const allOpen = expandedCategoryIds.size >= categories.length;
+    toggleAllLabel.textContent = allOpen ? 'Tüm Ürünleri Kapat' : 'Tüm Ürünleri Aç';
+    if (toggleAllBtn) {
+      if (allOpen) {
+        toggleAllBtn.className = 'px-3.5 py-2 rounded-xl bg-amber-500/15 text-amber-300 border border-amber-500/30 font-semibold text-xs flex items-center gap-1.5 transition-all';
+      } else {
+        toggleAllBtn.className = 'px-3.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10 font-semibold text-xs flex items-center gap-1.5 transition-all';
+      }
+    }
+  }
 
   if (categories.length === 0) {
     container.innerHTML = `<div class="p-6 text-center text-gray-400">Henüz kategori bulunmuyor.</div>`;
@@ -605,41 +643,160 @@ function renderAdminCategories() {
   container.innerHTML = `
     <div class="space-y-3">
       ${categories.map((cat, idx) => {
-        const count = items.filter(it => it.categoryId === cat.id).length;
+        const catItems = items.filter(it => it.categoryId === cat.id);
+        const count = catItems.length;
         const isFirst = idx === 0;
         const isLast = idx === categories.length - 1;
         const safeId = String(cat.id || '').replace(/'/g, "\\'");
+        const isExpanded = expandedCategoryIds.has(cat.id);
 
         return `
-          <div class="flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 p-3.5 rounded-xl bg-black border border-white/10 hover:border-white/20 transition-all">
-            <div class="flex items-center gap-3 min-w-0">
-              <div class="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center font-bold flex-shrink-0">
-                <i data-lucide="${escapeHtml(cat.icon || 'star')}" class="w-5 h-5"></i>
+          <div class="rounded-2xl bg-black border ${isExpanded ? 'border-amber-500/40 shadow-xl shadow-amber-500/5' : 'border-white/10 hover:border-white/20'} overflow-hidden transition-all">
+            <!-- Kategori Başlık Satırı -->
+            <div class="flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 p-3.5 bg-neutral-950/70">
+              <div class="flex items-center gap-3 min-w-0 flex-1">
+                <div class="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center font-bold flex-shrink-0">
+                  <i data-lucide="${escapeHtml(cat.icon || 'star')}" class="w-5 h-5"></i>
+                </div>
+                <div class="min-w-0">
+                  <div class="flex items-center gap-2">
+                    <span class="font-bold text-white text-sm truncate">${escapeHtml(cat.name)}</span>
+                    <span class="text-[10px] px-2 py-0.5 rounded-full ${count > 0 ? 'bg-amber-500/15 text-amber-300 border border-amber-500/25' : 'bg-white/5 text-gray-500 border border-white/5'} font-medium">
+                      ${count} Ürün
+                    </span>
+                  </div>
+                  <button type="button" onclick="toggleCategoryProducts('${safeId}')" class="text-xs text-gray-400 hover:text-amber-300 mt-0.5 flex items-center gap-1 transition-colors">
+                    <span>${isExpanded ? 'Ürünleri Gizle' : 'Ürünleri Yönet & Düzenle'}</span>
+                    <i data-lucide="${isExpanded ? 'chevron-up' : 'chevron-down'}" class="w-3 h-3 text-amber-400"></i>
+                  </button>
+                </div>
               </div>
-              <div class="min-w-0">
-                <div class="font-bold text-white text-sm truncate">${escapeHtml(cat.name)}</div>
-                <div class="text-xs text-gray-400 mt-0.5">${count} ürün bulunuyor</div>
+
+              <div class="flex items-center gap-1.5 ml-auto flex-wrap">
+                <!-- Ürünleri Aç/Kapat Butonu -->
+                <button type="button" onclick="toggleCategoryProducts('${safeId}')" class="px-2.5 py-1.5 rounded-lg ${isExpanded ? 'bg-amber-500 text-black font-bold' : 'bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10'} text-xs font-semibold flex items-center gap-1.5 transition-colors" title="Bu kategorideki ürünleri aç veya kapat">
+                  <i data-lucide="${isExpanded ? 'chevron-up' : 'package-open'}" class="w-3.5 h-3.5"></i>
+                  <span>${isExpanded ? 'Kapat' : 'Ürünler (' + count + ')'}</span>
+                </button>
+
+                <!-- Bu Kategoriye Ürün Ekle -->
+                <button type="button" onclick="openNewItemModalForCategory('${safeId}')" class="px-2.5 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 text-xs font-semibold flex items-center gap-1 transition-colors" title="Bu kategoriye yeni ürün ekle">
+                  <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                  <span>Ürün Ekle</span>
+                </button>
+
+                <!-- Sıralama / Düzenle / Sil -->
+                <button type="button" onclick="moveCategory('${safeId}', -1)" ${isFirst ? 'disabled class="p-1.5 rounded-lg text-gray-600 cursor-not-allowed"' : 'class="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 transition-colors"'} title="Kategoriyi Yukarı Taşı">
+                  <i data-lucide="arrow-up" class="w-4 h-4"></i>
+                </button>
+                <button type="button" onclick="moveCategory('${safeId}', 1)" ${isLast ? 'disabled class="p-1.5 rounded-lg text-gray-600 cursor-not-allowed"' : 'class="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 transition-colors"'} title="Kategoriyi Aşağı Taşı">
+                  <i data-lucide="arrow-down" class="w-4 h-4"></i>
+                </button>
+                <button type="button" onclick="openEditCategoryModal('${safeId}')" class="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white transition-colors" title="Kategori İsmini/İkonunu Düzenle">
+                  <i data-lucide="edit-3" class="w-4 h-4"></i>
+                </button>
+                <button type="button" onclick="deleteCategory('${safeId}')" class="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 transition-colors" title="Kategoriyi Sil">
+                  <i data-lucide="trash-2" class="w-4 h-4"></i>
+                </button>
               </div>
             </div>
 
-            <div class="flex items-center gap-2 ml-auto">
-              <button onclick="openNewItemModalForCategory('${safeId}')" class="px-2.5 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 text-xs font-semibold flex items-center gap-1 transition-colors" title="Bu kategoriye yeni ürün ekle">
-                <i data-lucide="plus" class="w-3.5 h-3.5"></i>
-                <span>Ürün Ekle</span>
-              </button>
-              <button onclick="moveCategory('${safeId}', -1)" ${isFirst ? 'disabled class="p-1.5 rounded-lg text-gray-600 cursor-not-allowed"' : 'class="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 transition-colors"'} title="Yukarı Taşı">
-                <i data-lucide="arrow-up" class="w-4 h-4"></i>
-              </button>
-              <button onclick="moveCategory('${safeId}', 1)" ${isLast ? 'disabled class="p-1.5 rounded-lg text-gray-600 cursor-not-allowed"' : 'class="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 transition-colors"'} title="Aşağı Taşı">
-                <i data-lucide="arrow-down" class="w-4 h-4"></i>
-              </button>
-              <button onclick="openEditCategoryModal('${safeId}')" class="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white transition-colors" title="Düzenle">
-                <i data-lucide="edit-3" class="w-4 h-4"></i>
-              </button>
-              <button onclick="deleteCategory('${safeId}')" class="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 transition-colors" title="Sil">
-                <i data-lucide="trash-2" class="w-4 h-4"></i>
-              </button>
-            </div>
+            <!-- Açılabilir Ürünler Yönetim Alanı -->
+            ${isExpanded ? `
+              <div class="border-t border-white/10 bg-neutral-900/60 p-3.5 sm:p-4 space-y-3">
+                <div class="flex items-center justify-between gap-2 text-xs text-gray-400 pb-1.5 border-b border-white/5">
+                  <span class="font-bold text-white flex items-center gap-1.5">
+                    <i data-lucide="package" class="w-3.5 h-3.5 text-amber-400"></i>
+                    <span>"${escapeHtml(cat.name)}" Kategorisindeki Ürünler (${catItems.length})</span>
+                  </span>
+                  <button type="button" onclick="openNewItemModalForCategory('${safeId}')" class="text-xs text-amber-400 hover:text-amber-300 font-semibold flex items-center gap-1 transition-colors">
+                    <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                    <span>+ Yeni Ürün Ekle</span>
+                  </button>
+                </div>
+
+                ${catItems.length === 0 ? `
+                  <div class="p-6 text-center rounded-xl bg-black/40 border border-white/5 text-xs text-gray-400 space-y-2.5">
+                    <div>Bu kategoride henüz ürün bulunmuyor. Menüde görünmesi için bir ürün ekleyin.</div>
+                    <button type="button" onclick="openNewItemModalForCategory('${safeId}')" class="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs inline-flex items-center gap-1.5 transition-colors shadow-md shadow-amber-500/15">
+                      <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                      <span>İlk Ürünü Ekle</span>
+                    </button>
+                  </div>
+                ` : `
+                  <div class="space-y-2">
+                    ${catItems.map((item) => {
+                      const isOut = item.inStock === false || item.isAvailable === false;
+                      const thumbFallback = 'https://images.unsplash.com/photo-1527661591475-527312dd65f5?auto=format&fit=crop&w=100&q=80';
+                      const thumbSrc = resolveAdminImageUrl(item.image, thumbFallback);
+                      const thumbFit = item.imageFit === 'contain' ? 'object-contain' : (item.imageFit === 'top' ? 'object-cover object-top' : 'object-cover');
+                      const safeItemId = String(item.id || '').replace(/'/g, "\\'");
+
+                      return `
+                        <div class="flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 p-2.5 sm:p-3 rounded-xl bg-black/75 border border-white/5 hover:border-amber-500/30 transition-all">
+                          <div class="flex items-center gap-3 min-w-0 flex-1">
+                            <img src="${thumbSrc}" 
+                                 alt="" class="w-11 h-11 rounded-lg ${thumbFit} bg-neutral-900 border border-white/10 flex-shrink-0"
+                                 onerror="this.src='${thumbFallback}'" />
+                            <div class="min-w-0 flex-1">
+                              <div class="font-bold text-white text-xs sm:text-sm flex items-center gap-1.5 truncate">
+                                <span>${escapeHtml(item.name)}</span>
+                                ${item.badge ? `<span class="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 font-medium">${escapeHtml(item.badge)}</span>` : ''}
+                              </div>
+                              ${item.flavors && item.flavors.length > 0 ? `
+                                <div class="text-[10px] text-gray-400 truncate mt-0.5">${item.flavors.map(f => escapeHtml(f)).join(' • ')}</div>
+                              ` : (item.description ? `
+                                <div class="text-[10px] text-gray-500 truncate mt-0.5">${escapeHtml(item.description)}</div>
+                              ` : '')}
+                            </div>
+                          </div>
+
+                          <div class="flex items-center gap-2 flex-shrink-0 ml-auto sm:ml-0">
+                            <!-- Hızlı Fiyat Düzenleme Kutusu -->
+                            <div class="flex items-center gap-1" title="Fiyatı anında değiştirmek için tıklayın">
+                              <input 
+                                type="number" 
+                                value="${item.price}" 
+                                onchange="saveSingleQuickPrice('${safeItemId}', this.value)"
+                                onkeydown="if(event.key==='Enter'){ this.blur(); }"
+                                class="w-20 px-2.5 py-1 rounded-lg bg-neutral-900 border border-white/15 text-right font-mono font-bold text-amber-400 text-xs focus:outline-none focus:border-amber-400"
+                              />
+                              <span class="text-xs text-gray-400 font-semibold font-mono">${currency}</span>
+                            </div>
+
+                            <!-- Stok Durumu Değiştirme Butonu -->
+                            <button type="button" onclick="toggleStockStatus('${safeItemId}')" 
+                                    class="px-2.5 py-1 rounded-lg text-[10px] sm:text-xs font-semibold flex items-center gap-1 transition-colors ${
+                                      isOut 
+                                        ? 'bg-red-500/20 text-red-300 border border-red-500/30' 
+                                        : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                                    }" title="Stok durumunu değiştir">
+                              <span class="w-1.5 h-1.5 rounded-full ${isOut ? 'bg-red-400' : 'bg-emerald-400'}"></span>
+                              <span>${isOut ? 'Tükendi' : 'Mevcut'}</span>
+                            </button>
+
+                            <!-- Doğrudan Ürünü Düzenleme Butonu (Kullanıcının İstediği Temel Düzenleme Alanı) -->
+                            <button type="button" onclick="openEditItemModal('${safeItemId}')" 
+                                    class="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs flex items-center gap-1.5 transition-colors shadow-sm shadow-amber-500/10" 
+                                    title="Ürünün ismini, fotoğrafını, aromasını veya açıklamasını düzenle">
+                              <i data-lucide="edit-3" class="w-3.5 h-3.5"></i>
+                              <span>Düzenle</span>
+                            </button>
+
+                            <!-- Ürünü Sil Butonu -->
+                            <button type="button" onclick="deleteItem('${safeItemId}')" 
+                                    class="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 transition-colors" 
+                                    title="Ürünü Sil">
+                              <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                            </button>
+                          </div>
+                        </div>
+                      `;
+                    }).join('')}
+                  </div>
+                `}
+              </div>
+            ` : ''}
           </div>
         `;
       }).join('')}
@@ -650,6 +807,9 @@ function renderAdminCategories() {
 }
 
 function openNewItemModalForCategory(catId) {
+  if (catId) {
+    expandedCategoryIds.add(catId);
+  }
   openNewItemModal();
   fillCategorySelect(catId);
 }

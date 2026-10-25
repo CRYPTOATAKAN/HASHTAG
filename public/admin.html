@@ -223,14 +223,20 @@
 
       <!-- SEKME: KATEGORİ YÖNETİMİ -->
       <section id="tab-section-categories" class="hidden">
-        <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center justify-between flex-wrap gap-3 mb-4">
           <div>
-            <h2 class="text-lg font-bold text-white">Kategori Yönetimi</h2>
-            <p class="text-xs text-gray-400">Menü kategorilerini ekleyin, isimlerini değiştirin veya sırasını ayarlayın.</p>
+            <h2 class="text-lg font-bold text-white">Kategori & Menü Ürünleri Yönetimi</h2>
+            <p class="text-xs text-gray-400">Kategorileri ve içerisindeki ürünleri doğrudan buradan görüntüleyebilir, düzenleyebilir veya yeni ürün ekleyebilirsiniz.</p>
           </div>
-          <button onclick="openNewCategoryModal()" class="px-4 py-2 rounded-xl bg-amber-500 text-black font-bold text-xs flex items-center gap-1.5 hover:bg-amber-400 transition-colors shadow-lg shadow-amber-500/20">
-            <i data-lucide="plus" class="w-4 h-4"></i> Yeni Kategori Ekle
-          </button>
+          <div class="flex items-center gap-2">
+            <button type="button" onclick="toggleAllCategoryProducts()" id="btn-toggle-all-cats" class="px-3.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10 font-semibold text-xs flex items-center gap-1.5 transition-all">
+              <i data-lucide="layers" class="w-3.5 h-3.5 text-amber-400"></i>
+              <span id="label-toggle-all-cats">Tüm Ürünleri Aç</span>
+            </button>
+            <button onclick="openNewCategoryModal()" class="px-4 py-2 rounded-xl bg-amber-500 text-black font-bold text-xs flex items-center gap-1.5 hover:bg-amber-400 transition-colors shadow-lg shadow-amber-500/20">
+              <i data-lucide="plus" class="w-4 h-4"></i> Yeni Kategori Ekle
+            </button>
+          </div>
         </div>
 
         <div id="admin-categories-list" class="rounded-2xl bg-neutral-900 border border-white/10 overflow-hidden shadow-xl p-4">
