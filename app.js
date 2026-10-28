@@ -1138,6 +1138,73 @@ function buildHeroSlides() {
     });
   }
 
+  // Slayt 4: Instagram Sosyal Medya Tanıtım & Reklam Slaytı
+  const cleanInsta = normalizeInstagramHandle(s.instagram);
+  if (cleanInsta && bm.instagramSlideEnabled !== false) {
+    const fullInstaUrl = `https://www.instagram.com/${cleanInsta}`;
+    slides.push({
+      id: 'promo-instagram',
+      image: 'https://images.unsplash.com/photo-1514933651103-005eec06c04b?auto=format&fit=crop&w=1200&q=80',
+      imageFit: 'cover',
+      fallbackImage: 'hashtag-banner.jpg?v=3.0',
+      badgeIcon: 'instagram',
+      badgeText: "INSTAGRAM'DA TAKİP EDİN",
+      badgeClass: 'bg-pink-500/25 text-pink-200 border-pink-400/40',
+      title: `@${cleanInsta}`,
+      desc: 'Özel nargile karışımlarımız, atmosferimiz ve hikayelerimiz için bizi takip edin!',
+      liveLabel: 'INSTAGRAM',
+      ctaUrl: fullInstaUrl,
+      ctaLabel: 'Sayfayı Ziyaret Et',
+      ctaClass: 'pointer-events-auto px-3 py-1.5 rounded-xl bg-gradient-to-r from-pink-600 via-purple-600 to-amber-500 hover:from-pink-500 hover:to-amber-400 text-white font-black text-[11px] uppercase tracking-wider flex items-center gap-1 shadow-lg shadow-pink-600/30 border border-pink-400/40 active:scale-95 transition-all'
+    });
+  }
+
+  // Slayt 5: Google Haritalar 5 Yıldız & Yorum Reklam Slaytı
+  const defaultGoogleMapsUrl = 'https://www.google.com/maps/place/HashTag+Sh%C4%B1sha+TowN/@36.5441256,31.9875018,17z/data=!4m8!3m7!1s0x14dca29d1fbf1249:0x4b3340264cde0fb8!8m2!3d36.5441256!4d31.9900767!9m1!1b1!16s%2Fg%2F11c5swfnsx?entry=ttu&g_ep=EgoyMDI2MTAyMC4wIKXMDSoASAFQAw%3D%3D';
+  const fullMapsUrl = (s.googleMapsUrl && String(s.googleMapsUrl).trim()) ? String(s.googleMapsUrl).trim() : defaultGoogleMapsUrl;
+  if (fullMapsUrl && bm.googleMapsSlideEnabled !== false) {
+    slides.push({
+      id: 'promo-google-maps',
+      image: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=1200&q=80',
+      imageFit: 'cover',
+      fallbackImage: 'hashtag-banner.jpg?v=3.0',
+      badgeIcon: 'map-pin',
+      badgeText: 'GOOGLE HARİTALAR ⭐⭐⭐⭐⭐',
+      badgeClass: 'bg-amber-500/25 text-amber-200 border-amber-400/40',
+      title: 'HashTag Shısha TowN',
+      desc: "Deneyiminizi Google Haritalar'da paylaşarak 5 yıldızınızla bize destek olun!",
+      liveLabel: '5★ PUAN VER',
+      ctaUrl: fullMapsUrl,
+      ctaLabel: '5★ Yorum Yaz',
+      ctaClass: 'pointer-events-auto px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-black font-black text-[11px] uppercase tracking-wider flex items-center gap-1 shadow-lg shadow-amber-500/30 border border-amber-300/50 active:scale-95 transition-all'
+    });
+  }
+
+  // Ekstra Reklam / Kampanya Eklentileri (Gelecekteki tüm reklam eklentileri otomatik olarak buraya da dahil olur)
+  if (Array.isArray(s.promoAds)) {
+    s.promoAds.forEach((ad, idx) => {
+      if (!ad || ad.enabled === false) return;
+      const safeCtaUrl = (ad.ctaUrl && String(ad.ctaUrl).trim() && !/^\s*(javascript|data|vbscript):/i.test(String(ad.ctaUrl)))
+        ? String(ad.ctaUrl).trim()
+        : '';
+      slides.push({
+        id: ad.id || `promo-ad-${idx + 1}`,
+        image: resolveImageUrl(ad.image, 'hashtag-banner.jpg?v=3.0'),
+        imageFit: ad.imageFit || 'cover',
+        fallbackImage: 'hashtag-banner.jpg?v=3.0',
+        badgeIcon: ad.badgeIcon || 'megaphone',
+        badgeText: ad.badge || 'ÖZEL KAMPANYA',
+        badgeClass: 'bg-cyan-500/25 text-cyan-200 border-cyan-400/40',
+        title: ad.title || cafeName,
+        desc: ad.desc || '',
+        liveLabel: ad.liveLabel || 'REKLAM',
+        ctaUrl: safeCtaUrl,
+        ctaLabel: ad.ctaLabel || 'İncele',
+        ctaClass: 'pointer-events-auto px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-400 text-black font-black text-[11px] uppercase tracking-wider flex items-center gap-1 shadow-lg border border-white/20 active:scale-95 transition-all'
+      });
+    });
+  }
+
   return slides;
 }
 
@@ -1174,23 +1241,21 @@ function initHeroBanner() {
     else btn.classList.remove('hidden');
   });
 
-  // Render slide image elements
+  // Render slide image elements (her türlü yatay/dikey görsel ve slayt sunumu için bulanık arka plan + net ön plan)
   const slidesWrapper = document.getElementById('hero-slides-wrapper');
   if (slidesWrapper) {
     slidesWrapper.innerHTML = heroSlidesList.map((slide, i) => {
       const fit = slide.imageFit || 'cover';
       const fitClasses = fit === 'contain'
-        ? 'relative z-10 w-full h-full object-contain brightness-95'
+        ? 'relative z-10 w-full h-full object-contain brightness-100 drop-shadow-2xl'
         : (fit === 'top'
-            ? 'w-full h-full object-cover object-top brightness-90 hero-kenburns'
-            : 'w-full h-full object-cover object-center brightness-90 hero-kenburns');
+            ? 'relative z-10 w-full h-full object-cover object-top brightness-95 hero-kenburns'
+            : 'relative z-10 w-full h-full object-cover object-center brightness-95 hero-kenburns');
       return `
         <div id="hero-slide-${i}" class="hero-slide ${i === 0 ? 'active' : ''}">
-          ${fit === 'contain' ? `
-            <img src="${slide.image}" alt="" aria-hidden="true"
-                 class="absolute inset-0 w-full h-full object-cover scale-125 blur-xl brightness-50 pointer-events-none"
-                 onerror="this.style.display='none'" />
-          ` : ''}
+          <img src="${slide.image}" alt="" aria-hidden="true"
+               class="absolute inset-0 w-full h-full object-cover scale-125 blur-xl brightness-50 pointer-events-none"
+               onerror="this.style.display='none'" />
           <img 
             src="${slide.image}" 
             onerror="if(!this.src.includes('hashtag-banner.jpg')) this.src='${slide.fallbackImage}';" 
@@ -1202,7 +1267,10 @@ function initHeroBanner() {
     }).join('');
   }
 
-  // Mouse hover & touch hold events to pause story
+  // Mouse hover & telefon dokunmatik kaydırma (Swipe Left / Right) + basılı tutarak duraklatma desteği
+  let touchStartX = 0;
+  let touchStartY = 0;
+
   card.onmouseenter = () => {
     heroIsPaused = true;
     heroPauseStartTime = Date.now();
@@ -1214,14 +1282,28 @@ function initHeroBanner() {
     }
   };
 
-  card.ontouchstart = () => {
+  card.ontouchstart = (ev) => {
     heroIsPaused = true;
     heroPauseStartTime = Date.now();
+    if (ev && ev.touches && ev.touches.length > 0) {
+      touchStartX = ev.touches[0].clientX;
+      touchStartY = ev.touches[0].clientY;
+    }
   };
-  card.ontouchend = () => {
+  card.ontouchend = (ev) => {
     if (heroIsPaused) {
       heroTotalPausedDuration += (Date.now() - heroPauseStartTime);
       heroIsPaused = false;
+    }
+    if (ev && ev.changedTouches && ev.changedTouches.length > 0 && touchStartX !== 0) {
+      const dx = ev.changedTouches[0].clientX - touchStartX;
+      const dy = ev.changedTouches[0].clientY - touchStartY;
+      touchStartX = 0;
+      touchStartY = 0;
+      if (Math.abs(dx) > 36 && Math.abs(dx) > Math.abs(dy) * 1.2) {
+        if (dx < 0) nextHeroSlide();
+        else prevHeroSlide();
+      }
     }
   };
 
@@ -1251,7 +1333,12 @@ function showHeroSlide(index) {
   const titleEl = document.getElementById('hero-slide-title');
   const descEl = document.getElementById('hero-slide-desc');
   const clockEl = document.getElementById('hero-live-clock');
+  const counterEl = document.getElementById('hero-slide-counter');
   const textContainer = document.getElementById('hero-slide-text-container');
+
+  if (counterEl) {
+    counterEl.textContent = `${index + 1}/${heroSlidesList.length}`;
+  }
 
   if (textContainer) {
     textContainer.classList.remove('hero-content-fade');
@@ -1279,6 +1366,19 @@ function showHeroSlide(index) {
 
   if (clockEl) {
     clockEl.textContent = slide.liveLabel || 'CANLI';
+  }
+
+  const ctaBtn = document.getElementById('hero-slide-cta-btn');
+  const ctaLabelEl = document.getElementById('hero-slide-cta-label');
+  if (ctaBtn) {
+    if (slide.ctaUrl && !/^\s*(javascript|data|vbscript):/i.test(String(slide.ctaUrl))) {
+      ctaBtn.href = slide.ctaUrl;
+      ctaBtn.className = slide.ctaClass || 'pointer-events-auto px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-400 text-black font-black text-[11px] uppercase tracking-wider flex items-center gap-1 shadow-lg border border-white/20 active:scale-95 transition-all';
+      if (ctaLabelEl) ctaLabelEl.textContent = slide.ctaLabel || 'İncele';
+    } else {
+      ctaBtn.className = 'hidden';
+      ctaBtn.href = '#';
+    }
   }
 
   if (window.lucide) {
@@ -1345,6 +1445,65 @@ window.jumpToHeroSlide = function(index) {
     showHeroSlide(index);
   }
 };
+
+function renderTopPromoAdsHub() {
+  const extraContainer = document.getElementById('extra-promo-ads-container');
+  if (!extraContainer) return;
+
+  const s = (menuData && menuData.settings) ? menuData.settings : {};
+  const activeAds = Array.isArray(s.promoAds)
+    ? s.promoAds.filter(ad => ad && ad.enabled !== false && (ad.title || ad.desc))
+    : [];
+
+  if (activeAds.length === 0) {
+    extraContainer.innerHTML = '';
+    extraContainer.classList.add('hidden');
+    return;
+  }
+
+  extraContainer.classList.remove('hidden');
+  extraContainer.innerHTML = activeAds.map(ad => {
+    const safeBadge = escapeHtml(ad.badge || 'ÖZEL REKLAM & KAMPANYA');
+    const safeTitle = escapeHtml(ad.title || '');
+    const safeDesc = escapeHtml(ad.desc || '');
+    const safeIcon = escapeHtml(ad.badgeIcon || 'megaphone');
+    const rawUrl = String(ad.ctaUrl || '').trim();
+    const safeUrl = (rawUrl && !/^\s*(javascript|data|vbscript):/i.test(rawUrl)) ? escapeHtml(rawUrl) : '';
+    const safeCtaLabel = escapeHtml(ad.ctaLabel || 'İncele');
+
+    return `
+      <div class="relative overflow-hidden rounded-2xl p-3.5 sm:p-4 bg-gradient-to-br from-neutral-900/95 via-neutral-900/75 to-neutral-950 border border-cyan-500/25 shadow-xl group hover:border-cyan-400/50 transition-all duration-300 flex flex-col justify-between gap-3">
+        <div class="absolute -top-8 -right-8 w-32 h-32 bg-gradient-to-br from-cyan-500/15 via-amber-500/10 to-purple-500/10 rounded-full blur-2xl pointer-events-none"></div>
+        <div class="relative z-10 flex items-start gap-3">
+          <div class="w-11 h-11 rounded-2xl bg-gradient-to-tr from-cyan-500 via-teal-400 to-amber-500 p-[2px] shadow-lg shadow-cyan-500/20 flex-shrink-0">
+            <div class="w-full h-full bg-neutral-950 rounded-[14px] flex items-center justify-center p-2.5">
+              <i data-lucide="${safeIcon}" class="w-full h-full text-cyan-400"></i>
+            </div>
+          </div>
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-1.5">
+              <span class="text-[10px] font-bold text-cyan-300 uppercase tracking-wider truncate">${safeBadge}</span>
+              <span class="flex h-2 w-2 relative flex-shrink-0">
+                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
+                <span class="relative inline-flex rounded-full h-2 w-2 bg-cyan-500"></span>
+              </span>
+            </div>
+            <h3 class="text-sm sm:text-base font-black text-white tracking-tight mt-0.5 truncate">${safeTitle}</h3>
+            ${safeDesc ? `<p class="text-[11px] text-gray-300 mt-0.5 line-clamp-2 leading-snug">${safeDesc}</p>` : ''}
+          </div>
+        </div>
+        ${safeUrl ? `
+          <div class="relative z-10 flex items-center gap-2">
+            <a href="${safeUrl}" target="_blank" rel="noopener noreferrer" class="flex-1 px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-teal-400 hover:from-cyan-400 hover:to-teal-300 text-black font-black text-[11px] uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-lg shadow-cyan-500/20 active:scale-95 transition-all">
+              <span>${safeCtaLabel}</span>
+              <i data-lucide="arrow-up-right" class="w-3.5 h-3.5"></i>
+            </a>
+          </div>
+        ` : ''}
+      </div>
+    `;
+  }).join('');
+}
 
 function renderHeaderInfo() {
   if (!menuData || !menuData.settings) return;
@@ -1452,6 +1611,9 @@ function renderHeaderInfo() {
   if (mapsCardBtn) {
     mapsCardBtn.href = fullMapsUrl;
   }
+
+  // Üst Reklam & Tanıtım Merkezindeki Ekstra Reklam Eklentilerini Güncelle
+  renderTopPromoAdsHub();
 
   // Gelecek özellik (Köz & Garson) kontrolü
   const serviceActionsEl = document.getElementById('service-call-actions');
