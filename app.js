@@ -41,7 +41,7 @@ function getApiBaseUrl() {
   return 'https://p01--hashtag--xqx4khzq6gkf.code.run';
 }
 
-// Yüklenen (/uploads/...) veya Harici Görseller İçin Evrensel URL Çözücü
+// Yüklenen (/uploads/...) veya Harici Görseller & Videolar İçin Evrensel URL Çözücü
 function resolveImageUrl(url, fallback = 'https://images.unsplash.com/photo-1527661591475-527312dd65f5?auto=format&fit=crop&w=600&q=80') {
   if (!url || typeof url !== 'string' || !url.trim()) {
     return fallback;
@@ -55,6 +55,16 @@ function resolveImageUrl(url, fallback = 'https://images.unsplash.com/photo-1527
     return apiBase ? `${apiBase}${clean}` : clean;
   }
   return clean;
+}
+
+// URL'nin Video Medyası (.mp4, .mov, .webm, .m4v, .ogv veya data:video/...) Olup Olmadığını Tespit Et
+function isVideoMediaUrl(url) {
+  if (!url || typeof url !== 'string') return false;
+  const clean = url.trim().toLowerCase();
+  if (!clean) return false;
+  if (clean.startsWith('data:video/')) return true;
+  const withoutQuery = clean.split('?')[0].split('#')[0];
+  return /\.(mp4|webm|mov|m4v|ogv|ogg)$/i.test(withoutQuery) || withoutQuery.includes('/vid_');
 }
 
 // Görsel Bildirim (Toast) Sistemi
@@ -542,12 +552,13 @@ function applyCustomerBackgroundAndEffects() {
   if (typeof document === 'undefined' || !menuData || !menuData.settings) return;
   const bm = menuData.settings.brandMedia || {};
 
-  // 1. Tam Ekran Arka Plan Fotoğrafı (Özel Arka Plan seçilmişse onu, yoksa 1. Slayt Kapağını, yoksa varsayılanı kullan)
+  // 1. Tam Ekran Arka Plan Fotoğrafı (Özel Arka Plan seçilmişse onu, yoksa 1. Slayt Kapağını -video değilse-, yoksa varsayılanı kullan)
   const ambientImgEl = document.getElementById('ambient-photo-img');
   if (ambientImgEl) {
     const customBg = bm.backgroundImage && String(bm.backgroundImage).trim();
-    const customHero = bm.heroBannerImage && String(bm.heroBannerImage).trim();
-    const chosenRawUrl = customBg || customHero || '';
+    const rawHero = bm.heroBannerImage && String(bm.heroBannerImage).trim();
+    const customHero = (rawHero && !isVideoMediaUrl(rawHero)) ? rawHero : '';
+    const chosenRawUrl = (customBg && !isVideoMediaUrl(customBg)) ? customBg : (customHero || '');
     const ambientSrc = chosenRawUrl
       ? resolveImageUrl(chosenRawUrl, 'hashtag-banner.jpg?v=2.7')
       : 'hashtag-banner.jpg?v=2.7';
@@ -1005,7 +1016,10 @@ let heroCurrentSlideIndex = 0;
 let heroSlidesList = [];
 let heroProgressAnimFrame = null;
 let heroSlideStartTime = 0;
-const HERO_SLIDE_DURATION = 5000; // Her slayt 5 saniye
+const HERO_SLIDE_DURATION = 5000; // Standart fotoğraf slaytı: 5 saniye
+const HERO_VIDEO_DEFAULT_DURATION = 10000; // Video slaytı varsayılan süresi: 10 saniye (veya videonun kendi uzunluğu)
+let heroActiveSlideDuration = HERO_SLIDE_DURATION;
+let heroVideoMuted = true;
 let heroIsPaused = false;
 let heroPauseStartTime = 0;
 let heroTotalPausedDuration = 0;
@@ -1241,18 +1255,47 @@ function initHeroBanner() {
     else btn.classList.remove('hidden');
   });
 
-  // Render slide image elements (her türlü yatay/dikey görsel ve slayt sunumu için bulanık arka plan + net ön plan)
+  // Render slide image & video elements (her türlü yatay/dikey görsel, video ve slayt sunumu için bulanık arka plan + net ön plan)
   const slidesWrapper = document.getElementById('hero-slides-wrapper');
   if (slidesWrapper) {
     slidesWrapper.innerHTML = heroSlidesList.map((slide, i) => {
       const fit = slide.imageFit || 'cover';
+      const isVid = isVideoMediaUrl(slide.image);
+      slide.isVideo = isVid;
+
+      if (isVid) {
+        const vidFitClasses = fit === 'contain'
+          ? 'relative z-10 w-full h-full object-contain brightness-100 drop-shadow-2xl'
+          : (fit === 'top'
+              ? 'relative z-10 w-full h-full object-cover object-top brightness-95'
+              : 'relative z-10 w-full h-full object-cover object-center brightness-95');
+        return `
+          <div id="hero-slide-${i}" class="hero-slide ${i === 0 ? 'active' : ''}" data-slide-type="video">
+            ${fit === 'contain' ? `
+              <video id="hero-slide-bg-video-${i}" src="${slide.image}" muted loop playsinline webkit-playsinline preload="metadata" aria-hidden="true"
+                     class="hero-bg-video absolute inset-0 w-full h-full object-cover scale-125 blur-xl brightness-50 pointer-events-none"></video>
+            ` : ''}
+            <video
+              id="hero-slide-video-${i}"
+              src="${slide.image}"
+              muted
+              loop
+              playsinline
+              webkit-playsinline
+              preload="auto"
+              class="${vidFitClasses}"
+            ></video>
+          </div>
+        `;
+      }
+
       const fitClasses = fit === 'contain'
         ? 'relative z-10 w-full h-full object-contain brightness-100 drop-shadow-2xl'
         : (fit === 'top'
             ? 'relative z-10 w-full h-full object-cover object-top brightness-95 hero-kenburns'
             : 'relative z-10 w-full h-full object-cover object-center brightness-95 hero-kenburns');
       return `
-        <div id="hero-slide-${i}" class="hero-slide ${i === 0 ? 'active' : ''}">
+        <div id="hero-slide-${i}" class="hero-slide ${i === 0 ? 'active' : ''}" data-slide-type="image">
           <img src="${slide.image}" alt="" aria-hidden="true"
                class="absolute inset-0 w-full h-full object-cover scale-125 blur-xl brightness-50 pointer-events-none"
                onerror="this.style.display='none'" />
@@ -1311,22 +1354,109 @@ function initHeroBanner() {
   showHeroSlide(0);
 }
 
+function updateHeroVideoSoundBtnUI() {
+  const soundBtn = document.getElementById('hero-video-sound-btn');
+  const iconEl = document.getElementById('hero-video-sound-icon');
+  const labelEl = document.getElementById('hero-video-sound-label');
+  if (!soundBtn) return;
+
+  const activeSlide = heroSlidesList[heroCurrentSlideIndex];
+  const isVid = !!(activeSlide && (activeSlide.isVideo || isVideoMediaUrl(activeSlide.image)));
+  if (!isVid) {
+    soundBtn.classList.add('hidden');
+    return;
+  }
+
+  soundBtn.classList.remove('hidden');
+  if (iconEl) iconEl.textContent = heroVideoMuted ? '🔇' : '🔊';
+  if (labelEl) labelEl.textContent = heroVideoMuted ? 'Sesi Aç' : 'Ses Açık';
+}
+
+window.toggleHeroVideoSound = function(e) {
+  if (e) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+  heroVideoMuted = !heroVideoMuted;
+  const activeVid = document.getElementById(`hero-slide-video-${heroCurrentSlideIndex}`);
+  if (activeVid) {
+    activeVid.muted = heroVideoMuted;
+    if (!heroVideoMuted && activeVid.paused && typeof activeVid.play === 'function') {
+      try {
+        const p = activeVid.play();
+        if (p && typeof p.catch === 'function') p.catch(() => {});
+      } catch (err) {}
+    }
+  }
+  updateHeroVideoSoundBtnUI();
+};
+
 function showHeroSlide(index) {
   if (index < 0 || index >= heroSlidesList.length) return;
   heroCurrentSlideIndex = index;
   const slide = heroSlidesList[index];
+  const isActiveVideo = !!(slide && (slide.isVideo || isVideoMediaUrl(slide.image)));
 
-  // Update slide images visibility
-  heroSlidesList.forEach((_, i) => {
+  heroActiveSlideDuration = isActiveVideo ? HERO_VIDEO_DEFAULT_DURATION : HERO_SLIDE_DURATION;
+
+  // Update slide images & videos visibility + playback state
+  heroSlidesList.forEach((sItem, i) => {
     const el = document.getElementById(`hero-slide-${i}`);
+    const vidEl = document.getElementById(`hero-slide-video-${i}`);
+    const bgVidEl = document.getElementById(`hero-slide-bg-video-${i}`);
     if (el) {
       if (i === index) {
         el.classList.add('active');
+        if (vidEl) {
+          vidEl.muted = heroVideoMuted;
+          try { vidEl.currentTime = 0; } catch (err) {}
+          const syncVideoDuration = () => {
+            if (heroCurrentSlideIndex === index && vidEl.duration && Number.isFinite(vidEl.duration) && vidEl.duration > 0) {
+              heroActiveSlideDuration = Math.min(Math.max(Math.round(vidEl.duration * 1000), 6000), 30000);
+            }
+          };
+          syncVideoDuration();
+          vidEl.onloadedmetadata = syncVideoDuration;
+          if (typeof vidEl.play === 'function') {
+            try {
+              const p = vidEl.play();
+              if (p && typeof p.catch === 'function') {
+                p.catch(() => {
+                  vidEl.muted = true;
+                  heroVideoMuted = true;
+                  updateHeroVideoSoundBtnUI();
+                  try {
+                    const p2 = vidEl.play();
+                    if (p2 && typeof p2.catch === 'function') p2.catch(() => {});
+                  } catch (e2) {}
+                });
+              }
+            } catch (playErr) {}
+          }
+        }
+        if (bgVidEl) {
+          bgVidEl.muted = true;
+          try { bgVidEl.currentTime = 0; } catch (err) {}
+          if (typeof bgVidEl.play === 'function') {
+            try {
+              const bp = bgVidEl.play();
+              if (bp && typeof bp.catch === 'function') bp.catch(() => {});
+            } catch (err) {}
+          }
+        }
       } else {
         el.classList.remove('active');
+        if (vidEl && typeof vidEl.pause === 'function') {
+          try { vidEl.pause(); } catch (err) {}
+        }
+        if (bgVidEl && typeof bgVidEl.pause === 'function') {
+          try { bgVidEl.pause(); } catch (err) {}
+        }
       }
     }
   });
+
+  updateHeroVideoSoundBtnUI();
 
   // Update animated text
   const badgeEl = document.getElementById('hero-slide-badge');
@@ -1399,8 +1529,9 @@ function startHeroProgressLoop() {
 
   function step() {
     if (!heroIsPaused) {
+      const activeDur = heroActiveSlideDuration || HERO_SLIDE_DURATION;
       const elapsed = Date.now() - heroSlideStartTime - heroTotalPausedDuration;
-      const progressPercent = Math.min((elapsed / HERO_SLIDE_DURATION) * 100, 100);
+      const progressPercent = Math.min((elapsed / activeDur) * 100, 100);
 
       heroSlidesList.forEach((_, i) => {
         const fill = document.getElementById(`hero-progress-fill-${i}`);

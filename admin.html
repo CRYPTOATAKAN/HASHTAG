@@ -146,8 +146,11 @@
           <button id="tab-btn-qr-stands" onclick="switchTab('qr-stands')" class="px-4 py-2 rounded-xl text-xs font-medium transition-all flex items-center gap-2 text-gray-400 hover:bg-white/5 whitespace-nowrap">
             <i data-lucide="qr-code" class="w-4 h-4 text-amber-400"></i> Sabit QR Masa Standları
           </button>
+          <button id="tab-btn-hero-banner" type="button" onclick="openHeroBannerSection()" class="px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 text-purple-200 bg-purple-500/15 hover:bg-purple-500/25 border border-purple-500/30 whitespace-nowrap shadow-sm shadow-purple-500/10">
+            <i data-lucide="video" class="w-4 h-4 text-purple-400"></i> 🎬 Hero Banner (Video / Foto)
+          </button>
           <button id="tab-btn-brand-media" type="button" onclick="openBrandMediaSection()" class="px-4 py-2 rounded-xl text-xs font-semibold transition-all flex items-center gap-2 text-amber-200 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/25 whitespace-nowrap">
-            <i data-lucide="image" class="w-4 h-4 text-amber-400"></i> Profil & Kapak Görselleri
+            <i data-lucide="image" class="w-4 h-4 text-amber-400"></i> Profil & Görseller
           </button>
           <button id="tab-btn-ambient-bg" type="button" onclick="openAmbientBackgroundSection()" class="px-4 py-2 rounded-xl text-xs font-semibold transition-all flex items-center gap-2 text-cyan-200 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/25 whitespace-nowrap">
             <i data-lucide="wind" class="w-4 h-4 text-cyan-400"></i> Arka Plan & Duman Efekti
@@ -414,15 +417,15 @@
               </div>
             </div>
 
-            <!-- KART 2: ANASAYFA 1. SLAYT (ANA KAPAK) & ÜST ARKA PLAN ATMOSFER FOTOĞRAFI -->
+            <!-- KART 2: ANASAYFA 1. SLAYT (ANA KAPAK VİDEO VEYA FOTOĞRAFI) & ÜST ARKA PLAN ATMOSFER GÖRSELİ -->
             <div id="brand-hero-dropzone" class="p-4 rounded-2xl bg-neutral-900/75 border border-dashed border-white/15 hover:border-amber-500/45 transition-all space-y-3.5">
               <div class="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <label class="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
                     <span class="w-6 h-6 rounded-lg bg-amber-500/20 border border-amber-500/30 text-amber-300 flex items-center justify-center text-xs font-black">2</span>
-                    <span>Anasayfa 1. Slayt (Ana Kapak) & Arka Plan Atmosfer Görseli</span>
+                    <span>Anasayfa 1. Slayt (Ana Kapak Fotoğrafı veya Videosu 🎬)</span>
                   </label>
-                  <p class="text-[11px] text-gray-400 mt-0.5">Müşteri anasayfasındaki ilk büyük slayt fotoğrafını ve sayfa üstündeki neon/atmosfer yansımasını değiştirir.</p>
+                  <p class="text-[11px] text-gray-400 mt-0.5">Müşteri anasayfasındaki genişletilmiş ilk büyük slayt alanına <b>HD Video (.MP4, .MOV, .WEBM)</b> veya fotoğraf yükleyebilirsiniz.</p>
                 </div>
                 <span id="brand-hero-status" class="text-[10px] px-2.5 py-1 rounded-full bg-white/5 text-amber-300 border border-white/10 font-mono">
                   Varsayılan Kapak Aktif
@@ -432,16 +435,17 @@
               <input type="hidden" id="set-brand-hero-image" value="" />
               <input type="hidden" id="set-brand-hero-fit" value="cover" />
 
-              <!-- Canlı 1. Slayt Önizleme Kartı -->
-              <div class="relative w-full h-40 sm:h-44 rounded-2xl overflow-hidden border border-white/10 bg-black shadow-inner">
+              <!-- Canlı 1. Slayt Önizleme Kartı (Fotoğraf & Video Destekli) -->
+              <div class="relative w-full h-44 sm:h-52 rounded-2xl overflow-hidden border border-white/10 bg-black shadow-inner">
                 <img id="brand-hero-blur-bg" src="hashtag-banner.jpg?v=3.0" alt="" class="hidden absolute inset-0 w-full h-full object-cover scale-125 blur-xl brightness-50 pointer-events-none" />
                 <img id="brand-hero-preview" src="hashtag-banner.jpg?v=3.0" alt="Ana Kapak Önizleme" class="relative z-10 w-full h-full object-cover object-center transition-all duration-300" />
+                <video id="brand-hero-video-preview" muted loop playsinline webkit-playsinline controls class="hidden relative z-10 w-full h-full object-cover object-center transition-all duration-300"></video>
                 <div class="absolute inset-0 z-10 pointer-events-none bg-gradient-to-t from-black/85 via-black/30 to-black/25"></div>
 
                 <!-- Yükleme Bekleme Katmanı -->
                 <div id="brand-hero-loading" class="hidden absolute inset-0 z-30 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-center text-center p-2">
                   <i data-lucide="loader-2" class="w-6 h-6 text-amber-400 animate-spin mb-1"></i>
-                  <span id="brand-hero-loading-text" class="text-[11px] text-amber-200 font-semibold">Kapak fotoğrafı optimize ediliyor...</span>
+                  <span id="brand-hero-loading-text" class="text-[11px] text-amber-200 font-semibold">Medya yükleniyor...</span>
                 </div>
 
                 <!-- Sağ Üst Döndür & Sıfırla -->
@@ -467,18 +471,24 @@
                 </div>
               </div>
 
-              <!-- Medya Seçim Butonları -->
-              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <label class="py-2.5 px-3.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all shadow-md shadow-amber-500/15 active:scale-95">
+              <!-- Medya Seçim Butonları (Fotoğraf, Doğrudan Video ve Kamera) -->
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <label class="py-2.5 px-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all shadow-md shadow-amber-500/15 active:scale-95">
                   <i data-lucide="image" class="w-4 h-4"></i>
-                  <span>Ana Kapak Fotoğrafı Seç (Galeri / PC)</span>
-                  <input type="file" id="brand-hero-file-input" accept="image/*,.heic,.heif,.avif,.webp,.png,.jpg,.jpeg,.gif,.bmp,.tiff,.tif,.svg" onchange="handleBrandMediaUpload('hero', event)" class="hidden" />
+                  <span>Fotoğraf veya Video Seç</span>
+                  <input type="file" id="brand-hero-file-input" accept="image/*,video/*,.mp4,.mov,.webm,.m4v,.ogv,.heic,.heif,.avif,.webp,.png,.jpg,.jpeg,.gif,.bmp,.tiff,.tif,.svg" onchange="handleBrandMediaUpload('hero', event)" class="hidden" />
                 </label>
 
-                <label class="py-2.5 px-3.5 rounded-xl bg-white/10 hover:bg-white/15 text-white border border-white/15 text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-95">
+                <label class="py-2.5 px-3 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all shadow-md shadow-purple-600/20 active:scale-95">
+                  <i data-lucide="video" class="w-4 h-4"></i>
+                  <span>🎬 Video Yükle (MP4 / MOV)</span>
+                  <input type="file" id="brand-hero-video-input" accept="video/*,.mp4,.mov,.webm,.m4v,.ogv" onchange="handleBrandMediaUpload('hero', event)" class="hidden" />
+                </label>
+
+                <label class="py-2.5 px-3 rounded-xl bg-white/10 hover:bg-white/15 text-white border border-white/15 text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-95">
                   <i data-lucide="camera" class="w-4 h-4 text-amber-400"></i>
-                  <span>Kamerayla Fotoğraf Çek</span>
-                  <input type="file" id="brand-hero-camera-input" accept="image/*" capture="environment" onchange="handleBrandMediaUpload('hero', event)" class="hidden" />
+                  <span>Kamerayla Çek</span>
+                  <input type="file" id="brand-hero-camera-input" accept="image/*,video/*" capture="environment" onchange="handleBrandMediaUpload('hero', event)" class="hidden" />
                 </label>
               </div>
 
@@ -558,9 +568,10 @@
                   <input type="hidden" id="set-brand-mood-image" value="" />
                   <input type="hidden" id="set-brand-mood-fit" value="cover" />
 
-                  <div class="relative w-full h-32 sm:h-36 rounded-xl overflow-hidden border border-white/10 bg-neutral-900">
+                  <div class="relative w-full h-36 sm:h-40 rounded-xl overflow-hidden border border-white/10 bg-neutral-900">
                     <img id="brand-mood-blur-bg" src="https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=1200&q=80" alt="" class="hidden absolute inset-0 w-full h-full object-cover scale-125 blur-xl brightness-50 pointer-events-none" />
                     <img id="brand-mood-preview" src="https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=1200&q=80" alt="3. Slayt Önizleme" class="relative z-10 w-full h-full object-cover object-center transition-all duration-300" />
+                    <video id="brand-mood-video-preview" muted loop playsinline webkit-playsinline controls class="hidden relative z-10 w-full h-full object-cover object-center transition-all duration-300"></video>
                     <div class="absolute inset-0 z-10 pointer-events-none bg-gradient-to-t from-black/70 via-transparent to-black/20"></div>
 
                     <div id="brand-mood-loading" class="hidden absolute inset-0 z-30 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-center text-center p-2">
@@ -584,16 +595,23 @@
                     </div>
                   </div>
 
-                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    <label class="py-2 px-3 rounded-xl bg-amber-500/90 hover:bg-amber-400 text-black text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-95">
+                  <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <label class="py-2 px-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-95 shadow-md shadow-amber-500/15">
                       <i data-lucide="image" class="w-3.5 h-3.5"></i>
-                      <span>3. Slayt Fotoğrafı Seç</span>
+                      <span>Fotoğraf Seç</span>
                       <input type="file" id="brand-mood-file-input" accept="image/*,.heic,.heif,.avif,.webp,.png,.jpg,.jpeg,.gif,.bmp,.tiff,.tif,.svg" onchange="handleBrandMediaUpload('mood', event)" class="hidden" />
                     </label>
+
+                    <label class="py-2 px-3 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-95 shadow-md shadow-purple-600/20">
+                      <i data-lucide="video" class="w-3.5 h-3.5"></i>
+                      <span>🎬 Video Yükle</span>
+                      <input type="file" id="brand-mood-video-input" accept="video/*,.mp4,.mov,.webm,.m4v,.ogv" onchange="handleBrandMediaUpload('mood', event)" class="hidden" />
+                    </label>
+
                     <label class="py-2 px-3 rounded-xl bg-white/10 hover:bg-white/15 text-white border border-white/15 text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-95">
                       <i data-lucide="camera" class="w-3.5 h-3.5 text-amber-400"></i>
                       <span>Kamerayla Çek</span>
-                      <input type="file" id="brand-mood-camera-input" accept="image/*" capture="environment" onchange="handleBrandMediaUpload('mood', event)" class="hidden" />
+                      <input type="file" id="brand-mood-camera-input" accept="image/*,video/*" capture="environment" onchange="handleBrandMediaUpload('mood', event)" class="hidden" />
                     </label>
                   </div>
 
@@ -958,10 +976,11 @@
                 <input type="hidden" id="set-announcement-image" value="" />
                 <input type="hidden" id="set-announcement-image-fit" value="cover" />
 
-                <!-- Canlı Hero Banner Önizlemesi -->
-                <div id="announcement-image-preview-wrap" class="relative w-full h-36 sm:h-40 rounded-2xl overflow-hidden border border-white/10 bg-neutral-900 shadow-inner">
+                <!-- Canlı Hero Banner Önizlemesi (Fotoğraf & Video Destekli) -->
+                <div id="announcement-image-preview-wrap" class="relative w-full h-40 sm:h-44 rounded-2xl overflow-hidden border border-white/10 bg-neutral-900 shadow-inner">
                   <img id="announcement-image-blur-bg" src="https://images.unsplash.com/photo-1527661591475-527312dd65f5?auto=format&fit=crop&w=1200&q=80" alt="" class="hidden absolute inset-0 w-full h-full object-cover scale-125 blur-xl brightness-50 pointer-events-none" />
                   <img id="announcement-image-preview" src="https://images.unsplash.com/photo-1527661591475-527312dd65f5?auto=format&fit=crop&w=1200&q=80" alt="Banner Önizleme" class="relative z-10 w-full h-full object-cover object-center transition-all duration-300" />
+                  <video id="announcement-video-preview" muted loop playsinline webkit-playsinline controls class="hidden relative z-10 w-full h-full object-cover object-center transition-all duration-300"></video>
                   <div class="absolute inset-0 z-10 pointer-events-none bg-gradient-to-t from-black/70 via-transparent to-black/20"></div>
 
                   <!-- Yükleme Bekleme Katmanı -->
@@ -988,18 +1007,24 @@
                   </div>
                 </div>
 
-                <!-- Doğrudan Medya & Kamera Seçim Butonları -->
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <label class="py-2.5 px-3.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all shadow-md shadow-amber-500/15 active:scale-95">
+                <!-- Doğrudan Medya, Video & Kamera Seçim Butonları -->
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <label class="py-2.5 px-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all shadow-md shadow-amber-500/15 active:scale-95">
                     <i data-lucide="image" class="w-4 h-4"></i>
-                    <span>Galeriden / Bilgisayardan Seç</span>
+                    <span>Fotoğraf Seç</span>
                     <input type="file" id="announcement-image-file-input" accept="image/*,.heic,.heif,.avif,.webp,.png,.jpg,.jpeg,.gif,.bmp,.tiff,.tif,.svg" onchange="handleAnnouncementImageUpload(event)" class="hidden" />
                   </label>
 
-                  <label class="py-2.5 px-3.5 rounded-xl bg-white/10 hover:bg-white/15 text-white border border-white/15 text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-95">
+                  <label class="py-2.5 px-3 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-all shadow-md shadow-purple-600/20 active:scale-95">
+                    <i data-lucide="video" class="w-4 h-4"></i>
+                    <span>🎬 Video Yükle (MP4 / MOV)</span>
+                    <input type="file" id="announcement-video-file-input" accept="video/*,.mp4,.mov,.webm,.m4v,.ogv" onchange="handleAnnouncementImageUpload(event)" class="hidden" />
+                  </label>
+
+                  <label class="py-2.5 px-3 rounded-xl bg-white/10 hover:bg-white/15 text-white border border-white/15 text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-95">
                     <i data-lucide="camera" class="w-4 h-4 text-amber-400"></i>
-                    <span>Kamerayla Fotoğraf Çek</span>
-                    <input type="file" id="announcement-camera-file-input" accept="image/*" capture="environment" onchange="handleAnnouncementImageUpload(event)" class="hidden" />
+                    <span>Kamerayla Çek</span>
+                    <input type="file" id="announcement-camera-file-input" accept="image/*,video/*" capture="environment" onchange="handleAnnouncementImageUpload(event)" class="hidden" />
                   </label>
                 </div>
 

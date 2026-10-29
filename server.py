@@ -76,6 +76,21 @@ def atomic_save_bytes(filepath, raw_bytes):
 
 def detect_image_ext_from_bytes(raw_bytes, fallback_ext=".jpg"):
     if len(raw_bytes) >= 12:
+        if raw_bytes[:4] == b"\x1a\x45\xdf\xa3":
+            return ".webm"
+        if raw_bytes[:4] == b"OggS":
+            return ".ogv"
+        if raw_bytes[4:8] == b"ftyp":
+            brand = raw_bytes[8:12]
+            if brand == b"qt  ":
+                return ".mov"
+            if brand in (b"M4V ", b"M4VH", b"M4VP"):
+                return ".m4v"
+            if brand in (b"avif", b"avis"):
+                return ".avif"
+            if brand in (b"heic", b"heix", b"mif1", b"msf1"):
+                return ".heic"
+            return ".mp4"
         if raw_bytes[:4] == b"RIFF" and raw_bytes[8:12] == b"WEBP":
             return ".webp"
         if raw_bytes[:3] == b"\xff\xd8\xff":
@@ -109,14 +124,34 @@ def sanitize_svg_bytes(raw_bytes):
 
 def process_and_save_uploaded_image(raw_bytes, filename="", mime_type="", max_dim=1200, rotation=0, force_server_process=False):
     if not raw_bytes:
-        raise ValueError("Boş görsel verisi gönderildi.")
-    if len(raw_bytes) > 45 * 1024 * 1024:
-        raise ValueError("Görsel boyutu 45 MB sınırını aşıyor.")
+        raise ValueError("Boş medya verisi gönderildi.")
+    if len(raw_bytes) > 65 * 1024 * 1024:
+        raise ValueError("Medya boyutu 65 MB sınırını aşıyor.")
 
     orig_ext = os.path.splitext(filename or "")[1].lower()
     detected_ext = detect_image_ext_from_bytes(raw_bytes, orig_ext or ".jpg")
     ts = int(time.time() * 1000)
     rand_id = random.randint(1000, 9999)
+
+    # 0. Video Dosyası Desteği (MP4, MOV, WEBM, M4V, OGV - Doğrudan Kayıt & Akış)
+    video_exts = {".mp4", ".mov", ".webm", ".m4v", ".ogv"}
+    mime_lower = (mime_type or "").lower()
+    if detected_ext in video_exts or orig_ext in video_exts or mime_lower.startswith("video/"):
+        if detected_ext in video_exts:
+            vid_ext = detected_ext
+        elif orig_ext in video_exts:
+            vid_ext = orig_ext
+        elif "webm" in mime_lower:
+            vid_ext = ".webm"
+        elif "quicktime" in mime_lower or "mov" in mime_lower:
+            vid_ext = ".mov"
+        elif "ogg" in mime_lower:
+            vid_ext = ".ogv"
+        else:
+            vid_ext = ".mp4"
+        out_name = f"vid_{ts}_{rand_id}{vid_ext}"
+        atomic_save_bytes(os.path.join(UPLOADS_DIR, out_name), raw_bytes)
+        return out_name, len(raw_bytes), vid_ext.lstrip(".").upper(), 0, 0
 
     # 1. Güvenli SVG Desteği
     if detected_ext == ".svg" or orig_ext == ".svg" or "svg" in (mime_type or "").lower():
@@ -952,7 +987,7 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
 
-        # Kalıcı Yüklenen Ürün & Banner Görselleri (/uploads/...)
+        # Kalıcı Yüklenen Ürün, Banner Görselleri & Videolar (/uploads/...)
         if path.startswith("/uploads/"):
             safe_name = os.path.basename(urllib.parse.unquote(path))
             up_file = os.path.join(UPLOADS_DIR, safe_name)
@@ -967,15 +1002,54 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
                     ".svg": "image/svg+xml",
                     ".avif": "image/avif",
                     ".bmp": "image/bmp",
-                    ".ico": "image/x-icon"
+                    ".ico": "image/x-icon",
+                    ".mp4": "video/mp4",
+                    ".m4v": "video/mp4",
+                    ".mov": "video/quicktime",
+                    ".webm": "video/webm",
+                    ".ogv": "video/ogg",
+                    ".ogg": "video/ogg"
                 }
                 ctype = mime_map.get(ext, "application/octet-stream")
                 try:
+                    file_size = os.path.getsize(up_file)
+                    range_header = self.headers.get("Range")
+                    self._is_immutable_asset = True
+
+                    # iOS Safari ve mobil tarayıcılarda video oynatma için HTTP Range (206 Partial Content) desteği
+                    if range_header and range_header.strip().lower().startswith("bytes=") and file_size > 0:
+                        try:
+                            range_spec = range_header.strip()[6:].split(",")[0].strip()
+                            start_str, end_str = range_spec.split("-", 1)
+                            if start_str == "":
+                                suffix_len = int(end_str)
+                                start_byte = max(0, file_size - suffix_len)
+                                end_byte = file_size - 1
+                            else:
+                                start_byte = int(start_str)
+                                end_byte = int(end_str) if end_str else (file_size - 1)
+                            end_byte = min(end_byte, file_size - 1)
+                            if 0 <= start_byte <= end_byte:
+                                chunk_len = (end_byte - start_byte) + 1
+                                with open(up_file, "rb") as f:
+                                    f.seek(start_byte)
+                                    chunk = f.read(chunk_len)
+                                self.send_response(206)
+                                self.send_header("Content-Type", ctype)
+                                self.send_header("Accept-Ranges", "bytes")
+                                self.send_header("Content-Range", f"bytes {start_byte}-{end_byte}/{file_size}")
+                                self.send_header("Content-Length", str(len(chunk)))
+                                self.end_headers()
+                                self.wfile.write(chunk)
+                                return
+                        except Exception:
+                            pass
+
                     with open(up_file, "rb") as f:
                         img_bytes = f.read()
-                    self._is_immutable_asset = True
                     self.send_response(200)
                     self.send_header("Content-Type", ctype)
+                    self.send_header("Accept-Ranges", "bytes")
                     if ext == ".svg":
                         self.send_header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox")
                     self.send_header("Content-Length", str(len(img_bytes)))
@@ -985,7 +1059,7 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
                     self._send_json({"error": str(e)}, status=500)
                 return
             else:
-                self._send_json({"error": "Image not found"}, status=404)
+                self._send_json({"error": "Media not found"}, status=404)
                 return
 
         if path == "/api/menu/version":
@@ -1231,9 +1305,9 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
         path = parsed.path
         client_ip = self.headers.get("X-Forwarded-For", "").split(",")[0].strip() or self.client_address[0]
 
-        # Payload Size Limit Koruması (Fotoğraf yüklemeleri için 50 MB'a kadar tam destek)
+        # Payload Size Limit Koruması (Fotoğraf & Video yüklemeleri için 85 MB'a kadar tam destek)
         content_length = int(self.headers.get("Content-Length", 0))
-        max_limit = 50 * 1024 * 1024 if path in ["/api/menu/update", "/api/settings/update", "/api/admin/upload-image"] else 64 * 1024
+        max_limit = 85 * 1024 * 1024 if path in ["/api/menu/update", "/api/settings/update", "/api/admin/upload-image"] else 64 * 1024
         if content_length > max_limit:
             try:
                 self.rfile.read(min(content_length, 128 * 1024))
@@ -1988,11 +2062,12 @@ class MenuRequestHandler(http.server.SimpleHTTPRequestHandler):
                     "filename": out_name,
                     "sizeKB": round(final_size / 1024.0, 1),
                     "format": fmt,
+                    "isVideo": out_name.startswith("vid_") or fmt.lower() in ("mp4", "mov", "webm", "m4v", "ogv"),
                     "width": w,
                     "height": h
                 })
             except Exception as e:
-                self._send_json({"status": "error", "message": f"Fotoğraf işlenemedi: {str(e)}"}, status=500)
+                self._send_json({"status": "error", "message": f"Medya işlenemedi: {str(e)}"}, status=500)
             return
 
         self._send_json({"error": "Not Found"}, status=404)

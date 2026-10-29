@@ -2806,6 +2806,15 @@ function onManualImageUrlInput(val) {
   updateItemImagePreviewUI(val, fit);
 }
 
+function isVideoMediaUrl(url) {
+  if (!url || typeof url !== 'string') return false;
+  const clean = url.trim().toLowerCase();
+  if (!clean) return false;
+  if (clean.startsWith('data:video/')) return true;
+  const withoutQuery = clean.split('?')[0].split('#')[0];
+  return /\.(mp4|webm|mov|m4v|ogv|ogg)$/i.test(withoutQuery) || withoutQuery.includes('/vid_');
+}
+
 function readFileAsDataURL(fileOrBlob) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -2848,7 +2857,17 @@ async function detectImageFileFormatInfo(file) {
     (headBytes.length >= 4 && ((headBytes[0] === 0x49 && headBytes[1] === 0x49 && headBytes[2] === 0x2A && headBytes[3] === 0x00) ||
                                (headBytes[0] === 0x4D && headBytes[1] === 0x4D && headBytes[2] === 0x00 && headBytes[3] === 0x2A)));
 
-  return { ext, mime, isSvg, isGif, isHeic, isTiff };
+  const isWebmMagic = headBytes.length >= 4 && headBytes[0] === 0x1A && headBytes[1] === 0x45 && headBytes[2] === 0xDF && headBytes[3] === 0xA3;
+  const isFtypVideo = !isHeic && !lowerHead.includes('ftypavif') && !lowerHead.includes('ftypavis') && asciiHead.slice(4, 8) === 'ftyp';
+  const isVideoExt = ['mp4', 'mov', 'webm', 'm4v', 'ogv', 'ogg'].includes(ext);
+  const isVideo = mime.startsWith('video/') || isVideoExt || isWebmMagic || isFtypVideo;
+  let videoExt = 'mp4';
+  if (isVideoExt) videoExt = ext === 'ogg' ? 'ogv' : ext;
+  else if (isWebmMagic || mime.includes('webm')) videoExt = 'webm';
+  else if (asciiHead.slice(8, 12) === 'qt  ' || mime.includes('quicktime') || mime.includes('mov')) videoExt = 'mov';
+  else if (mime.includes('m4v')) videoExt = 'm4v';
+
+  return { ext, mime, isSvg, isGif, isHeic, isTiff, isVideo, videoExt };
 }
 
 function ensureHeicConverterLoaded() {
@@ -3092,14 +3111,46 @@ async function uploadOptimizedImageToServer({ dataUrl, filename, mimeType, maxDi
   }
 }
 
-async function processUniversalImageFile(file, { maxDim = 1200, rotationDeg = 0, onProgress = null } = {}) {
-  if (!file) throw new Error('Lütfen geçerli bir fotoğraf seçin.');
+async function processUniversalImageFile(file, { maxDim = 1200, rotationDeg = 0, onProgress = null, allowVideo = false } = {}) {
+  if (!file) throw new Error('Lütfen geçerli bir medya dosyası seçin.');
   if (file.size > MAX_RAW_IMAGE_BYTES) {
-    throw new Error('Dosya boyutu çok büyük (Maksimum 50 MB). Lütfen 50 MB altında bir fotoğraf seçin.');
+    throw new Error('Dosya boyutu çok büyük (Maksimum 50 MB). Lütfen 50 MB altında bir fotoğraf veya video seçin.');
   }
 
   const fmtInfo = await detectImageFileFormatInfo(file);
   const baseName = (file.name || 'urun-gorsel').replace(/\.[^.]+$/, '') || 'urun-gorsel';
+
+  // 0. Video Dosyası Desteği (MP4, MOV, WEBM, M4V, OGV - Anasayfa Slaytları ve Duyuru Banner İçin)
+  if (fmtInfo.isVideo) {
+    if (!allowVideo) {
+      throw new Error('Bu alana yalnızca fotoğraf yüklenebilir. Video yüklemeyi Anasayfa Slayt / Banner alanlarında kullanabilirsiniz.');
+    }
+    if (file.size > 65 * 1024 * 1024) {
+      throw new Error(`Seçtiğiniz video (${Math.round(file.size / (1024 * 1024))} MB) çok büyük. Mobil akıcılık ve hızlı yükleme için lütfen 65 MB altındaki videoları tercih edin.`);
+    }
+    if (onProgress) onProgress('🎬 Video sunucuya yükleniyor...');
+    const rawDataUrl = await readFileAsDataURL(file);
+    const vExt = fmtInfo.videoExt || 'mp4';
+    const vMime = fmtInfo.mime && fmtInfo.mime.startsWith('video/')
+      ? fmtInfo.mime
+      : (vExt === 'mov' ? 'video/quicktime' : (vExt === 'webm' ? 'video/webm' : 'video/mp4'));
+    const uploaded = await uploadOptimizedImageToServer({
+      dataUrl: rawDataUrl,
+      filename: `${baseName}.${vExt}`,
+      mimeType: vMime,
+      maxDim,
+      rotation: 0,
+      needsServerProcess: false
+    });
+    return {
+      ...uploaded,
+      isVideo: true,
+      format: uploaded.format || vExt.toUpperCase(),
+      sizeKB: uploaded.sizeKB || Math.max(1, Math.round(file.size / 1024)),
+      width: 0,
+      height: 0
+    };
+  }
 
   // 1. Vektörel SVG Dosyası
   if (fmtInfo.isSvg) {
@@ -3487,6 +3538,7 @@ function setAnnouncementImageFit(fitMode, isManual = true) {
 
 function updateAnnouncementImagePreview(url, fitMode = null) {
   const img = document.getElementById('announcement-image-preview');
+  const vid = document.getElementById('announcement-video-preview');
   const blurBg = document.getElementById('announcement-image-blur-bg');
   const clearBtn = document.getElementById('btn-clear-announcement-img');
   const captionEl = document.getElementById('announcement-preview-caption');
@@ -3495,30 +3547,56 @@ function updateAnnouncementImagePreview(url, fitMode = null) {
 
   const clean = (url || '').trim();
   const hasCustom = clean.length > 0;
+  const isVid = hasCustom && isVideoMediaUrl(clean);
   const mode = fitMode || document.getElementById('set-announcement-image-fit')?.value || 'cover';
   const resolved = hasCustom
     ? resolveAdminImageUrl(clean, DEFAULT_ANNOUNCEMENT_BANNER_IMG)
     : DEFAULT_ANNOUNCEMENT_BANNER_IMG;
 
-  img.src = resolved;
-  img.onerror = () => {
-    if (img.src !== DEFAULT_ANNOUNCEMENT_BANNER_IMG) {
-      img.src = DEFAULT_ANNOUNCEMENT_BANNER_IMG;
-    }
-  };
+  const fitClass = mode === 'contain' && hasCustom
+    ? 'relative z-10 w-full h-full object-contain transition-all duration-300'
+    : (mode === 'top'
+        ? 'relative z-10 w-full h-full object-cover object-top transition-all duration-300'
+        : 'relative z-10 w-full h-full object-cover object-center transition-all duration-300');
 
-  if (mode === 'contain' && hasCustom) {
-    img.className = 'relative z-10 w-full h-full object-contain transition-all duration-300';
-    if (blurBg) {
-      blurBg.src = resolved;
-      blurBg.classList.remove('hidden');
+  if (isVid) {
+    img.classList.add('hidden');
+    if (blurBg) blurBg.classList.add('hidden');
+    if (vid) {
+      vid.src = resolved;
+      vid.className = fitClass;
+      vid.classList.remove('hidden');
+      if (typeof vid.play === 'function') {
+        try {
+          const p = vid.play();
+          if (p && typeof p.catch === 'function') p.catch(() => {});
+        } catch (err) {}
+      }
     }
-  } else if (mode === 'top') {
-    img.className = 'relative z-10 w-full h-full object-cover object-top transition-all duration-300';
-    if (blurBg) blurBg.classList.add('hidden');
   } else {
-    img.className = 'relative z-10 w-full h-full object-cover object-center transition-all duration-300';
-    if (blurBg) blurBg.classList.add('hidden');
+    if (vid) {
+      if (typeof vid.pause === 'function') {
+        try { vid.pause(); } catch (err) {}
+      }
+      if (typeof vid.removeAttribute === 'function') vid.removeAttribute('src');
+      else vid.src = '';
+      vid.classList.add('hidden');
+    }
+    img.src = resolved;
+    img.onerror = () => {
+      if (img.src !== DEFAULT_ANNOUNCEMENT_BANNER_IMG) {
+        img.src = DEFAULT_ANNOUNCEMENT_BANNER_IMG;
+      }
+    };
+    img.className = fitClass;
+    if (mode === 'contain' && hasCustom) {
+      if (blurBg) {
+        blurBg.src = resolved;
+        blurBg.classList.remove('hidden');
+      }
+    } else if (blurBg) {
+      blurBg.classList.add('hidden');
+    }
   }
 
   if (clearBtn) {
@@ -3528,14 +3606,14 @@ function updateAnnouncementImagePreview(url, fitMode = null) {
 
   if (captionEl) {
     captionEl.textContent = hasCustom
-      ? 'Cihazınızdan yüklenen özel banner görseli aktif'
+      ? (isVid ? '🎬 Cihazınızdan yüklenen özel duyuru videosu aktif' : 'Cihazınızdan yüklenen özel banner görseli aktif')
       : 'Varsayılan şık lounge görseli gösteriliyor';
   }
 
   if (statusEl && !isUploadingAnnouncementImage) {
     if (hasCustom) {
-      if (!statusEl.textContent.startsWith('✓')) {
-        statusEl.textContent = '✓ Özel Medya Aktif';
+      if (!statusEl.textContent.startsWith('✓') || statusEl.textContent === '✓ Özel Medya Aktif' || statusEl.textContent === '✓ Özel Video Aktif') {
+        statusEl.textContent = isVid ? '✓ Özel Video Aktif' : '✓ Özel Medya Aktif';
         statusEl.className = 'text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-mono';
       }
     } else {
@@ -3676,7 +3754,8 @@ async function applyUploadedAnnouncementFile(file, rotationDeg = 0, allowAutoFit
     const result = await processUniversalImageFile(file, {
       maxDim: 1600,
       rotationDeg: activeAnnouncementImageRotation,
-      onProgress: (msg) => setAnnouncementUploadBusy(true, msg)
+      onProgress: (msg) => setAnnouncementUploadBusy(true, msg),
+      allowVideo: true
     });
 
     const input = document.getElementById('set-announcement-image');
@@ -3696,12 +3775,13 @@ async function applyUploadedAnnouncementFile(file, rotationDeg = 0, allowAutoFit
 
     if (statusEl) {
       const dimLabel = (result.width && result.height) ? ` • ${result.width}×${result.height}` : '';
-      statusEl.textContent = `✓ ${result.format || 'WEBP'} • ${result.sizeKB || ''} KB${dimLabel}`;
+      const vidTag = result.isVideo ? '🎬 ' : '';
+      statusEl.textContent = `✓ ${vidTag}${result.format || 'WEBP'} • ${result.sizeKB || ''} KB${dimLabel}`;
       statusEl.className = 'text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-mono';
     }
 
     await persistAnnouncementMediaQuickly();
-    showToast('✅ Duyuru banner görseli medyadan yüklendi ve kaydedildi!', 'success');
+    showToast(result.isVideo ? '✅ Duyuru videosu yüklendi ve canlı menüde yayına alındı!' : '✅ Duyuru banner görseli medyadan yüklendi ve kaydedildi!', 'success');
   } catch (err) {
     console.error('Announcement photo upload error:', err);
     if (statusEl) {
@@ -3713,6 +3793,8 @@ async function applyUploadedAnnouncementFile(file, rotationDeg = 0, allowAutoFit
     setAnnouncementUploadBusy(false);
     const fileInput = document.getElementById('announcement-image-file-input');
     if (fileInput) fileInput.value = '';
+    const vidInput = document.getElementById('announcement-video-file-input');
+    if (vidInput) vidInput.value = '';
     const camInput = document.getElementById('announcement-camera-file-input');
     if (camInput) camInput.value = '';
   }
@@ -3728,13 +3810,18 @@ async function handleAnnouncementImageUpload(event) {
 async function rotateAnnouncementImage() {
   if (isUploadingAnnouncementImage) return;
 
+  const currentUrl = document.getElementById('set-announcement-image')?.value?.trim();
+  if (isVideoMediaUrl(currentUrl) || (activeAnnouncementImageFile && activeAnnouncementImageFile.type && activeAnnouncementImageFile.type.startsWith('video/'))) {
+    showToast('ℹ️ Video dosyaları orijinal yönüyle oynatılır; kadraj butonlarıyla (Tam Doldur / Kesmeden Sığdır) görünümü ayarlayabilirsiniz.', 'info');
+    return;
+  }
+
   if (activeAnnouncementImageFile) {
     const nextRot = (activeAnnouncementImageRotation + 90) % 360;
     await applyUploadedAnnouncementFile(activeAnnouncementImageFile, nextRot, true);
     return;
   }
 
-  const currentUrl = document.getElementById('set-announcement-image')?.value?.trim();
   if (!currentUrl) {
     showToast('⚠️ Döndürmek için önce galeriden veya bilgisayardan bir fotoğraf seçin.', 'error');
     return;
@@ -3786,6 +3873,18 @@ function resetBrandMediaUploadState() {
     brandMediaUploadState[slot].manualFit = false;
     setBrandMediaSlotBusy(slot, false);
   });
+}
+
+function openHeroBannerSection() {
+  switchTab('settings');
+  setTimeout(() => {
+    const section = document.getElementById('brand-hero-dropzone') || document.getElementById('brand-media-manager-section');
+    if (section) {
+      section.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      section.classList.add('ring-2', 'ring-purple-500', 'ring-offset-2', 'ring-offset-black');
+      setTimeout(() => section.classList.remove('ring-2', 'ring-purple-500', 'ring-offset-2', 'ring-offset-black'), 2500);
+    }
+  }, 80);
 }
 
 function openBrandMediaSection() {
@@ -4021,7 +4120,8 @@ function updateBrandMediaPreviewUI(slot, fitMode = null) {
   }
 
   if (slot === 'bg') {
-    const heroCleanUrl = (document.getElementById('set-brand-hero-image')?.value || '').trim();
+    const rawHeroUrl = (document.getElementById('set-brand-hero-image')?.value || '').trim();
+    const heroCleanUrl = isVideoMediaUrl(rawHeroUrl) ? '' : rawHeroUrl;
     const effectiveUrl = cleanUrl || heroCleanUrl;
     const resolved = effectiveUrl
       ? resolveAdminImageUrl(effectiveUrl, DEFAULT_BRAND_HERO_IMG)
@@ -4081,39 +4181,66 @@ function updateBrandMediaPreviewUI(slot, fitMode = null) {
     return;
   }
 
-  // Hero (1. Slayt) veya Mood (3. Slayt)
+  // Hero (1. Slayt) veya Mood (3. Slayt) — Fotoğraf ve Video Desteği
   const fallbackImg = slot === 'hero' ? DEFAULT_BRAND_HERO_IMG : DEFAULT_BRAND_MOOD_IMG;
   const previewImg = document.getElementById(`brand-${slot}-preview`);
+  const previewVid = document.getElementById(`brand-${slot}-video-preview`);
   const blurBg = document.getElementById(`brand-${slot}-blur-bg`);
   const captionEl = document.getElementById(`brand-${slot}-caption`);
   if (!previewImg) return;
 
+  const isVid = hasCustom && isVideoMediaUrl(cleanUrl);
   const resolved = hasCustom
     ? resolveAdminImageUrl(cleanUrl, fallbackImg)
     : fallbackImg;
 
-  previewImg.src = resolved;
-  previewImg.onerror = () => {
-    if (slot === 'hero') {
-      if (!previewImg.src.includes('hashtag-banner.jpg')) previewImg.src = DEFAULT_BRAND_HERO_IMG;
-      else if (!previewImg.src.includes('images/')) previewImg.src = 'images/hashtag-banner.jpg?v=3.0';
-    } else if (previewImg.src !== DEFAULT_BRAND_MOOD_IMG) {
-      previewImg.src = DEFAULT_BRAND_MOOD_IMG;
-    }
-  };
+  const fitClass = mode === 'contain' && hasCustom
+    ? 'relative z-10 w-full h-full object-contain transition-all duration-300'
+    : (mode === 'top'
+        ? 'relative z-10 w-full h-full object-cover object-top transition-all duration-300'
+        : 'relative z-10 w-full h-full object-cover object-center transition-all duration-300');
 
-  if (mode === 'contain' && hasCustom) {
-    previewImg.className = 'relative z-10 w-full h-full object-contain transition-all duration-300';
-    if (blurBg) {
-      blurBg.src = resolved;
-      blurBg.classList.remove('hidden');
+  if (isVid) {
+    previewImg.classList.add('hidden');
+    if (blurBg) blurBg.classList.add('hidden');
+    if (previewVid) {
+      previewVid.src = resolved;
+      previewVid.className = fitClass;
+      previewVid.classList.remove('hidden');
+      if (typeof previewVid.play === 'function') {
+        try {
+          const p = previewVid.play();
+          if (p && typeof p.catch === 'function') p.catch(() => {});
+        } catch (err) {}
+      }
     }
-  } else if (mode === 'top') {
-    previewImg.className = 'relative z-10 w-full h-full object-cover object-top transition-all duration-300';
-    if (blurBg) blurBg.classList.add('hidden');
   } else {
-    previewImg.className = 'relative z-10 w-full h-full object-cover object-center transition-all duration-300';
-    if (blurBg) blurBg.classList.add('hidden');
+    if (previewVid) {
+      if (typeof previewVid.pause === 'function') {
+        try { previewVid.pause(); } catch (err) {}
+      }
+      if (typeof previewVid.removeAttribute === 'function') previewVid.removeAttribute('src');
+      else previewVid.src = '';
+      previewVid.classList.add('hidden');
+    }
+    previewImg.src = resolved;
+    previewImg.onerror = () => {
+      if (slot === 'hero') {
+        if (!previewImg.src.includes('hashtag-banner.jpg')) previewImg.src = DEFAULT_BRAND_HERO_IMG;
+        else if (!previewImg.src.includes('images/')) previewImg.src = 'images/hashtag-banner.jpg?v=3.0';
+      } else if (previewImg.src !== DEFAULT_BRAND_MOOD_IMG) {
+        previewImg.src = DEFAULT_BRAND_MOOD_IMG;
+      }
+    };
+    previewImg.className = fitClass;
+    if (mode === 'contain' && hasCustom) {
+      if (blurBg) {
+        blurBg.src = resolved;
+        blurBg.classList.remove('hidden');
+      }
+    } else if (blurBg) {
+      blurBg.classList.add('hidden');
+    }
   }
 
   if (clearBtn) {
@@ -4123,18 +4250,20 @@ function updateBrandMediaPreviewUI(slot, fitMode = null) {
 
   if (captionEl) {
     if (slot === 'hero') {
-      captionEl.textContent = hasCustom ? 'Özel kapak aktif' : 'Varsayılan görsel';
+      captionEl.textContent = hasCustom
+        ? (isVid ? '🎬 Özel kapak videosu aktif' : 'Özel kapak aktif')
+        : 'Varsayılan görsel';
     } else {
       captionEl.textContent = hasCustom
-        ? 'Cihazınızdan yüklenen özel 3. slayt görseli aktif'
+        ? (isVid ? '🎬 Cihazınızdan yüklenen özel 3. slayt videosu aktif' : 'Cihazınızdan yüklenen özel 3. slayt görseli aktif')
         : 'Günün saatine göre otomatik atmosfer görseli aktif';
     }
   }
 
   if (statusEl && !brandMediaUploadState[slot].busy) {
     if (hasCustom) {
-      if (!statusEl.textContent.startsWith('✓')) {
-        statusEl.textContent = '✓ Özel Görsel Aktif';
+      if (!statusEl.textContent.startsWith('✓') || statusEl.textContent === '✓ Özel Görsel Aktif' || statusEl.textContent === '✓ Özel Video Aktif') {
+        statusEl.textContent = isVid ? '✓ Özel Video Aktif' : '✓ Özel Görsel Aktif';
         statusEl.className = 'text-[10px] px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-mono';
       }
     } else {
@@ -4426,7 +4555,8 @@ async function applyUploadedBrandMediaFile(slot, file, rotationDeg = 0, allowAut
     const result = await processUniversalImageFile(file, {
       maxDim: targetMaxDim,
       rotationDeg: state.rotation,
-      onProgress: (msg) => setBrandMediaSlotBusy(slot, true, msg)
+      onProgress: (msg) => setBrandMediaSlotBusy(slot, true, msg),
+      allowVideo: (slot === 'hero' || slot === 'mood')
     });
 
     const input = document.getElementById(`set-brand-${slot}-image`);
@@ -4446,7 +4576,8 @@ async function applyUploadedBrandMediaFile(slot, file, rotationDeg = 0, allowAut
 
     if (statusEl) {
       const dimLabel = (result.width && result.height) ? ` • ${result.width}×${result.height}` : '';
-      statusEl.textContent = `✓ ${result.format || 'WEBP'} • ${result.sizeKB || ''} KB${dimLabel}`;
+      const vidTag = result.isVideo ? '🎬 ' : '';
+      statusEl.textContent = `✓ ${vidTag}${result.format || 'WEBP'} • ${result.sizeKB || ''} KB${dimLabel}`;
       statusEl.className = 'text-[10px] px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-mono';
     }
 
@@ -4454,8 +4585,12 @@ async function applyUploadedBrandMediaFile(slot, file, rotationDeg = 0, allowAut
     if (ok) {
       const successLabels = {
         logo: '✅ Sol üst ve sayfa altı profil fotoğrafı yüklendi ve canlı menüde güncellendi!',
-        hero: '✅ Anasayfa 1. slayt ve arka plan fotoğrafı yüklendi ve canlı menüde güncellendi!',
-        mood: '✅ Anasayfa 3. slayt fotoğrafı yüklendi ve canlı menüde güncellendi!',
+        hero: result.isVideo
+          ? '✅ Anasayfa 1. slayt videosu yüklendi ve canlı müşteri menüsünde yayına alındı!'
+          : '✅ Anasayfa 1. slayt ve arka plan fotoğrafı yüklendi ve canlı menüde güncellendi!',
+        mood: result.isVideo
+          ? '✅ Anasayfa 3. slayt videosu yüklendi ve canlı müşteri menüsünde yayına alındı!'
+          : '✅ Anasayfa 3. slayt fotoğrafı yüklendi ve canlı menüde güncellendi!',
         bg: '✅ Müşteri menüsü tam ekran arka plan fotoğrafı yüklendi ve canlı menüde güncellendi!'
       };
       showToast(successLabels[slot], 'success');
@@ -4466,11 +4601,13 @@ async function applyUploadedBrandMediaFile(slot, file, rotationDeg = 0, allowAut
       statusEl.textContent = '❌ Yükleme Hatası';
       statusEl.className = 'text-[10px] px-2.5 py-1 rounded-full bg-red-500/15 text-red-300 border border-red-500/30 font-mono';
     }
-    showToast('❌ ' + (err.message || 'Fotoğraf yüklenemedi.'), 'error');
+    showToast('❌ ' + (err.message || 'Medya yüklenemedi.'), 'error');
   } finally {
     setBrandMediaSlotBusy(slot, false);
     const fileInput = document.getElementById(`brand-${slot}-file-input`);
     if (fileInput) fileInput.value = '';
+    const vidInput = document.getElementById(`brand-${slot}-video-input`);
+    if (vidInput) vidInput.value = '';
     const camInput = document.getElementById(`brand-${slot}-camera-input`);
     if (camInput) camInput.value = '';
   }
@@ -4488,13 +4625,18 @@ async function rotateBrandMediaSlot(slot) {
   const state = brandMediaUploadState[slot];
   if (state.busy) return;
 
+  const currentUrl = document.getElementById(`set-brand-${slot}-image`)?.value?.trim();
+  if (isVideoMediaUrl(currentUrl) || (state.file && state.file.type && state.file.type.startsWith('video/'))) {
+    showToast('ℹ️ Video dosyaları orijinal yönüyle oynatılır; kadraj butonlarıyla (Tam Doldur / Kesmeden Sığdır) görünümü ayarlayabilirsiniz.', 'info');
+    return;
+  }
+
   if (state.file) {
     const nextRot = (state.rotation + 90) % 360;
     await applyUploadedBrandMediaFile(slot, state.file, nextRot, true);
     return;
   }
 
-  const currentUrl = document.getElementById(`set-brand-${slot}-image`)?.value?.trim();
   if (!currentUrl) {
     showToast('⚠️ Döndürmek için önce galeriden veya bilgisayardan bir fotoğraf seçin.', 'error');
     return;
@@ -4513,5 +4655,12 @@ async function rotateBrandMediaSlot(slot) {
     showToast('⚠️ Lütfen cihazınızdan yeni bir fotoğraf seçerek döndürün.', 'error');
   }
 }
+
+if (typeof window !== 'undefined') {
+  window.openHeroBannerSection = openHeroBannerSection;
+  window.openBrandMediaSection = openBrandMediaSection;
+  window.openAmbientBackgroundSection = openAmbientBackgroundSection;
+}
+
 
 

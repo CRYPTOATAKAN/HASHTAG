@@ -128,7 +128,7 @@
     </header>
 
     <!-- ÜST REKLAM & TANITIM MERKEZİ (Instagram, Google Haritalar ve Gelecekteki Tüm Reklam Eklentileri Alanı) -->
-    <section id="top-promo-ads-hub" aria-label="Sosyal Medya ve Reklam Eklentileri" class="max-w-3xl mx-auto px-4 pt-2.5 w-full space-y-2">
+    <section id="top-promo-ads-hub" aria-label="Sosyal Medya ve Reklam Eklentileri" class="max-w-4xl mx-auto px-2 sm:px-4 pt-2.5 w-full space-y-2">
       <div id="core-promo-ads-grid" class="grid grid-cols-2 gap-2 sm:gap-3">
         <!-- 1. Instagram Sosyal Medya Şık Tanıtım & Reklam Kartı -->
         <div id="instagram-card-section" class="relative overflow-hidden rounded-2xl p-2.5 sm:p-3.5 bg-gradient-to-br from-neutral-900/95 via-neutral-900/80 to-neutral-950 border border-pink-500/25 shadow-lg group hover:border-pink-500/50 transition-all duration-300 flex flex-col justify-between gap-2">
@@ -209,23 +209,35 @@
       <div id="extra-promo-ads-container" class="hidden grid grid-cols-1 sm:grid-cols-2 gap-2"></div>
     </section>
 
-    <!-- Karşılama / Dinamik Hibrit Hero Banner & Slayt Gösterisi Alanı (Mobil Ekranlara Özel Dengeli Boyut) -->
-    <div class="max-w-3xl mx-auto px-4 pt-2.5 w-full">
-      <div id="hero-banner-card" class="relative w-full h-56 sm:h-72 rounded-3xl overflow-hidden border border-amber-500/25 shadow-2xl bg-neutral-950 group select-none neon-breathing-card touch-pan-y">
+    <!-- Karşılama / Dinamik Hibrit Hero Banner, Video & Slayt Gösterisi Alanı (Genişletilmiş Sinematik Vitrin) -->
+    <div id="hero-banner-outer-wrapper" class="max-w-4xl mx-auto px-2 sm:px-4 pt-3 w-full">
+      <div id="hero-banner-card" class="relative w-full h-64 sm:h-80 md:h-96 rounded-3xl overflow-hidden border border-amber-500/25 shadow-2xl bg-neutral-950 group select-none neon-breathing-card touch-pan-y">
         
         <!-- Üst Hikaye / Progress Çubukları (Instagram Story Stili) -->
         <div id="hero-progress-bars" class="absolute top-2.5 left-3.5 right-3.5 z-30 flex items-center gap-1.5">
           <!-- JS dinamik olarak çubukları dolduracak -->
         </div>
 
-        <!-- Slayt Görselleri Kapsayıcısı -->
+        <!-- Video Slaytları İçin Ses Aç / Kapat Butonu (Sadece video slaytlarında otomatik görünür) -->
+        <button
+          type="button"
+          id="hero-video-sound-btn"
+          onclick="toggleHeroVideoSound(event)"
+          aria-label="Video Sesini Aç/Kapat"
+          class="hidden absolute top-6 right-3.5 z-30 px-2.5 py-1.5 rounded-full bg-black/70 hover:bg-black/90 text-white border border-amber-400/35 backdrop-blur-md text-[10px] font-bold flex items-center gap-1.5 shadow-lg active:scale-95 transition-all"
+        >
+          <span id="hero-video-sound-icon">🔇</span>
+          <span id="hero-video-sound-label">Sesi Aç</span>
+        </button>
+
+        <!-- Slayt Görselleri & Videoları Kapsayıcısı -->
         <div id="hero-slides-wrapper" class="absolute inset-0 w-full h-full">
-          <!-- JS dinamik olarak slaytları ekleyecek -->
+          <!-- JS dinamik olarak fotoğraf ve video slaytlarını ekleyecek -->
         </div>
 
-        <!-- Dengeli Sinematik Gradyanlar (Görselin Ortasını Karartmadan Yazıları Net Gösterir) -->
-        <div class="absolute inset-x-0 top-0 h-12 bg-gradient-to-b from-black/60 via-black/20 to-transparent pointer-events-none z-10"></div>
-        <div class="absolute inset-x-0 bottom-0 h-32 sm:h-36 bg-gradient-to-t from-neutral-950/95 via-neutral-950/55 to-transparent pointer-events-none z-10"></div>
+        <!-- Dengeli Sinematik Gradyanlar (Görselin/Videonun Ortasını Karartmadan Yazıları Net Gösterir) -->
+        <div class="absolute inset-x-0 top-0 h-14 bg-gradient-to-b from-black/60 via-black/20 to-transparent pointer-events-none z-10"></div>
+        <div class="absolute inset-x-0 bottom-0 h-36 sm:h-40 bg-gradient-to-t from-neutral-950/95 via-neutral-950/50 to-transparent pointer-events-none z-10"></div>
 
         <!-- Sol & Sağ Dokunmatik/Tıklama Gezinme Butonları -->
         <button type="button" onclick="prevHeroSlide(event)" aria-label="Önceki Slayt" class="hero-nav-btn absolute left-2.5 top-1/2 -translate-y-1/2 z-25 w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-black/55 hover:bg-black/85 text-white/90 hover:text-white flex items-center justify-center backdrop-blur-md border border-white/15 active:scale-95 transition-all">
