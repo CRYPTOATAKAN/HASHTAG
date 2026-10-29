@@ -1736,11 +1736,15 @@ function renderHeaderInfo() {
 
   // Google Haritalar Bağlantısı ve Şık Kartı
   const mapsCardBtn = document.getElementById('google-maps-card-btn');
+  const mapsTitleEl = document.getElementById('google-maps-title-display');
   const defaultGoogleMapsUrl = 'https://www.google.com/maps/place/HashTag+Sh%C4%B1sha+TowN/@36.5441256,31.9875018,17z/data=!4m8!3m7!1s0x14dca29d1fbf1249:0x4b3340264cde0fb8!8m2!3d36.5441256!4d31.9900767!9m1!1b1!16s%2Fg%2F11c5swfnsx?entry=ttu&g_ep=EgoyMDI2MTAyMC4wIKXMDSoASAFQAw%3D%3D';
   const fullMapsUrl = (settings.googleMapsUrl && settings.googleMapsUrl.trim()) ? settings.googleMapsUrl.trim() : defaultGoogleMapsUrl;
 
   if (mapsCardBtn) {
     mapsCardBtn.href = fullMapsUrl;
+  }
+  if (mapsTitleEl && settings.googleMapsTitle) {
+    mapsTitleEl.textContent = settings.googleMapsTitle;
   }
 
   // Üst Reklam & Tanıtım Merkezindeki Ekstra Reklam Eklentilerini Güncelle
